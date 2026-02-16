@@ -1,17 +1,23 @@
-import { Route, BrowserRouter as Router, Routes} from "react-router-dom";
-import Dashboard from "../pages/admin/adminDashboard";
-// import AdminLayout from "../common/AdminLayout";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import LoginPage from "../pages/admin/AdminLogin";
+import Dashboard from "../pages/admin/AdminDashboard";
+import ProtectedRoute from "./ProtectedRoute"
+function App() {
+  const token =
+    localStorage.getItem("accessToken") ||
+    sessionStorage.getItem("accessToken");
 
-const AdminRoutes = () => {
   return (
     <Router>
       <Routes>
+        <Route path="/admin/login" element={<LoginPage />} />
 
-      <Route path="/" element={<Dashboard/>}/>
-
+        <Route element={<ProtectedRoute isAuthenticated={!!token} />}>
+          <Route path="/admin/dashboard" element={<Dashboard />} />\
+        </Route>
       </Routes>
     </Router>
   );
-};
+}
 
-export default AdminRoutes;
+export default App;
