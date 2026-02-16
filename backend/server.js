@@ -20,6 +20,7 @@ const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:5173",
   "http://192.168.31.223:5173", // local network frontend
+  "http://192.168.31.230:5173", // local network frontend
   process.env.FRONTEND_URL, // production frontend
 ];
 
