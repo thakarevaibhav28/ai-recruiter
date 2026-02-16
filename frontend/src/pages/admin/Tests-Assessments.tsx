@@ -864,7 +864,8 @@ const TestsAssessments = () => {
               </button>
             </div>
           </div>
-        </div>
+          </div>
+          </>
       )}
 
       {/* Tests Templates Tab */}
