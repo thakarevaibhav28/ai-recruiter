@@ -6,6 +6,11 @@ class AdminService {
     return adminApi.login(data);
   }
 
+  // add candidate 
+  addCandidate(data:any){
+    return adminApi.addCandidate(data)
+  }
+
 }
 
 
