@@ -10,7 +10,10 @@ const adminSchema = new mongoose.Schema({
     default: "user",
     required: true,
   },
-}); 
+  refreshToken: {
+    type: String,
+  },
+});
 
 adminSchema.pre("save", async function (next) {
   if (this.isModified("password")) {

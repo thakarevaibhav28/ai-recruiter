@@ -23,50 +23,49 @@ const LoginPage: React.FC = () => {
   } = useForm<LoginFormData>();
 
   const onSubmit = async (data: LoginFormData) => {
-    setIsLoading(true);
-    setError("");
+  setIsLoading(true);
+  setError("");
 
-    try {
-      const response = await adminService.login({
-        email: data.email,
-        password: data.password,
-      });
+  try {
+    const response = await adminService.login(data);
+    console.log(response)
 
-      // Store token if remember me is checked
-      if (data.rememberMe && response.data.token) {
-        localStorage.setItem("token", response.data.token);
-      } else if (response.data.token) {
-        sessionStorage.setItem("token", response.data.token);
-      }
+    const { accessToken, refreshToken, user } = response;
 
-      // Store user data if needed
-      if (response.data.user) {
-        localStorage.setItem("user", JSON.stringify(response.data.user));
-      }
-
-      // Navigate to dashboard
-      navigate("/admin/dashboard");
-    } catch (err) {
-      const axiosError = err as AxiosError<{ message: string }>;
-      
-      if (axiosError.response) {
-        // Server responded with error
-        setError(
-          axiosError.response.data.message || "Invalid email or password"
-        );
-      } else if (axiosError.request) {
-        // Request made but no response
-        setError("Network error. Please check your connection.");
-      } else {
-        // Something else happened
-        setError("An unexpected error occurred. Please try again.");
-      }
-      
-      console.error("Login error:", err);
-    } finally {
-      setIsLoading(false);
+    // Store access token
+    if (data.rememberMe && accessToken) {
+      localStorage.setItem("accessToken", accessToken);
+      localStorage.setItem("refreshToken", refreshToken);
+    } else if (accessToken) {
+      sessionStorage.setItem("accessToken", accessToken);
+      sessionStorage.setItem("refreshToken", refreshToken);
     }
-  };
+
+    // Store user
+    if (user) {
+      localStorage.setItem("user", JSON.stringify(user));
+    }
+
+    navigate("/admin/dashboard");
+
+  } catch (err) {
+    const axiosError = err as AxiosError<{ message: string }>;
+
+    if (axiosError.response) {
+      setError(
+        axiosError.response.data.message || "Invalid email or password"
+      );
+    } else if (axiosError.request) {
+      setError("Network error. Please check your connection.");
+    } else {
+      setError("An unexpected error occurred. Please try again.");
+    }
+
+    console.error("Login error:", err);
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   return (
     <div className="h-screen w-full flex items-center justify-center py-8 relative">

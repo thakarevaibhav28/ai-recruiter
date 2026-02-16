@@ -3,7 +3,7 @@ import { api } from "../api";
 
 class AdminApi {
   private _url = {
-    LOGIN: "/admin/login/",
+    LOGIN: "/admin/login",
     FORGOT_PASSWORD: "/admin/forgot-password",
     OTP: "/admin/verify-otp",
     RESET_PASSWORD: "/admin/reset-password",
