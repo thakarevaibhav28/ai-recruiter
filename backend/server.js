@@ -21,6 +21,8 @@ const allowedOrigins = [
   "http://localhost:5173",
   "http://192.168.31.223:5173", // local network frontend
   "http://192.168.31.230:5173", // local network frontend
+  "http://192.168.31.222:5173",
+
   process.env.FRONTEND_URL, // production frontend
 ];
 
@@ -84,6 +86,4 @@ app.use("/api/candidate", candidateRoutes);
 
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, () =>
-  console.log(`Server running on port ${PORT}`)
-);
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
