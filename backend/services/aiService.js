@@ -8,6 +8,7 @@ const cleanResponseText = (text) => {
   // Remove Markdown code fences and any leading/trailing whitespace
   return text.replace(/```json\n|```|\n/g, '').trim();
 };
+// console.log("hii")
 
 
 const callGeminiWithRetry = async (prompt, maxRetries = 4) => {
@@ -28,7 +29,6 @@ const callGeminiWithRetry = async (prompt, maxRetries = 4) => {
     }
   }
 };
-console.log('AI Service initialized with Gemini model');
 const generateQuestions = async (jobDescription, test_title, difficulty, Exam_Type, no_of_questions) => {
  
   let prompt;

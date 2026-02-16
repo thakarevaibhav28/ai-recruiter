@@ -2,6 +2,9 @@
 import { adminApi } from '../api/adminApi/adminApi';
 
 class AdminService {
+  login(data: any) {
+    return adminApi.login(data);
+  }
   lobulk_add_candidategin(data: any) {
     return adminApi.bulk_add_candidate(data);
   }

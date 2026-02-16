@@ -2,7 +2,12 @@ import { useState } from "react";
 import AdminLayout from "../../common/AdminLayout";
 import AddCandidateModal from "../../components/admin/AddCandidate";
 import { Plus, Filter, MoreVertical } from "lucide-react";
+<<<<<<< HEAD
 import BulkUpload from "../../components/admin/Candidates/BulkUpload";
+=======
+  import { adminService } from "../../services/service/adminService";
+  import { AxiosError } from "axios";
+>>>>>>> 6a7e6967b34f6dba25e61798e7bdaf3a6777c518
 
 const statusStyles = {
   Interview: "bg-purple-100 text-purple-600",

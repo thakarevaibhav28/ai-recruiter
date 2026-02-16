@@ -5,7 +5,7 @@ const jwt = require("jsonwebtoken");
 const multer = require("multer");
 const Admin = require("../models/Admin");
 const MCQ_Interview = require("../models/MCQ_Interview");
-const AI_Interview = require("../models/AI_Interview")
+const AI_Interview = require("../models/AI_Interview");
 const Candidate = require("../models/Candidate");
 const Question = require("../models/Question");
 const Score = require("../models/Score");
@@ -35,87 +35,196 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 console.log("upload", upload);
 // This endpoint allows the admin to register by providing an email and password.
+// router.post("/register", async (req, res) => {
+//   const { email, password } = req.body;
+//   try {
+//     let admin = await Admin.findOne({ email });
+//     if (admin) return res.status(400).json({ message: "Admin already exists" });
+
+//     admin = new Admin({ email, password });
+//     await admin.save();
+
+//     const token = jwt.sign(
+//       { id: admin._id, role: "admin" },
+//       process.env.JWT_SECRET,
+//       { expiresIn: "1h" }
+//     );
+//     res.status(201).json({ token });
+//   } catch (error) {
+//     res.status(500).json({ message: "Server error" });
+//   }
+// });
+
 router.post("/register", async (req, res) => {
   const { email, password } = req.body;
+
   try {
     let admin = await Admin.findOne({ email });
-    if (admin) return res.status(400).json({ message: "Admin already exists" });
+    if (admin) {
+      return res.status(400).json({ message: "Admin already exists" });
+    }
 
     admin = new Admin({ email, password });
     await admin.save();
 
-    const token = jwt.sign(
+    const accessToken = jwt.sign(
       { id: admin._id, role: "admin" },
       process.env.JWT_SECRET,
-      { expiresIn: "1h" }
+      { expiresIn: "1h" },
     );
-    res.status(201).json({ token });
+
+    const refreshToken = jwt.sign(
+      { id: admin._id, role: "admin" },
+      process.env.JWT_REFRESH_SECRET,
+      { expiresIn: "7d" },
+    );
+
+    admin.refreshToken = refreshToken;
+    await admin.save();
+
+    const options = {
+      httpOnly: true,
+      secure: true,
+      sameSite: "strict",
+    };
+
+    return res
+      .status(201)
+      .cookie("accessToken", accessToken, options)
+      .cookie("refreshToken", refreshToken, options)
+      .json({
+        user: {
+          _id: admin._id,
+          email: admin.email,
+        },
+        accessToken,
+        refreshToken,
+      });
   } catch (error) {
     res.status(500).json({ message: "Server error" });
   }
 });
 // This endpoint allows the admin to log in and receive a JWT token for authentication.
+// router.post("/login", async (req, res) => {
+//   const { email, password } = req.body;
+//   try {
+//     const admin = await Admin.findOne({ email });
+//     console.log(admin)
+//     if (!admin) return res.status(400).json({ message: "Invalid credentials" });
+
+//     const isMatch = await admin.comparePassword(password);
+//     if (!isMatch)
+//       return res.status(400).json({ message: "Invalid credentials" });
+
+//     const token = jwt.sign(
+//       { id: admin._id, role: "admin" },
+//       process.env.JWT_SECRET,
+//       { expiresIn: "1h" }
+//     );
+//     res.json({ token });
+//   } catch (error) {
+//     res.status(500).json({ message: "Server error" });
+//   }
+// });
 router.post("/login", async (req, res) => {
   const { email, password } = req.body;
+
   try {
     const admin = await Admin.findOne({ email });
-    if (!admin) return res.status(400).json({ message: "Invalid credentials" });
+    if (!admin) {
+      return res.status(400).json({ message: "Invalid credentials" });
+    }
 
     const isMatch = await admin.comparePassword(password);
-    if (!isMatch)
+    if (!isMatch) {
       return res.status(400).json({ message: "Invalid credentials" });
+    }
 
-    const token = jwt.sign(
+    const accessToken = jwt.sign(
       { id: admin._id, role: "admin" },
       process.env.JWT_SECRET,
-      { expiresIn: "1h" }
+      { expiresIn: "1h" },
     );
-    res.json({ token });
+
+    const refreshToken = jwt.sign(
+      { id: admin._id, role: "admin" },
+      process.env.JWT_REFRESH_SECRET,
+      { expiresIn: "7d" },
+    );
+
+    admin.refreshToken = refreshToken;
+    await admin.save();
+
+    const options = {
+      httpOnly: true,
+      secure: true,
+      sameSite: "strict",
+    };
+
+    return res
+      .status(200)
+      .cookie("accessToken", accessToken, options)
+      .cookie("refreshToken", refreshToken, options)
+      .json({
+        user: {
+          _id: admin._id,
+          email: admin.email,
+        },
+        accessToken,
+        refreshToken,
+      });
   } catch (error) {
     res.status(500).json({ message: "Server error" });
   }
 });
-router.post('/interview/ai', auth('admin'), upload.single('jobDescription'), async (req, res) => {
-  const { difficulty, duration } = req.body;
-  const no_of_questions = 5;
 
-  try {
-    if (!difficulty || !duration) {
-      return res.status(400).json({ message: 'All fields are required' });
+router.post(
+  "/interview/ai",
+  auth("admin"),
+  upload.single("jobDescription"),
+  async (req, res) => {
+    const { difficulty, duration } = req.body;
+    const no_of_questions = 5;
+
+    try {
+      if (!difficulty || !duration) {
+        return res.status(400).json({ message: "All fields are required" });
+      }
+
+      // ✅ Define jobDescription from file
+      const jobDescription = req.file
+        ? req.file.path.replace(/\\/g, "/")
+        : "No description provided";
+
+      // ✅ Correct parameter order
+      const questions = await generateQuestions(
+        jobDescription,
+        "AI Interview", // test_title
+        difficulty,
+        "Interview", // Exam_Type
+        no_of_questions,
+      );
+
+      const interview = await AI_Interview.create({
+        jobDescription,
+        difficulty,
+        duration,
+        createdBy: req.user.id,
+      });
+
+      const questionDocs = questions.map((q) => ({
+        interviewId: interview._id,
+        questionText: q,
+      }));
+      await Question.insertMany(questionDocs);
+
+      res.status(201).json({ interview, questions });
+    } catch (err) {
+      console.error("Error in /interview/ai:", err);
+      res.status(500).json({ message: "Server error", details: err.message });
     }
-
-    // ✅ Define jobDescription from file
-    const jobDescription = req.file ? req.file.path.replace(/\\/g, '/') : 'No description provided';
-
-    // ✅ Correct parameter order
-    const questions = await generateQuestions(
-      jobDescription,
-      "AI Interview",     // test_title
-      difficulty,
-      "Interview",        // Exam_Type
-      no_of_questions
-    );
-
-    const interview = await AI_Interview.create({
-      jobDescription,
-      difficulty,
-      duration,
-      createdBy: req.user.id,
-    });
-
-    const questionDocs = questions.map(q => ({
-      interviewId: interview._id,
-      questionText: q,
-    }));
-    await Question.insertMany(questionDocs);
-
-    res.status(201).json({ interview, questions });
-
-  } catch (err) {
-    console.error('Error in /interview/ai:', err);
-    res.status(500).json({ message: 'Server error', details: err.message });
-  }
-});
+  },
+);
 // routes/adminInterviewRoutes.js
 
 router.post(
@@ -133,24 +242,34 @@ router.post(
 
       const { interviewId } = req.params;
 
-      if (!scheduledStartDate || !scheduledEndDate || !subjectLine || !messageBody || !candidates) {
+      if (
+        !scheduledStartDate ||
+        !scheduledEndDate ||
+        !subjectLine ||
+        !messageBody ||
+        !candidates
+      ) {
         return res.status(400).json({ message: "All fields are required" });
       }
 
-      const candidateArray = typeof candidates === "string" ? JSON.parse(candidates) : candidates;
+      const candidateArray =
+        typeof candidates === "string" ? JSON.parse(candidates) : candidates;
       if (!Array.isArray(candidateArray) || candidateArray.length === 0)
         return res.status(400).json({ message: "Candidates must be an array" });
 
       // 🔍 Get existing interview
       const interview = await AI_Interview.findById(interviewId);
-      if (!interview) return res.status(404).json({ message: "Interview not found" });
+      if (!interview)
+        return res.status(404).json({ message: "Interview not found" });
 
       const scheduledCandidates = [];
 
       for (const candId of candidateArray) {
         const candidate = await Candidate.findById(candId);
         if (!candidate)
-          return res.status(404).json({ message: `Candidate ID ${candId} not found` });
+          return res
+            .status(404)
+            .json({ message: `Candidate ID ${candId} not found` });
 
         const interviewLink = `http://localhost:5173/candidate/interview/ai/${interviewId}`;
         const password = Math.random().toString(36).slice(-8);
@@ -174,7 +293,15 @@ router.post(
         interview.candidates.push(entry);
         scheduledCandidates.push(entry);
 
-        await sendAIInterviewLink(candidate.email,entry.interviewLink,entry.password,subjectLine, personalizedBody,scheduledEndDate,scheduledStartDate);
+        await sendAIInterviewLink(
+          candidate.email,
+          entry.interviewLink,
+          entry.password,
+          subjectLine,
+          personalizedBody,
+          scheduledEndDate,
+          scheduledStartDate,
+        );
       }
 
       await interview.save();
@@ -188,117 +315,129 @@ router.post(
       console.error("Error scheduling AI interview:", err);
       res.status(500).json({ message: "Server error", details: err.message });
     }
-  }
+  },
 );
 
 // POST /api/admin/interview/mcq/full
-router.post("/interview/mcq",auth("admin"),async (req, res) => {
-    try {
-      const {
-        test_title,
-        difficulty,
-        duration,
-        no_of_questions,
-        primary_skill,
-        secondary_skill,
-        passing_score,
-        start_Date,
-        end_Date,
-        candidates // should be array of candidate IDs
-      } = req.body;
+router.post("/interview/mcq", auth("admin"), async (req, res) => {
+  try {
+    const {
+      test_title,
+      difficulty,
+      duration,
+      no_of_questions,
+      primary_skill,
+      secondary_skill,
+      passing_score,
+      start_Date,
+      end_Date,
+      candidates, // should be array of candidate IDs
+    } = req.body;
 
-      // Validate required fields
-      const requiredFields = [
-        test_title, difficulty, duration, no_of_questions,
-        primary_skill, secondary_skill, passing_score,
-        start_Date,
-        end_Date,, candidates
-      ];
-      if (requiredFields.some(v => !v)) {
-        return res.status(400).json({ message: "All fields are required" });
-      }
-
-      let candidateArray;
-      try {
-        // Parse if sent as JSON string
-        candidateArray = typeof candidates === 'string'
-          ? JSON.parse(candidates)
-          : candidates;
-        if (!Array.isArray(candidateArray)) throw new Error();
-      } catch {
-        return res.status(400).json({ message: "Invalid candidates array" });
-      }
-
-      // Optional job description file
-      const jobDescription ="";
-
-      // Generate questions
-      const questions = await generateQuestions(
-        jobDescription,
-        test_title,
-        difficulty,
-        "MCQ",
-        no_of_questions
-      );
-
-      // Create interview
-      const interview = await MCQ_Interview.create({
-        test_title,
-        difficulty,
-        duration,
-        no_of_questions,
-        primary_skill,
-        secondary_skill,
-        passing_score,
-        createdBy: req.user.id,
-      });
-
-      // Save questions
-      const questionDocs = questions.map(q => ({
-        interviewId: interview._id,
-        questionText: q.question,
-        options: q.options,
-        correctAnswer: q.correctAnswer,
-      }));
-      await Question.insertMany(questionDocs);
-
-      // Schedule candidates
-      const updatedCandidates = [];
-      for (const candId of candidateArray) {
-        const candidate = await Candidate.findById(candId);
-        if (!candidate)
-          return res.status(404).json({ message: `Candidate ${candId} not found` });
-
-        const entry = {
-          candidateId: candidate._id,
-          interviewLink: `http://localhost:5173/candidate/interview/${interview._id}`,
-          password: Math.random().toString(36).slice(-8),
-          start_Date,
-        end_Date,
-        };
-
-        interview.candidates.push(entry);
-        updatedCandidates.push(entry);
-
-        // Send email
-        await sendMCQInterviewLink(candidate.email, entry.interviewLink, entry.password,start_Date,end_Date);
-      }
-
-      await interview.save();
-
-      res.status(201).json({
-        message: "Interview created and candidates scheduled successfully",
-        interview,
-        questions,
-        scheduledCandidates: updatedCandidates,
-      });
-    } catch (err) {
-      console.error(err);
-      res.status(500).json({ message: "Server error", details: err.message });
+    // Validate required fields
+    const requiredFields = [
+      test_title,
+      difficulty,
+      duration,
+      no_of_questions,
+      primary_skill,
+      secondary_skill,
+      passing_score,
+      start_Date,
+      end_Date,
+      ,
+      candidates,
+    ];
+    if (requiredFields.some((v) => !v)) {
+      return res.status(400).json({ message: "All fields are required" });
     }
-  }
-);
 
+    let candidateArray;
+    try {
+      // Parse if sent as JSON string
+      candidateArray =
+        typeof candidates === "string" ? JSON.parse(candidates) : candidates;
+      if (!Array.isArray(candidateArray)) throw new Error();
+    } catch {
+      return res.status(400).json({ message: "Invalid candidates array" });
+    }
+
+    // Optional job description file
+    const jobDescription = "";
+
+    // Generate questions
+    const questions = await generateQuestions(
+      jobDescription,
+      test_title,
+      difficulty,
+      "MCQ",
+      no_of_questions,
+    );
+
+    // Create interview
+    const interview = await MCQ_Interview.create({
+      test_title,
+      difficulty,
+      duration,
+      no_of_questions,
+      primary_skill,
+      secondary_skill,
+      passing_score,
+      createdBy: req.user.id,
+    });
+
+    // Save questions
+    const questionDocs = questions.map((q) => ({
+      interviewId: interview._id,
+      questionText: q.question,
+      options: q.options,
+      correctAnswer: q.correctAnswer,
+    }));
+    await Question.insertMany(questionDocs);
+
+    // Schedule candidates
+    const updatedCandidates = [];
+    for (const candId of candidateArray) {
+      const candidate = await Candidate.findById(candId);
+      if (!candidate)
+        return res
+          .status(404)
+          .json({ message: `Candidate ${candId} not found` });
+
+      const entry = {
+        candidateId: candidate._id,
+        interviewLink: `http://localhost:5173/candidate/interview/${interview._id}`,
+        password: Math.random().toString(36).slice(-8),
+        start_Date,
+        end_Date,
+      };
+
+      interview.candidates.push(entry);
+      updatedCandidates.push(entry);
+
+      // Send email
+      await sendMCQInterviewLink(
+        candidate.email,
+        entry.interviewLink,
+        entry.password,
+        start_Date,
+        end_Date,
+      );
+    }
+
+    await interview.save();
+
+    res.status(201).json({
+      message: "Interview created and candidates scheduled successfully",
+      interview,
+      questions,
+      scheduledCandidates: updatedCandidates,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error", details: err.message });
+  }
+});
 
 // router.post('/interview/mcq',auth('admin'),async (req, res) => {
 //     const {
@@ -370,12 +509,10 @@ router.post("/create/candidate", auth("admin"), async (req, res) => {
     !description ||
     !year_of_experience
   ) {
-    return res
-      .status(400)
-      .json({
-        message:
-          "Email, name, mobile, role, key_Skills, description, year_of_experience, and id are required.",
-      });
+    return res.status(400).json({
+      message:
+        "Email, name, mobile, role, key_Skills, description, year_of_experience, and id are required.",
+    });
   }
   // Email format validation
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -392,8 +529,8 @@ router.post("/create/candidate", auth("admin"), async (req, res) => {
     // Check if candidate already exists for this interview
     const existingCandidate = await Candidate.findOne({ email });
     if (existingCandidate) {
-        return res.status(409).json({ message: 'Candidate already added.' });
-      }
+      return res.status(409).json({ message: "Candidate already added." });
+    }
 
     // Create candidate if not exists
     const candidate =
@@ -574,7 +711,8 @@ router.get("/total-schedule", auth("admin"), async (req, res) => {
 // );
 // Bulk add candidates to an interview from a CSV file
 // This endpoint allows the admin to upload a CSV file containing candidate details (name, email,
-router.post("/interview/candidates/bulk",
+router.post(
+  "/interview/candidates/bulk",
   auth("admin"),
   upload.single("csvFile"),
   async (req, res) => {
@@ -593,8 +731,23 @@ router.post("/interview/candidates/bulk",
           const addedCandidates = [];
           for (const row of results) {
             console.log(row);
-            const { name, email, mobile,role,year_of_experience,key_Skills } = row;
-            if (!name || !email || !mobile ||!role ||!year_of_experience || !key_Skills) continue;
+            const {
+              name,
+              email,
+              mobile,
+              role,
+              year_of_experience,
+              key_Skills,
+            } = row;
+            if (
+              !name ||
+              !email ||
+              !mobile ||
+              !role ||
+              !year_of_experience ||
+              !key_Skills
+            )
+              continue;
 
             // Email and mobile validation
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -604,7 +757,14 @@ router.post("/interview/candidates/bulk",
             let candidate = await Candidate.findOne({ email });
             if (!candidate) {
               console.log(`Creating new candidate: ${name}`);
-              candidate = await Candidate.create({ name, email, mobile,role,year_of_experience,key_Skills });
+              candidate = await Candidate.create({
+                name,
+                email,
+                mobile,
+                role,
+                year_of_experience,
+                key_Skills,
+              });
             }
 
             // Check if already added to this interview
@@ -613,7 +773,7 @@ router.post("/interview/candidates/bulk",
             //     c.candidateId.equals(candidate._id)
             //   )
             // )
-              // continue;
+            // continue;
 
             // interview.candidates.push({
             //   candidateId: candidate._id,
@@ -625,216 +785,219 @@ router.post("/interview/candidates/bulk",
           }
           // await interview.save();
           fs.unlinkSync(req.file.path);
-          res
-            .status(201)
-            .json({
-              message: "Bulk candidates added",
-              added: addedCandidates.length,
-            });
+          res.status(201).json({
+            message: "Bulk candidates added",
+            added: addedCandidates.length,
+          });
         });
     } catch (error) {
       if (req.file && fs.existsSync(req.file.path))
         fs.unlinkSync(req.file.path);
       res.status(500).json({ message: "Server error" });
     }
-  }
+  },
 );
 
-
-
-
 // Get all candidates for a specific interview, including scorecard info if available and scheduledDate, result (pass/fail)
-router.get("/interview/:id/getcandidates/mcq", auth("admin"), async (req, res) => {
-  const { id } = req.params;
+router.get(
+  "/interview/:id/getcandidates/mcq",
+  auth("admin"),
+  async (req, res) => {
+    const { id } = req.params;
 
-  try {
-    // Find the interview and populate candidate details
-    const interview = await Interview.findById(id).populate(
-      "candidates.candidateId"
-    );
-    if (!interview) {
-      return res.status(404).json({ message: "Interview not found" });
-    }
+    try {
+      // Find the interview and populate candidate details
+      const interview = await Interview.findById(id).populate(
+        "candidates.candidateId",
+      );
+      if (!interview) {
+        return res.status(404).json({ message: "Interview not found" });
+      }
 
-    // Get all candidate IDs in this interview
-    const candidateIds = interview.candidates
-      .map((c) => c.candidateId && c.candidateId._id)
-      .filter(Boolean);
+      // Get all candidate IDs in this interview
+      const candidateIds = interview.candidates
+        .map((c) => c.candidateId && c.candidateId._id)
+        .filter(Boolean);
 
-    // Get all scores for this interview and these candidates
-    const scores = await Score.find({
-      interviewId: id,
-      candidateId: { $in: candidateIds },
-    });
+      // Get all scores for this interview and these candidates
+      const scores = await Score.find({
+        interviewId: id,
+        candidateId: { $in: candidateIds },
+      });
 
-    // Map candidateId to score for quick lookup
-    const scoreMap = {};
-    scores.forEach((score) => {
-      scoreMap[score.candidateId.toString()] = score;
-    });
+      // Map candidateId to score for quick lookup
+      const scoreMap = {};
+      scores.forEach((score) => {
+        scoreMap[score.candidateId.toString()] = score;
+      });
 
-    // Get Exam_Type for logic
-    const examType = interview.Exam_Type;
+      // Get Exam_Type for logic
+      const examType = interview.Exam_Type;
 
-    // Build response
-    let candidates = interview.candidates
-      .map((c) => {
-        const candidate = c.candidateId;
-        if (!candidate) return null;
-        const score = scoreMap[candidate._id.toString()];
-        let result = null;
-        let totalScore = null;
+      // Build response
+      let candidates = interview.candidates
+        .map((c) => {
+          const candidate = c.candidateId;
+          if (!candidate) return null;
+          const score = scoreMap[candidate._id.toString()];
+          let result = null;
+          let totalScore = null;
 
-        // Calculate result if score exists
-        if (score && examType === "MCQ") {
-          // MCQ: full mark is 10, passing is 60% (6/10)
-          const totalQuestions = score.scores ? score.scores.length : 0;
-          const correctAnswers = score.scores
-            ? score.scores.filter((q) => q.score === 1).length
-            : 0;
-          totalScore = correctAnswers;
-          result =
-            totalQuestions > 0 && correctAnswers / totalQuestions >= 0.6
-              ? "Pass"
-              : "Fail";
-        } else if (score && examType === "Interview") {
-          // Interview: no MCQ, so pass/fail logic can be based on totalScore >= 60%
-          // If totalScore is out of 10, use same logic, else just pass totalScore
-          if (typeof score.totalScore === "number") {
-            totalScore = score.totalScore;
-            result = score.totalScore >= 6 ? "Pass" : "Fail";
+          // Calculate result if score exists
+          if (score && examType === "MCQ") {
+            // MCQ: full mark is 10, passing is 60% (6/10)
+            const totalQuestions = score.scores ? score.scores.length : 0;
+            const correctAnswers = score.scores
+              ? score.scores.filter((q) => q.score === 1).length
+              : 0;
+            totalScore = correctAnswers;
+            result =
+              totalQuestions > 0 && correctAnswers / totalQuestions >= 0.6
+                ? "Pass"
+                : "Fail";
+          } else if (score && examType === "Interview") {
+            // Interview: no MCQ, so pass/fail logic can be based on totalScore >= 60%
+            // If totalScore is out of 10, use same logic, else just pass totalScore
+            if (typeof score.totalScore === "number") {
+              totalScore = score.totalScore;
+              result = score.totalScore >= 6 ? "Pass" : "Fail";
+            }
           }
-        }
 
-        return {
-          _id: candidate._id,
-          name: candidate.name,
-          email: candidate.email,
-          mobile: candidate.mobile,
-          aadharFront: candidate.aadharFront,
-          aadharBack: candidate.aadharBack,
-          photo: candidate.photo,
-          scoreCard: score ? score.totalScore : null,
-          scores: score ? score.scores : null,
-          summary: score ? score.summary : null,
-          pdfPath: score ? score.pdfPath : null,
-          totalScore: totalScore,
-          scheduledDate: c.scheduledDate || null,
-          Exam_Type: examType,
-          result: score ? result : null,
-        };
-      })
-      .filter(Boolean);
+          return {
+            _id: candidate._id,
+            name: candidate.name,
+            email: candidate.email,
+            mobile: candidate.mobile,
+            aadharFront: candidate.aadharFront,
+            aadharBack: candidate.aadharBack,
+            photo: candidate.photo,
+            scoreCard: score ? score.totalScore : null,
+            scores: score ? score.scores : null,
+            summary: score ? score.summary : null,
+            pdfPath: score ? score.pdfPath : null,
+            totalScore: totalScore,
+            scheduledDate: c.scheduledDate || null,
+            Exam_Type: examType,
+            result: score ? result : null,
+          };
+        })
+        .filter(Boolean);
 
-    // Sort candidates so the latest added is on top (descending by scheduledDate)
-    candidates.sort((a, b) => {
-      const aTime = a.scheduledDate ? new Date(a.scheduledDate).getTime() : 0;
-      const bTime = b.scheduledDate ? new Date(b.scheduledDate).getTime() : 0;
-      return bTime - aTime;
-    });
+      // Sort candidates so the latest added is on top (descending by scheduledDate)
+      candidates.sort((a, b) => {
+        const aTime = a.scheduledDate ? new Date(a.scheduledDate).getTime() : 0;
+        const bTime = b.scheduledDate ? new Date(b.scheduledDate).getTime() : 0;
+        return bTime - aTime;
+      });
 
-    res.json({ candidates });
-  } catch (error) {
-    console.log(error);
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
-router.get("/interview/:id/getcandidates/mcq", auth("admin"), async (req, res) => {
-  const { id } = req.params;
-
-  try {
-    // Find the interview and populate candidate details
-    const interview = await Interview.findById(id).populate(
-      "candidates.candidateId"
-    );
-    if (!interview) {
-      return res.status(404).json({ message: "Interview not found" });
+      res.json({ candidates });
+    } catch (error) {
+      console.log(error);
+      res.status(500).json({ message: "Server error" });
     }
+  },
+);
 
-    // Get all candidate IDs in this interview
-    const candidateIds = interview.candidates
-      .map((c) => c.candidateId && c.candidateId._id)
-      .filter(Boolean);
+router.get(
+  "/interview/:id/getcandidates/mcq",
+  auth("admin"),
+  async (req, res) => {
+    const { id } = req.params;
 
-    // Get all scores for this interview and these candidates
-    const scores = await Score.find({
-      interviewId: id,
-      candidateId: { $in: candidateIds },
-    });
+    try {
+      // Find the interview and populate candidate details
+      const interview = await Interview.findById(id).populate(
+        "candidates.candidateId",
+      );
+      if (!interview) {
+        return res.status(404).json({ message: "Interview not found" });
+      }
 
-    // Map candidateId to score for quick lookup
-    const scoreMap = {};
-    scores.forEach((score) => {
-      scoreMap[score.candidateId.toString()] = score;
-    });
+      // Get all candidate IDs in this interview
+      const candidateIds = interview.candidates
+        .map((c) => c.candidateId && c.candidateId._id)
+        .filter(Boolean);
 
-    // Get Exam_Type for logic
-    const examType = interview.Exam_Type;
+      // Get all scores for this interview and these candidates
+      const scores = await Score.find({
+        interviewId: id,
+        candidateId: { $in: candidateIds },
+      });
 
-    // Build response
-    let candidates = interview.candidates
-      .map((c) => {
-        const candidate = c.candidateId;
-        if (!candidate) return null;
-        const score = scoreMap[candidate._id.toString()];
-        let result = null;
-        let totalScore = null;
+      // Map candidateId to score for quick lookup
+      const scoreMap = {};
+      scores.forEach((score) => {
+        scoreMap[score.candidateId.toString()] = score;
+      });
 
-        // Calculate result if score exists
-        if (score && examType === "MCQ") {
-          // MCQ: full mark is 10, passing is 60% (6/10)
-          const totalQuestions = score.scores ? score.scores.length : 0;
-          const correctAnswers = score.scores
-            ? score.scores.filter((q) => q.score === 1).length
-            : 0;
-          totalScore = correctAnswers;
-          result =
-            totalQuestions > 0 && correctAnswers / totalQuestions >= 0.6
-              ? "Pass"
-              : "Fail";
-        } else if (score && examType === "Interview") {
-          // Interview: no MCQ, so pass/fail logic can be based on totalScore >= 60%
-          // If totalScore is out of 10, use same logic, else just pass totalScore
-          if (typeof score.totalScore === "number") {
-            totalScore = score.totalScore;
-            result = score.totalScore >= 6 ? "Pass" : "Fail";
+      // Get Exam_Type for logic
+      const examType = interview.Exam_Type;
+
+      // Build response
+      let candidates = interview.candidates
+        .map((c) => {
+          const candidate = c.candidateId;
+          if (!candidate) return null;
+          const score = scoreMap[candidate._id.toString()];
+          let result = null;
+          let totalScore = null;
+
+          // Calculate result if score exists
+          if (score && examType === "MCQ") {
+            // MCQ: full mark is 10, passing is 60% (6/10)
+            const totalQuestions = score.scores ? score.scores.length : 0;
+            const correctAnswers = score.scores
+              ? score.scores.filter((q) => q.score === 1).length
+              : 0;
+            totalScore = correctAnswers;
+            result =
+              totalQuestions > 0 && correctAnswers / totalQuestions >= 0.6
+                ? "Pass"
+                : "Fail";
+          } else if (score && examType === "Interview") {
+            // Interview: no MCQ, so pass/fail logic can be based on totalScore >= 60%
+            // If totalScore is out of 10, use same logic, else just pass totalScore
+            if (typeof score.totalScore === "number") {
+              totalScore = score.totalScore;
+              result = score.totalScore >= 6 ? "Pass" : "Fail";
+            }
           }
-        }
 
-        return {
-          _id: candidate._id,
-          name: candidate.name,
-          email: candidate.email,
-          mobile: candidate.mobile,
-          aadharFront: candidate.aadharFront,
-          aadharBack: candidate.aadharBack,
-          photo: candidate.photo,
-          scoreCard: score ? score.totalScore : null,
-          scores: score ? score.scores : null,
-          summary: score ? score.summary : null,
-          pdfPath: score ? score.pdfPath : null,
-          totalScore: totalScore,
-          scheduledDate: c.scheduledDate || null,
-          Exam_Type: examType,
-          result: score ? result : null,
-        };
-      })
-      .filter(Boolean);
+          return {
+            _id: candidate._id,
+            name: candidate.name,
+            email: candidate.email,
+            mobile: candidate.mobile,
+            aadharFront: candidate.aadharFront,
+            aadharBack: candidate.aadharBack,
+            photo: candidate.photo,
+            scoreCard: score ? score.totalScore : null,
+            scores: score ? score.scores : null,
+            summary: score ? score.summary : null,
+            pdfPath: score ? score.pdfPath : null,
+            totalScore: totalScore,
+            scheduledDate: c.scheduledDate || null,
+            Exam_Type: examType,
+            result: score ? result : null,
+          };
+        })
+        .filter(Boolean);
 
-    // Sort candidates so the latest added is on top (descending by scheduledDate)
-    candidates.sort((a, b) => {
-      const aTime = a.scheduledDate ? new Date(a.scheduledDate).getTime() : 0;
-      const bTime = b.scheduledDate ? new Date(b.scheduledDate).getTime() : 0;
-      return bTime - aTime;
-    });
+      // Sort candidates so the latest added is on top (descending by scheduledDate)
+      candidates.sort((a, b) => {
+        const aTime = a.scheduledDate ? new Date(a.scheduledDate).getTime() : 0;
+        const bTime = b.scheduledDate ? new Date(b.scheduledDate).getTime() : 0;
+        return bTime - aTime;
+      });
 
-    res.json({ candidates });
-  } catch (error) {
-    console.log(error);
-    res.status(500).json({ message: "Server error" });
-  }
-});
+      res.json({ candidates });
+    } catch (error) {
+      console.log(error);
+      res.status(500).json({ message: "Server error" });
+    }
+  },
+);
 // Get all interviews created by the admin
 router.get("/interview/job_list", auth("admin"), async (req, res) => {
   try {
@@ -845,6 +1008,5 @@ router.get("/interview/job_list", auth("admin"), async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
-
 
 module.exports = router;
