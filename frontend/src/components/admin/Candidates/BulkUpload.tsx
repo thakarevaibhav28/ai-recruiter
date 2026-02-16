@@ -45,8 +45,9 @@ const BulkUpload = () => {
 
       const formData = new FormData();
       formData.append("csvFile", selectedFile);
+      console.log(formData)
 
-      const res = await adminService.lobulk_add_candidategin(formData);
+      const res = await adminService.bulk_add_candidate(formData);
 
       toast.success(res?.data?.message || "Candidates added successfully");
 
