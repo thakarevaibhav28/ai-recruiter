@@ -350,14 +350,15 @@ const TestsAssessments = () => {
       )}
 
       {/* Tabs and Filter Button */}
-      <div className="flex items-center justify-between mb-6">
+
+      <div className="flex items-center justify-between mb-6 ">
         {/* Left: Tabs */}
-        <div className="inline-flex bg-gray-100 rounded-lg p-1">
+        <div className="inline-flex bg-white rounded-lg p-2">
           <button
             onClick={() => setActiveTab("create")}
             className={`px-6 py-2 text-sm font-medium rounded-md transition-colors ${
               activeTab === "create"
-                ? "bg-white text-gray-900 shadow-sm"
+                ? "bg-[#F4F7FE] text-gray-900 shadow-sm"
                 : "text-gray-600 hover:text-gray-900"
             }`}
           >
@@ -367,7 +368,7 @@ const TestsAssessments = () => {
             onClick={() => setActiveTab("templates")}
             className={`px-6 py-2 text-sm font-medium rounded-md transition-colors ${
               activeTab === "templates"
-                ? "bg-white text-gray-900 shadow-sm"
+                ? "bg-[#F4F7FE] text-gray-900 shadow-sm"
                 : "text-gray-600 hover:text-gray-900"
             }`}
           >
@@ -388,33 +389,22 @@ const TestsAssessments = () => {
 
       {/* Create Assessments Tab */}
       {activeTab === "create" && (
-        <div className="bg-white rounded-lg p-8">
-          {/* Header */}
-          <div className="flex items-start gap-4 mb-6">
-            <div className="w-12 h-12 rounded-full bg-indigo-600 flex items-center justify-center text-white shrink-0">
-              <svg
-                className="w-6 h-6"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 4v16m8-8H4"
-                />
-              </svg>
+        <>
+          <div className=" rounded-lg p-5 bg-white">
+            {/* Header */}
+            <div className="flex items-start gap-4 mb-6 ">
+              <div className="w-12 h-12 rounded flex items-center justify-center text-white shrink-0">
+                <img src={Brain} alt="" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-semibold text-gray-900">
+                  Create New Assessment
+                </h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  Set up a new MCQ-based assessment for your candidates
+                </p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-2xl font-semibold text-gray-900">
-                Create New Assessment
-              </h2>
-              <p className="text-sm text-gray-500 mt-1">
-                Set up a new MCQ-based assessment for your candidates
-              </p>
-            </div>
-          </div>
 
           {/* Form */}
           <div className="space-y-6">

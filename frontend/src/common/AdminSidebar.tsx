@@ -26,11 +26,11 @@ const Sidebar: React.FC = () => {
 
   return (
     <aside className="fixed left-0 top-0 h-screen w-60 bg-white border-r border-gray-200">
-      <div className="px-5 pt-6 pb-8">
-        <h1 className="text-lg font-bold text-gray-900">Vitric IQ</h1>
+      <div className="px-5 pt-6 pb-8 flex items-center justify-center border-b border-gray-100 mb-10">
+        <h1 className="text-[25px] font-bold text-gray-900">Vitric IQ</h1>
       </div>
 
-      <nav className="space-y-0.5">
+      <nav className="space-y-4">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = location.pathname === item.path;
@@ -39,18 +39,18 @@ const Sidebar: React.FC = () => {
             <button
               key={item.title}
               onClick={() => navigate(item.path)}
-              className={`relative w-full flex items-center gap-3 px-4 py-2.5 text-[14px] font-medium transition-colors ${
+              className={`  pl-10 text-[16px] relative w-full flex items-center gap-3 px-4 py-2.5 font-medium transition-colors ${
                 isActive
                   ? "text-indigo-600"
                   : "text-gray-600 hover:text-gray-900"
               }`}
             >
               {isActive && (
-                <div className="absolute right-0 top-0 bottom-0 w-1 rounded-r-full bg-indigo-600" />
+                <div className="absolute right-0 top-0 bottom-0 w-1 text-[#A3AED0] rounded-r-full bg-indigo-600" />
               )}
 
-              <Icon className="h-[18px] w-[18px] shrink-0" />
-              <span className={isActive ? "font-semibold" : ""}>
+              <Icon className="h-[18px] w-[18px] shrink-0 " />
+              <span className={isActive ? "font-semibold text-[#2B3674]" : ""}>
                 {item.title}
               </span>
             </button>

@@ -5,8 +5,11 @@ class AdminService {
   login(data: any) {
     return adminApi.login(data);
   }
+  bulk_add_candidategin(data: any) {
+    return adminApi.bulk_add_candidate(data);
+  }
 
+  
 }
-
 
 export const adminService = new AdminService();
