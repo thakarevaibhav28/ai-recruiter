@@ -1,0 +1,467 @@
+{
+	"info": {
+		"_postman_id": "4f8f9419-93fc-43c7-8240-693008ff77bf",
+		"name": "InterviewApp",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "31888716"
+	},
+	"item": [
+		{
+			"name": "Admin",
+			"item": [
+				{
+					"name": "Register Admin",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"sumedh\",\n  \"password\": \"password123\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/admin/register",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"register"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Login Admin",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Login successful\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"const response = pm.response.json();",
+									"pm.environment.set(\"adminToken\", response.token);"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"sumedh\",\n  \"password\": \"password123\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/admin/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"login"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Logout Admin",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/admin/logout",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"logout"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Jobs",
+			"item": [
+				{
+					"name": "Create Job",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "descriptionFile",
+									"type": "file",
+									"src": "/C:/Users/HP/Downloads/test-docs/React Developer _ Dehradun.docx.pdf"
+								},
+								{
+									"key": "techStack",
+									"value": "[\"React\", \"Node.js\", \"MongoDB\"]",
+									"type": "text"
+								},
+								{
+									"key": "examLevel",
+									"value": "medium",
+									"type": "text"
+								},
+								{
+									"key": "examType",
+									"value": "video",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/jobs",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"jobs"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get All Jobs",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/jobs",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"jobs"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Candidates",
+			"item": [
+				{
+					"name": "Add Candidate",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Vedant\",\n  \"email\": \"sumedhzodape143@gmail.com\",\n  \"mobile\": \"1234567890\",\n  \"jobId\": \"{{jobId}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/candidates",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"candidates"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Candidate",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"examDate\": \"2025-06-16\",\n  \"examTime\": \"11:00\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/candidates/{{candidateId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"candidates",
+								"{{candidateId}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Candidate",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/candidates/{{candidateId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"candidates",
+								"{{candidateId}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Schedule Interview",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"candidateIds\":[\"6847f4e67ff6f925944391b8\", \"6847f9c794b6d1b74b0524e5\"],\r\n    \"examDate\": \"2025-06-10\",\r\n    \"examTime\": \"15:00\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/candidates/schedule",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"candidates",
+								"schedule"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Exam",
+			"item": [
+				{
+					"name": "Candidate Exam Login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Candidate login successful\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"const response = pm.response.json();",
+									"pm.environment.set(\"candidateToken\", response.token);"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"sumedhzodape143@gmail.com\",\n  \"password\": \"{{candidatePassword}}\"\n}\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/candidates/exam/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"candidates",
+								"exam",
+								"login"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Submit Exam (MCQ)",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"candidateId\": \"{{candidateId}}\",\n  \"answers\": [\n    {\n      \"questionId\": \"question_id_1\",\n      \"answer\": \"===\"\n    }\n  ],\n  \"examType\": \"mcq\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/candidates/exam/submit",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"candidates",
+								"exam",
+								"submit"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Submit Exam (Video)",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"candidateId\": \"{{candidateId}}\",\n  \"answers\": [\n    {\n      \"questionId\": \"6847f210365f629b28055c31\",\n      \"answer\": \"Functional components are JavaScript functions that return JSX and use hooks for state and lifecycle management\"\n    },\n    {\n      \"questionId\": \"6847f210365f629b28055c32\",\n      \"answer\": \"Redux is a predictable state container that centralizes application state in a single store, making state management more organized and debuggable. Redux-thunk middleware allows action creators to return functions instead of plain objects, enabling asynchronous operations like API calls within Redux actions. I've used this combination to manage complex state like user authentication, shopping cart data, and real-time updates, where components dispatch thunk actions that handle async operations and update the global state accordingly.\"\n    },\n    {\n      \"questionId\": \"6847f210365f629b28055c33\",\n      \"answer\": \"I handle async operations using async/await with try-catch blocks inside useEffect hooks, custom hooks, or event handlers for proper error handling and clean code structure. Best practices include implementing loading states to provide user feedback, using error boundaries to catch component errors, and cleaning up subscriptions to prevent memory leaks. I also use libraries like React Query or SWR for advanced data fetching, implement debouncing for user inputs, and always provide meaningful error messages to users.\"\n    },\n    {\n      \"questionId\": \"6847f210365f629b28055c34\",\n      \"answer\": \"A custom hook is a JavaScript function starting with use that can call other hooks, allowing extraction of component logic for reusability across components. For example, a useLocalStorage hook would accept a key and initial value, use useState to manage state, and useEffect to sync with localStorage on changes. This hook returns the current value and a setter function, providing a clean API similar to useState while handling localStorage operations automatically.\"\n    },\n    {\n      \"questionId\": \"6847f210365f629b28055c35\",\n      \"answer\": \"I use Jest as the testing framework combined with React Testing Library, focusing on testing user behavior rather than implementation details like internal state or methods. My approach includes writing unit tests for individual component functionality, integration tests for component interactions, and using mock functions for external dependencies like API calls. I test user interactions, accessibility features, and error scenarios while maintaining tests that are maintainable and reflect actual user workflows.\"\n    },\n    {\n      \"questionId\": \"6847f210365f629b28055c36\",\n      \"answer\": \"RESTful APIs use standard HTTP methods (GET, POST, PUT, DELETE) to perform operations on resources identified by URLs, following stateless communication principles. \"\n    },\n    {\n      \"questionId\": \"6847f210365f629b28055c37\",\n      \"answer\": \"I\"\n    },\n    {\n      \"questionId\": \"6847f210365f629b28055c38\",\n      \"answer\": \"I implement responsive design using CSS Grid and Flexbox for flexible layouts, CSS media queries for device-specific styling, and CSS-in-JS libraries for dynamic responsive behavior. I follow mobile-first design principles, use responsive units like rem and percentages, and leverage component libraries like Material-UI or Bootstrap that provide built-in responsive components. Testing across different devices using browser developer tools and real device testing ensures consistent user experience across all screen sizes.\"\n    },\n    {\n      \"questionId\": \"6847f210365f629b28055c39\",\n      \"answer\": \"I would use React DevTools Profiler to identify expensive renders and components causing bottlenecks, then analyze network requests and memory usage patterns. For real-time data components, I'd implement optimizations like memoization, debouncing updates, efficient WebSocket usage, and virtual scrolling for large datasets. Solutions would include implementing proper caching strategies, using React Query for background data synchronization, and considering pagination or data virtualization to handle large amounts of real-time data efficiently.\"\n    },\n    {\n      \"questionId\": \"6847f210365f629b28055c3a\",\n      \"answer\": \"I would start by reproducing the issue across different browsers and devices, then use browser developer tools to inspect elements, check console errors, and examine network requests. My debugging process includes using React DevTools to inspect component state and props, adding strategic console logs, and testing event handlers to ensure proper binding. After identifying the root cause, I'd implement a fix, write tests to prevent regression, and deploy through proper staging and testing procedures.\"\n    }\n    \n  ],\n  \"examType\": \"video\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/candidates/exam/submit",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"candidates",
+								"exam",
+								"submit"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	]
+}
