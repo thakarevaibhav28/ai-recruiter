@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 const { required } = require('nodemon/lib/config');
 
-const interviewSchema = new mongoose.Schema({
+const aiinterviewSchema = new mongoose.Schema({
   jobDescription: { type: String, required: true },
   difficulty: { type: String, required: true },
   duration: { type: String, required: true },
@@ -18,4 +18,4 @@ const interviewSchema = new mongoose.Schema({
   }]
 });
 
-module.exports = mongoose.model('AI_Interview', interviewSchema);
+module.exports = mongoose.model('AI_Interview', aiinterviewSchema);

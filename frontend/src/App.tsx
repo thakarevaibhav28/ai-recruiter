@@ -7,7 +7,7 @@ import AIVideoInterview from "./pages/admin/AIVideoInterview";
 import TestsAssessments from "./pages/admin/Tests-Assessments";
 
 import "./App.css";
-import LoginPage from "./pages/admin/adminLogin";
+import LoginPage from "./pages/admin/AdminLogin";
 
 function App() {
   return (
