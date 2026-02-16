@@ -5,7 +5,7 @@ class AdminService {
   login(data: any) {
     return adminApi.login(data);
   }
-  bulk_add_candidategin(data: any) {
+  bulk_add_candidate(data: any) {
     return adminApi.bulk_add_candidate(data);
   }
 

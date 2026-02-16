@@ -7,7 +7,7 @@ interface ProtectedRouteProps {
   children?: React.ReactNode;
 }
 
-const ProtectedRoute = ({ isAuthenticated, redirectTo = "/admin-login" }: ProtectedRouteProps) => {
+const ProtectedRoute = ({ isAuthenticated, redirectTo = "/admin/login" }: ProtectedRouteProps) => {
   console.log("ProtectedRoute - isAuthenticated:", isAuthenticated);
   return isAuthenticated ? <Outlet /> : <Navigate to={redirectTo} replace />;
 };
