@@ -13,13 +13,12 @@ const Header: React.FC<HeaderProps> = ({
   heading = "Hi, John",
   subheading,
   showSearch = true,
-  userName = "Himanshu",
   userInitial = "H",
 }) => {
   return (
     <header className="flex h-16 items-center justify-between px-8">
-      <div>
-        <h2 className="text-xl font-semibold text-gray-900">{heading}</h2>
+      <div className="flex flex-col gap-3">
+        <h2 className="text-3xl font-semibold text-gray-900">{heading}</h2>
         {subheading && (
           <p className="text-sm text-gray-500 mt-0.5">{subheading}</p>
         )}

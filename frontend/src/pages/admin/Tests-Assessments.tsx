@@ -6,6 +6,7 @@ import {
   Clock,
   Calendar as CalendarIcon,
 } from "lucide-react";
+import Brain from "../../assets/admin/new_assisment.png";
 
 const templates = Array.from({ length: 6 }).map((_, i) => ({
   id: i + 1,
@@ -32,14 +33,15 @@ const TestsAssessments = () => {
       onMenuItemClick={setActiveMenuItem}
     >
       {/* Tabs and Filter Button */}
-      <div className="flex items-center justify-between mb-6">
+
+      <div className="flex items-center justify-between mb-6 ">
         {/* Left: Tabs */}
-        <div className="inline-flex bg-gray-100 rounded-lg p-1">
+        <div className="inline-flex bg-white rounded-lg p-2">
           <button
             onClick={() => setActiveTab("create")}
             className={`px-6 py-2 text-sm font-medium rounded-md transition-colors ${
               activeTab === "create"
-                ? "bg-white text-gray-900 shadow-sm"
+                ? "bg-[#F4F7FE] text-gray-900 shadow-sm"
                 : "text-gray-600 hover:text-gray-900"
             }`}
           >
@@ -49,7 +51,7 @@ const TestsAssessments = () => {
             onClick={() => setActiveTab("templates")}
             className={`px-6 py-2 text-sm font-medium rounded-md transition-colors ${
               activeTab === "templates"
-                ? "bg-white text-gray-900 shadow-sm"
+                ? "bg-[#F4F7FE] text-gray-900 shadow-sm"
                 : "text-gray-600 hover:text-gray-900"
             }`}
           >
@@ -57,23 +59,193 @@ const TestsAssessments = () => {
           </button>
         </div>
 
-        {/* Right: Filter Button */}
-        <button
-          className={`${activeTab === "templates" ? "hidden" : "flex"} items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors`}
+        {/* Right: Action Buttons */}
+        {/* <div
+          className={`items-center gap-3 ${activeTab === "bulk" ? "hidden" : "flex"}`}
         >
-          <Filter className="h-4 w-4" />
-          Filter
-        </button>
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-[#00000033] rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            Add Candidates
+          </button>
+          <button className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-[#00000033] rounded-lg hover:bg-gray-50 transition-colors">
+            <Filter className="h-4 w-4" />
+            Filter
+          </button>
+        </div> */}
       </div>
 
       {/* Create Assessments Tab */}
       {activeTab === "create" && (
-        <div className="bg-white rounded-lg p-8">
-          {/* Header */}
-          <div className="flex items-start gap-4 mb-6">
-            <div className="w-12 h-12 rounded-full bg-indigo-600 flex items-center justify-center text-white shrink-0">
+        <>
+          <div className=" rounded-lg p-5 bg-white">
+            {/* Header */}
+            <div className="flex items-start gap-4 mb-6 ">
+              <div className="w-12 h-12 rounded flex items-center justify-center text-white shrink-0">
+                <img src={Brain} alt="" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-semibold text-gray-900">
+                  Create New Assessment
+                </h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  Set up a new MCQ-based assessment for your candidates
+                </p>
+              </div>
+            </div>
+
+            {/* Form */}
+            <div className="space-y-6 ">
+              {/* Row 1: Add Candidates, Start Date, End Date */}
+              <div className="flex items-center gap-5">
+                <div className="w-1/2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Add Candidates
+                    <span className="ml-2 text-xs text-indigo-600">
+                      1 Candidate Added
+                    </span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Select Candidates to invite"
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent outline-none"
+                  />
+                </div>
+                <div className="w-1/2 flex items-center justify-between gap-4">
+                  <div className="w-1/2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Start Date
+                    </label>
+                    <div className=" relative">
+                      <input
+                        type="text"
+                        placeholder="Pick a date"
+                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent outline-none"
+                      />
+                      <CalendarIcon className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                    </div>
+                  </div>
+                  <div className="w-1/2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      End Date
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Pick a date"
+                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent outline-none"
+                      />
+                      <CalendarIcon className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 2: Test Title, No. of questions */}
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Test Title
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g., Frontend Developer Assessment"
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    No. of questions
+                  </label>
+                  <select className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent outline-none appearance-none bg-white">
+                    <option>e.g., 20</option>
+                    <option>10</option>
+                    <option>20</option>
+                    <option>30</option>
+                    <option>40</option>
+                    <option>50</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Row 3: Primary Skill, Passing Score% */}
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Primary Skill
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g., Frontend Developer Assessment"
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Passing Score%
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g., 70"
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Row 4: Secondary Skill, Select exam level */}
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Secondary Skill (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g., Frontend Developer Assessment"
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Select exam level
+                  </label>
+                  <select className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent outline-none appearance-none bg-white">
+                    <option>e.g., Easy</option>
+                    <option>Easy</option>
+                    <option>Intermediate</option>
+                    <option>Advanced</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Row 5: Duration */}
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Duration
+                  </label>
+                  <select className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent outline-none appearance-none bg-white">
+                    <option>Select duration</option>
+                    <option>30 min</option>
+                    <option>60 min</option>
+                    <option>90 min</option>
+                    <option>120 min</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+            </div>
+          </div>
+          <div className="flex justify-end gap-4 pt-6 border-t border-gray-200">
+            <button className="flex items-center gap-2 px-6 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+              <FileText className="h-4 w-4" />
+              Generate & Save as template
+            </button>
+            <button className="flex items-center gap-2 px-6 py-2.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors">
               <svg
-                className="w-6 h-6"
+                className="h-4 w-4"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -82,182 +254,13 @@ const TestsAssessments = () => {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth={2}
-                  d="M12 4v16m8-8H4"
+                  d="M13 10V3L4 14h7v7l9-11h-7z"
                 />
               </svg>
-            </div>
-            <div>
-              <h2 className="text-2xl font-semibold text-gray-900">
-                Create New Assessment
-              </h2>
-              <p className="text-sm text-gray-500 mt-1">
-                Set up a new MCQ-based assessment for your candidates
-              </p>
-            </div>
+              Generate & Send Invites
+            </button>
           </div>
-
-          {/* Form */}
-          <div className="space-y-6">
-            {/* Row 1: Add Candidates, Start Date, End Date */}
-            <div className="grid grid-cols-3 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Add Candidates
-                  <span className="ml-2 text-xs text-indigo-600">
-                    1 Candidate Added
-                  </span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="Select Candidates to invite"
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Start Date
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="Pick a date"
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent outline-none"
-                  />
-                  <CalendarIcon className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  End Date
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="Pick a date"
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent outline-none"
-                  />
-                  <CalendarIcon className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                </div>
-              </div>
-            </div>
-
-            {/* Row 2: Test Title, No. of questions */}
-            <div className="grid grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Test Title
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g., Frontend Developer Assessment"
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  No. of questions
-                </label>
-                <select className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent outline-none appearance-none bg-white">
-                  <option>e.g., 20</option>
-                  <option>10</option>
-                  <option>20</option>
-                  <option>30</option>
-                  <option>40</option>
-                  <option>50</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Row 3: Primary Skill, Passing Score% */}
-            <div className="grid grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Primary Skill
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g., Frontend Developer Assessment"
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Passing Score%
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g., 70"
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent outline-none"
-                />
-              </div>
-            </div>
-
-            {/* Row 4: Secondary Skill, Select exam level */}
-            <div className="grid grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Secondary Skill (Optional)
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g., Frontend Developer Assessment"
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Select exam level
-                </label>
-                <select className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent outline-none appearance-none bg-white">
-                  <option>e.g., Easy</option>
-                  <option>Easy</option>
-                  <option>Intermediate</option>
-                  <option>Advanced</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Row 5: Duration */}
-            <div className="grid grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Duration
-                </label>
-                <select className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent outline-none appearance-none bg-white">
-                  <option>Select duration</option>
-                  <option>30 min</option>
-                  <option>60 min</option>
-                  <option>90 min</option>
-                  <option>120 min</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex justify-end gap-4 pt-6 border-t border-gray-200">
-              <button className="flex items-center gap-2 px-6 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
-                <FileText className="h-4 w-4" />
-                Generate & Save as template
-              </button>
-              <button className="flex items-center gap-2 px-6 py-2.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors">
-                <svg
-                  className="h-4 w-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M13 10V3L4 14h7v7l9-11h-7z"
-                  />
-                </svg>
-                Generate & Send Invites
-              </button>
-            </div>
-          </div>
-        </div>
+        </>
       )}
 
       {/* Tests Templates Tab */}
