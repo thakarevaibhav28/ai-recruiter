@@ -7,6 +7,7 @@ import AIVideoInterview from "./pages/admin/AIVideoInterview";
 import TestsAssessments from "./pages/admin/Tests-Assessments";
 
 import "./App.css";
+import LoginPage from "./pages/admin/adminLogin";
 
 function App() {
   return (
@@ -14,6 +15,8 @@ function App() {
       <Router>
         <Routes>
           <Route path="/" element={<Dashboard />} />
+          <Route path="/admin/login" element={<LoginPage />} />
+
           <Route path="/admin/dashboard" element={<Dashboard />} />
           <Route path="/admin/candidates" element={<Candidate />} />
           <Route path="/admin/tests" element={<TestsAssessments />} />
