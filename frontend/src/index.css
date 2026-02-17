@@ -14,3 +14,10 @@ body {
     /* scrollbar-width: auto;  */
 }
 
+
+/* Hide default date icon (Chrome, Edge, Safari) */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  opacity: 0;
+  /* display: none; */
+}
+
