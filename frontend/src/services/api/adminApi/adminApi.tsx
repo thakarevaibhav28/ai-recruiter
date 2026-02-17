@@ -3,8 +3,10 @@ import { api } from "../api";
 
 class AdminApi {
   private _url = {
+
     LOGIN: "/admin/login",
-    ADD_CANDIDATE: "/api/candidate"
+    ADD_CANDIDATE: "/api/candidate",
+    bulk_add_candidate:"/admin/interview/candidates/bulk"
   };
 
   // admin Login
