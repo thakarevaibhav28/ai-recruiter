@@ -12,7 +12,7 @@ class AdminService {
 
   // add candidate 
   addCandidate(data:any){
-    return adminApi.addCandidate(data)
+    return adminApi.getAllCandidate(data)
   }
 
   //create assessment template
@@ -39,6 +39,18 @@ class AdminService {
   generateAndInvite(data:any){
     return adminApi.generateAndInvite(data)
   }
+  //create AI interview
+  generateAIInterview(data:any){
+    return adminApi.generateAIInterview(data)
+  }
+  sendInvitations(data:any){
+    return adminApi.sendInvitations(data)
+  }
+  getDraft(){
+    return adminApi.getDraft()
+  }
+
+
 
 }
 
