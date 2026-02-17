@@ -19,6 +19,26 @@ class AdminService {
     return adminApi.createAssessmentTemplate(data)
   }
 
+  //ge t all assesments
+  getAssesments(){
+    return adminApi.getAssesments()
+  }
+
+  //get all candidates
+  getAllCandidate(){
+    return adminApi.getAllCandidate()
+  }
+
+  //send invites
+  sendInvites(assessmentId:any, data:any){
+    return adminApi.sendInvites(assessmentId, data)
+  }
+
+  //generate and invite candidates
+  generateAndInvite(data:any){
+    return adminApi.generateAndInvite(data)
+  }
+
 }
 
 export const adminService = new AdminService();
