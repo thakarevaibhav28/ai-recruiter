@@ -82,7 +82,7 @@ console.log("createdJobId",createdJobId)
       formData.append("numberOfQuestions", numberOfQuestions);
       formData.append("skills", JSON.stringify(skills));
 
-      const response = await adminService.generateInterview(formData);
+      const response = await adminService.generateAIInterview(formData);
       console.log("Interview Created:", response);
      setCreatedJobId(response.jobId); 
 
@@ -120,7 +120,7 @@ console.log("createdJobId",createdJobId)
       formData.append("numberOfQuestions", numberOfQuestions);
       formData.append("skills", JSON.stringify(skills));
 
-      const response = await adminService.generateInterview(formData);
+      const response = await adminService.generateAIInterview(formData);
       console.log("Interview Created:", response);
       setCreatedJobId(response.jobId); 
 
@@ -150,7 +150,7 @@ console.log("createdJobId",createdJobId)
 
   const fetchCandidates = async () => {
     try {
-      const res: any = await adminService.getCandidates();
+      const res: any = await adminService.getAllCandidate();
 
       // const filtered = res.candidates.filter(
       //   (c: any) =>
