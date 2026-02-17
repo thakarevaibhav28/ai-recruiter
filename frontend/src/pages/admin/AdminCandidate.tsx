@@ -2,11 +2,9 @@ import { useState } from "react";
 import AdminLayout from "../../common/AdminLayout";
 import AddCandidateModal from "../../components/admin/AddCandidate";
 import { Plus, Filter, MoreVertical } from "lucide-react";
-  import { adminService } from "../../services/service/adminService";
-  import { AxiosError } from "axios";
-
+import BulkUpload from "../../components/admin/Candidates/BulkUpload";
 const statusStyles = {
-  Interview: "bg-purple-100 text-purple-600",   
+  Interview: "bg-purple-100 text-purple-600",
   New: "bg-blue-100 text-blue-600",
   Completed: "bg-green-100 text-green-600",
   Screening: "bg-orange-100 text-orange-600",
@@ -90,7 +88,7 @@ const Candidates = () => {
 
   const toggleRow = (id: number) => {
     setSelected((prev) =>
-      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id],
     );
   };
 
@@ -100,22 +98,22 @@ const Candidates = () => {
   };
 
   return (
-    <AdminLayout 
-      heading="Candidate Management" 
+    <AdminLayout
+      heading="Candidate Management"
       subheading="Manage and Review Candidates"
       showSearch={false}
       activeMenuItem={activeMenuItem}
       onMenuItemClick={setActiveMenuItem}
     >
       {/* Header with Tabs and Action Buttons */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 ">
         {/* Left: Tabs */}
-        <div className="inline-flex bg-gray-100 rounded-lg p-1">
+        <div className="inline-flex bg-white rounded-lg p-2">
           <button
             onClick={() => setActiveTab("list")}
             className={`px-6 py-2 text-sm font-medium rounded-md transition-colors ${
               activeTab === "list"
-                ? "bg-white text-gray-900 shadow-sm"
+                ? "bg-[#F4F7FE] text-gray-900 shadow-sm"
                 : "text-gray-600 hover:text-gray-900"
             }`}
           >
@@ -125,7 +123,7 @@ const Candidates = () => {
             onClick={() => setActiveTab("bulk")}
             className={`px-6 py-2 text-sm font-medium rounded-md transition-colors ${
               activeTab === "bulk"
-                ? "bg-white text-gray-900 shadow-sm"
+                ? "bg-[#F4F7FE] text-gray-900 shadow-sm"
                 : "text-gray-600 hover:text-gray-900"
             }`}
           >
@@ -134,15 +132,17 @@ const Candidates = () => {
         </div>
 
         {/* Right: Action Buttons */}
-        <div className={`items-center gap-3 ${activeTab === "bulk"? "hidden":"flex"}`}>
-          <button 
+        <div
+          className={`items-center gap-3 ${activeTab === "bulk" ? "hidden" : "flex"}`}
+        >
+          <button
             onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-[#00000033] rounded-lg hover:bg-gray-50 transition-colors"
           >
             <Plus className="h-4 w-4" />
             Add Candidates
           </button>
-          <button className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+          <button className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-[#00000033] rounded-lg hover:bg-gray-50 transition-colors">
             <Filter className="h-4 w-4" />
             Filter
           </button>
@@ -150,16 +150,18 @@ const Candidates = () => {
       </div>
 
       {activeTab === "list" && (
-        <div className="bg-white rounded-lg border border-gray-200">
+        <div className="bg-white rounded-lg border border-[#00000033]">
           {/* Table */}
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
+              <thead className="bg-gray-50 border-b border-[#00000033]">
                 <tr>
                   <th className="px-6 py-3 text-left">
                     <input
                       type="checkbox"
-                      checked={selected.length === data.length && data.length > 0}
+                      checked={
+                        selected.length === data.length && data.length > 0
+                      }
                       onChange={toggleSelectAll}
                       className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"
                     />
@@ -195,7 +197,10 @@ const Candidates = () => {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {paginated.map((row, index) => (
-                  <tr key={row.id} className="hover:bg-gray-50 transition-colors">
+                  <tr
+                    key={row.id}
+                    className="hover:bg-gray-50 transition-colors"
+                  >
                     <td className="px-6 py-4">
                       <input
                         type="checkbox"
@@ -216,7 +221,9 @@ const Candidates = () => {
                           <div className="text-sm font-medium text-gray-900">
                             {row.name}
                           </div>
-                          <div className="text-xs text-gray-500">{row.email}</div>
+                          <div className="text-xs text-gray-500">
+                            {row.email}
+                          </div>
                         </div>
                       </div>
                     </td>
@@ -270,23 +277,24 @@ const Candidates = () => {
           </div>
 
           {/* Pagination */}
-          <div className="flex justify-between items-center px-6 py-4 border-t border-gray-200">
+          <div className="flex justify-between items-center px-6 py-4 border-t border-[#00000033]">
             <div className="text-sm text-gray-700">
               Showing {(page - 1) * rowsPerPage + 1} to{" "}
-              {Math.min(page * rowsPerPage, data.length)} of {data.length} results
+              {Math.min(page * rowsPerPage, data.length)} of {data.length}{" "}
+              results
             </div>
             <div className="flex items-center gap-2">
               <button
                 disabled={page === 1}
                 onClick={() => setPage((p) => p - 1)}
-                className="px-3 py-1 text-sm border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 py-1 text-sm border border-[#00000033] rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 «
               </button>
               <button
                 disabled={page === 1}
                 onClick={() => setPage((p) => p - 1)}
-                className="px-3 py-1 text-sm border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 py-1 text-sm border border-[#00000033] rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 ‹
               </button>
@@ -297,7 +305,7 @@ const Candidates = () => {
                   className={`px-3 py-1 text-sm rounded ${
                     page === i + 1
                       ? "bg-indigo-600 text-white"
-                      : "border border-gray-200 hover:bg-gray-50"
+                      : "border border-[#00000033] hover:bg-gray-50"
                   }`}
                 >
                   {i + 1}
@@ -309,7 +317,7 @@ const Candidates = () => {
                 className={`px-3 py-1 text-sm rounded ${
                   page === totalPages
                     ? "bg-indigo-600 text-white"
-                    : "border border-gray-200 hover:bg-gray-50"
+                    : "border border-[#00000033] hover:bg-gray-50"
                 }`}
               >
                 {totalPages}
@@ -317,14 +325,14 @@ const Candidates = () => {
               <button
                 disabled={page === totalPages}
                 onClick={() => setPage((p) => p + 1)}
-                className="px-3 py-1 text-sm border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 py-1 text-sm border border-[#00000033] rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 ›
               </button>
               <button
                 disabled={page === totalPages}
                 onClick={() => setPage((p) => p + 1)}
-                className="px-3 py-1 text-sm border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 py-1 text-sm border border-[#00000033] rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 »
               </button>
@@ -334,84 +342,7 @@ const Candidates = () => {
       )}
 
       {activeTab === "bulk" && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-2 gap-6">
-            {/* Upload Section */}
-            <div className="bg-white rounded-lg p-6 border border-gray-200">
-              <h3 className="text-sm font-semibold text-gray-900 mb-4">
-                Upload Candidates
-              </h3>
-
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-10 text-center bg-gray-50">
-                <div className="flex flex-col items-center gap-3">
-                  <div className="w-12 h-12 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 text-xl">
-                    ⬆
-                  </div>
-                  <p className="font-medium text-gray-900">Upload CSV File</p>
-                  <p className="text-sm text-gray-500">
-                    Drag and drop your CSV file here, or click to browse
-                  </p>
-                  <label className="mt-2">
-                    <span className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium cursor-pointer hover:bg-gray-50 inline-block">
-                      Choose File
-                    </span>
-                    <input type="file" accept=".csv" className="hidden" />
-                  </label>
-                </div>
-              </div>
-            </div>
-
-            {/* Preview Section */}
-            <div className="bg-white rounded-lg p-6 border border-gray-200">
-              <h3 className="text-sm font-semibold text-gray-900 mb-4">
-                Preview & Import
-              </h3>
-
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-10 text-center bg-gray-50">
-                <div className="flex flex-col items-center gap-3">
-                  <div className="w-12 h-12 rounded bg-gray-200 flex items-center justify-center text-2xl">
-                    📄
-                  </div>
-                  <p className="font-medium text-gray-900">Import Preview</p>
-                  <p className="text-sm text-gray-500 max-w-xs">
-                    Upload a CSV file to see a preview of candidates that will be
-                    imported
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* CSV Requirements */}
-          <div className="bg-white rounded-lg p-6 border border-gray-200 max-w-2xl">
-            <h3 className="text-sm font-semibold text-gray-900 mb-4">
-              CSV Format Requirements
-            </h3>
-
-            <ul className="space-y-2.5 text-sm text-gray-600">
-              <li className="flex items-start gap-2">
-                <span className="w-1.5 h-1.5 bg-indigo-600 rounded-full mt-2" />
-                File must be in CSV format (.csv extension)
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="w-1.5 h-1.5 bg-indigo-600 rounded-full mt-2" />
-                Required Columns: Name, Email, Phone, Position
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="w-1.5 h-1.5 bg-indigo-600 rounded-full mt-2" />
-                Optional Columns: Experience, Skills, Location
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="w-1.5 h-1.5 bg-indigo-600 rounded-full mt-2" />
-                Maximum file size: 10MB
-              </li>
-            </ul>
-
-            <button className="mt-6 inline-flex items-center gap-2 px-4 py-2 text-sm font-medium border border-gray-200 rounded-lg bg-white hover:bg-gray-50">
-              <span>⬇</span> Download Sample CSV
-            </button>
-          </div>
-        </div>
+        <BulkUpload/>
       )}
 
       {/* Add Candidate Modal */}
