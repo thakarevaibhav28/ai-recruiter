@@ -14,6 +14,7 @@ body {
     /* scrollbar-width: auto;  */
 }
 
+
 /* not found page css */
 
 @layer utilities {
@@ -24,3 +25,11 @@ body {
     animation-delay: 4s;
   }
 }
+
+
+/* Hide default date icon (Chrome, Edge, Safari) */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  opacity: 0;
+  /* display: none; */
+}
+

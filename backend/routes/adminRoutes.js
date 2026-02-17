@@ -10,6 +10,9 @@ const Candidate = require("../models/Candidate");
 const Question = require("../models/Question");
 const Score = require("../models/Score");
 const auth = require("../middleware/auth");
+const { randomUUID } = require("crypto");
+
+
 const {
   sendMCQInterviewLink,
   sendAIInterviewLink,
@@ -64,7 +67,7 @@ router.post("/register", async (req, res) => {
       return res.status(400).json({ message: "Admin already exists" });
     }
 
-    admin = new Admin({ email, password,role:"admin" });
+    admin = new Admin({ email, password, role: "admin" });
     await admin.save();
 
     const accessToken = jwt.sign(
@@ -131,7 +134,7 @@ router.post("/login", async (req, res) => {
 
   try {
     const admin = await Admin.findOne({ email });
-    console.log(admin)
+    console.log(admin);
     if (!admin) {
       return res.status(400).json({ message: "Invalid credentials" });
     }
@@ -178,7 +181,27 @@ router.post("/login", async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
+// get All candidate
+router.get("/candidates", auth("admin"), async (req, res) => {
+  try {
+    const candidates = await Candidate.find()
+      .select("name email mobile role key_Skills year_of_experience status")
+      .sort({ createdAt: -1 });
 
+    res.status(200).json({
+      success: true,
+      count: candidates.length,
+      data: candidates,
+    });
+  } catch (error) {
+    console.error("Error fetching candidates:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch candidates",
+      error: error.message,
+    });
+  }
+});
 router.post(
   "/interview/ai",
   auth("admin"),
@@ -226,6 +249,7 @@ router.post(
     }
   },
 );
+
 // routes/adminInterviewRoutes.js
 
 router.post(
@@ -1017,105 +1041,104 @@ router.get(
   },
 );
 
-router.get(
-  "/interview/:id/getcandidates/mcq",
-  auth("admin"),
-  async (req, res) => {
-    const { id } = req.params;
+// router.get("/interview/:id/getcandidates/mcq",
+//   auth("admin"),
+//   async (req, res) => {
+//     const { id } = req.params;
 
-    try {
-      // Find the interview and populate candidate details
-      const interview = await Interview.findById(id).populate(
-        "candidates.candidateId",
-      );
-      if (!interview) {
-        return res.status(404).json({ message: "Interview not found" });
-      }
+//     try {
+//       // Find the interview and populate candidate details
+//       const interview = await Interview.findById(id).populate(
+//         "candidates.candidateId",
+//       );
+//       if (!interview) {
+//         return res.status(404).json({ message: "Interview not found" });
+//       }
 
-      // Get all candidate IDs in this interview
-      const candidateIds = interview.candidates
-        .map((c) => c.candidateId && c.candidateId._id)
-        .filter(Boolean);
+//       // Get all candidate IDs in this interview
+//       const candidateIds = interview.candidates
+//         .map((c) => c.candidateId && c.candidateId._id)
+//         .filter(Boolean);
 
-      // Get all scores for this interview and these candidates
-      const scores = await Score.find({
-        interviewId: id,
-        candidateId: { $in: candidateIds },
-      });
+//       // Get all scores for this interview and these candidates
+//       const scores = await Score.find({
+//         interviewId: id,
+//         candidateId: { $in: candidateIds },
+//       });
 
-      // Map candidateId to score for quick lookup
-      const scoreMap = {};
-      scores.forEach((score) => {
-        scoreMap[score.candidateId.toString()] = score;
-      });
+//       // Map candidateId to score for quick lookup
+//       const scoreMap = {};
+//       scores.forEach((score) => {
+//         scoreMap[score.candidateId.toString()] = score;
+//       });
 
-      // Get Exam_Type for logic
-      const examType = interview.Exam_Type;
+//       // Get Exam_Type for logic
+//       const examType = interview.Exam_Type;
 
-      // Build response
-      let candidates = interview.candidates
-        .map((c) => {
-          const candidate = c.candidateId;
-          if (!candidate) return null;
-          const score = scoreMap[candidate._id.toString()];
-          let result = null;
-          let totalScore = null;
+//       // Build response
+//       let candidates = interview.candidates
+//         .map((c) => {
+//           const candidate = c.candidateId;
+//           if (!candidate) return null;
+//           const score = scoreMap[candidate._id.toString()];
+//           let result = null;
+//           let totalScore = null;
 
-          // Calculate result if score exists
-          if (score && examType === "MCQ") {
-            // MCQ: full mark is 10, passing is 60% (6/10)
-            const totalQuestions = score.scores ? score.scores.length : 0;
-            const correctAnswers = score.scores
-              ? score.scores.filter((q) => q.score === 1).length
-              : 0;
-            totalScore = correctAnswers;
-            result =
-              totalQuestions > 0 && correctAnswers / totalQuestions >= 0.6
-                ? "Pass"
-                : "Fail";
-          } else if (score && examType === "Interview") {
-            // Interview: no MCQ, so pass/fail logic can be based on totalScore >= 60%
-            // If totalScore is out of 10, use same logic, else just pass totalScore
-            if (typeof score.totalScore === "number") {
-              totalScore = score.totalScore;
-              result = score.totalScore >= 6 ? "Pass" : "Fail";
-            }
-          }
+//           // Calculate result if score exists
+//           if (score && examType === "MCQ") {
+//             // MCQ: full mark is 10, passing is 60% (6/10)
+//             const totalQuestions = score.scores ? score.scores.length : 0;
+//             const correctAnswers = score.scores
+//               ? score.scores.filter((q) => q.score === 1).length
+//               : 0;
+//             totalScore = correctAnswers;
+//             result =
+//               totalQuestions > 0 && correctAnswers / totalQuestions >= 0.6
+//                 ? "Pass"
+//                 : "Fail";
+//           } else if (score && examType === "Interview") {
+//             // Interview: no MCQ, so pass/fail logic can be based on totalScore >= 60%
+//             // If totalScore is out of 10, use same logic, else just pass totalScore
+//             if (typeof score.totalScore === "number") {
+//               totalScore = score.totalScore;
+//               result = score.totalScore >= 6 ? "Pass" : "Fail";
+//             }
+//           }
 
-          return {
-            _id: candidate._id,
-            name: candidate.name,
-            email: candidate.email,
-            mobile: candidate.mobile,
-            aadharFront: candidate.aadharFront,
-            aadharBack: candidate.aadharBack,
-            photo: candidate.photo,
-            scoreCard: score ? score.totalScore : null,
-            scores: score ? score.scores : null,
-            summary: score ? score.summary : null,
-            pdfPath: score ? score.pdfPath : null,
-            totalScore: totalScore,
-            scheduledDate: c.scheduledDate || null,
-            Exam_Type: examType,
-            result: score ? result : null,
-          };
-        })
-        .filter(Boolean);
+//           return {
+//             _id: candidate._id,
+//             name: candidate.name,
+//             email: candidate.email,
+//             mobile: candidate.mobile,
+//             aadharFront: candidate.aadharFront,
+//             aadharBack: candidate.aadharBack,
+//             photo: candidate.photo,
+//             scoreCard: score ? score.totalScore : null,
+//             scores: score ? score.scores : null,
+//             summary: score ? score.summary : null,
+//             pdfPath: score ? score.pdfPath : null,
+//             totalScore: totalScore,
+//             scheduledDate: c.scheduledDate || null,
+//             Exam_Type: examType,
+//             result: score ? result : null,
+//           };
+//         })
+//         .filter(Boolean);
 
-      // Sort candidates so the latest added is on top (descending by scheduledDate)
-      candidates.sort((a, b) => {
-        const aTime = a.scheduledDate ? new Date(a.scheduledDate).getTime() : 0;
-        const bTime = b.scheduledDate ? new Date(b.scheduledDate).getTime() : 0;
-        return bTime - aTime;
-      });
+//       // Sort candidates so the latest added is on top (descending by scheduledDate)
+//       candidates.sort((a, b) => {
+//         const aTime = a.scheduledDate ? new Date(a.scheduledDate).getTime() : 0;
+//         const bTime = b.scheduledDate ? new Date(b.scheduledDate).getTime() : 0;
+//         return bTime - aTime;
+//       });
 
-      res.json({ candidates });
-    } catch (error) {
-      console.log(error);
-      res.status(500).json({ message: "Server error" });
-    }
-  },
-);
+//       res.json({ candidates });
+//     } catch (error) {
+//       console.log(error);
+//       res.status(500).json({ message: "Server error" });
+//     }
+//   },
+// );
 // Get all interviews created by the admin
 router.get("/interview/job_list", auth("admin"), async (req, res) => {
   try {
@@ -1124,6 +1147,257 @@ router.get("/interview/job_list", auth("admin"), async (req, res) => {
     res.json(interviewsData);
   } catch (error) {
     res.status(500).json({ message: "Server error" });
+  }
+});
+
+//create AI interview
+router.post(
+  "/create/interview/ai",
+  auth("admin"),
+  upload.single("jobDescription"),
+  async (req, res) => {
+    try {
+      const {
+        position,
+        description,
+        passingScore,
+        difficulty,
+        skills,
+        duration,
+        numberOfQuestions,
+      } = req.body;
+
+      const file = req.file;
+
+      // ================= VALIDATION =================
+      if (
+        !file ||
+        !difficulty ||
+        !duration ||
+        !position ||
+        !description ||
+        !skills ||
+        !passingScore ||
+        !numberOfQuestions
+      ) {
+        return res.status(400).json({
+          message:
+            "Job description file, difficulty, duration, position, description, passing score,skills and number of questions are required.",
+        });
+      }
+
+      // ================= FORMAT FILE PATH =================
+      const jobDescription = file.path.replace(/\\/g, "/");
+      examType = "Interview";
+      // ================= GENERATE QUESTIONS USING AI =================
+      // const questions = await generateQuestions(
+      //   jobDescription,
+      //   position,
+      //   difficulty,
+      //   examType,
+      //   parseInt(numberOfQuestions)
+      // );
+
+      // ================= CREATE INTERVIEW =================
+      const interview = await AI_Interview.create({
+        jobDescription: jobDescription,
+        position,
+        difficulty,
+        duration,
+        skills,
+        passingScore,
+        numberOfQuestions,
+        createdBy: req.user.id, // from auth middleware
+        // questions,
+        candidates: [],
+        status: "draft", // default
+      });
+
+      // ================= RESPONSE =================
+      return res.status(201).json({
+        jobId: interview._id,
+        interview: {
+          _id: interview._id,
+          position: interview.position,
+          difficulty: interview.difficulty,
+          duration: interview.duration,
+          createdAt: interview.createdAt,
+          questions: interview.questions,
+          skills: interview.skills,
+          passingScore: interview.passingScore,
+          description: interview.description,
+          numberOfQuestions: interview.numberOfQuestions,
+        },
+        // questions,
+      });
+    } catch (error) {
+      console.error("Generate AI Interview Error:", error);
+      return res.status(500).json({
+        message: "Server error while generating AI interview",
+        error: error.message,
+      });
+    }
+  },
+);
+
+// Send interview invitations
+router.post("/send-invitations", auth("admin"), async (req, res) => {
+  try {
+    const { jobId, candidateIds, messageBody, startDate, endDate, testTitle } =
+      req.body;
+
+    if (
+      !jobId ||
+      !candidateIds ||
+      !messageBody ||
+      !startDate ||
+      !endDate ||
+      !testTitle
+    ) {
+      return res.status(400).json({
+        message: "All fields are required.",
+      });
+    }
+
+    const interview = await AI_Interview.findById(jobId);
+    if (!interview) {
+      return res.status(404).json({ message: "Interview not found." });
+    }
+
+    const candidates = await Candidate.find({
+      _id: { $in: candidateIds },
+    });
+
+    if (candidates.length !== candidateIds.length) {
+      return res.status(400).json({
+        message: "Some candidate IDs are invalid.",
+      });
+    }
+
+    interview.candidates = [];
+
+    for (const candidate of candidates) {
+      const interviewLink = `https://your-app.com/interview/${randomUUID()}`;
+      const password = randomUUID().slice(0, 8);
+
+      interview.candidates.push({
+        candidateId: candidate._id,
+        interviewLink,
+        password,
+        scheduledStartDate: new Date(startDate),
+        scheduledEndDate: new Date(endDate),
+        emailBody: messageBody,
+      });
+
+      const finalMessage = messageBody
+        .replace("[Candidate Name]", candidate.name)
+        .replace("[Job Role]", testTitle);
+
+      await sendAIInterviewLink(
+        candidate.email,
+        interviewLink,
+        password,
+        `AI Interview Invitation - ${testTitle}`,
+        finalMessage,
+        new Date(endDate),
+        new Date(startDate)
+      );
+    }
+
+    interview.status = "scheduled";
+    await interview.save();
+
+    res.status(200).json({
+      message: "Invitations sent successfully",
+      totalCandidates: candidates.length,
+    });
+  } catch (error) {
+    console.error("Error sending invitations:", error);
+    res.status(500).json({
+      message: "Server error",
+      error: error.message,
+    });
+  }
+});
+
+// Update interview status (draft/scheduled)
+router.patch("/interview/:id/status", auth("admin"), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    // ✅ Validate status
+    const allowedStatus = ["draft", "scheduled"];
+
+    if (!status || !allowedStatus.includes(status)) {
+      return res.status(400).json({
+        message: `Invalid status. Allowed values: ${allowedStatus.join(", ")}`,
+      });
+    }
+
+    const interview = await AI_Interview.findById(id);
+
+    if (!interview) {
+      return res.status(404).json({
+        message: "Interview not found",
+      });
+    }
+
+    interview.status = status;
+    await interview.save();
+
+    return res.status(200).json({
+      message: "Interview status updated successfully",
+      interviewId: interview._id,
+      newStatus: interview.status,
+    });
+  } catch (error) {
+    console.error("Update Interview Status Error:", error);
+    return res.status(500).json({
+      message: "Server error",
+      error: error.message,
+    });
+  }
+});
+router.get("/interviews/draft", auth("admin"), async (req, res) => {
+  try {
+    const adminId = req.user.id;
+
+    const drafts = await AI_Interview.find({
+      createdBy: adminId,
+      status: "draft",
+    })
+      .sort({ createdAt: -1 })
+      .select(
+        "_id position difficulty duration skills passingScore numberOfQuestions description status createdAt",
+      );
+
+    const formattedDrafts = drafts.map((item) => ({
+      jobId: item._id, // 🔥 send as jobId
+      _id: item._id,
+      position: item.position,
+      difficulty: item.difficulty,
+      duration: item.duration,
+      skills: item.skills,
+      passingScore: item.passingScore,
+      numberOfQuestions: item.numberOfQuestions,
+      description: item.description,
+      status: item.status,
+      createdAt: item.createdAt,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      totalDrafts: formattedDrafts.length,
+      drafts: formattedDrafts,
+    });
+  } catch (error) {
+    console.error("Get Draft Interviews Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message,
+    });
   }
 });
 
