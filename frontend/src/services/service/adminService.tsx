@@ -14,6 +14,10 @@ class AdminService {
     return adminApi.addCandidate(data)
   }
 
+  //create assessment template
+  createAssessmentTemplate(data:any){
+    return adminApi.createAssessmentTemplate(data)
+  }
 
 }
 
