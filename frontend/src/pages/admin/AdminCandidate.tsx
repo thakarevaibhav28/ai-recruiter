@@ -65,7 +65,7 @@ const Candidates = () => {
   const fetchCandidates = async () => {
     setLoading(true);
     try {
-      const response = await adminService.getAllCandiate();
+      const response = await adminService.getAllCandidate();
 
       if (response.status === 200) {
         // Reverse the array to show newest first
