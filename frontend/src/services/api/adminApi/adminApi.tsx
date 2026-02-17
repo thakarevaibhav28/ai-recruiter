@@ -3,28 +3,16 @@ import { api } from "../api";
 
 class AdminApi {
   private _url = {
-    LOGIN: "/admin/login",
-    ADD_CANDIDATE: "/api/candidate"
+    LOGIN :"/admin/login",
+    bulk_add_candidate:"/admin/interview/candidates/bulk"
   };
 
-  // admin Login
-
-  login(data: any) {
-    return api._post(this._url.LOGIN, data);
+  login =(data:any)=>{
+    return api._post(this._url.LOGIN,data)
   }
-
-  // add Candidate
-
-  addCandidate(data:any){
-    return api._post(this._url.ADD_CANDIDATE, data)
+  bulk_add_candidate=(data:any)=>{
+    return api._postFormData(this._url.bulk_add_candidate,data)
   }
-
-
-
-
-
-
- 
 }
 
 export const adminApi = new AdminApi();
