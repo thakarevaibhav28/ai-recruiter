@@ -24,13 +24,13 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
   onMenuItemClick
 }) => {
   return (
-    <div className="flex min-h-screen w-full bg-gray-50">
+    <div className="flex min-h-screen w-full bg-[#F4F7FE] ">
       <Sidebar 
         activeItem={activeMenuItem}
         onItemClick={onMenuItemClick}
       />
       
-      <div className="flex flex-1 flex-col ml-60">
+      <div className="flex flex-1 flex-col ml-60 pt-14">
         <Header 
           heading={heading}
           subheading={subheading}  // Added this

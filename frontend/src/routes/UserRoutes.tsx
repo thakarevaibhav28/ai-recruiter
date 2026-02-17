@@ -7,25 +7,11 @@ import {
 import { useAppContext } from "../contexts/contexts";
 import { useEffect, useState } from "react";
 
-import Home from "../pages/user/Home";
-import Products from "../pages/user/Products";
-import ProductDetails from "../pages/user/Product_Details";
-import Profiles from "../pages/user/Profiles";
-import Categories from "../pages/user/Categories";
-import MobileBlocker from "../components/User/MobileBlocker/MobileBlocker";
-import SearchItem from "../components/User/Header/SearchItem";
-import LocationPopup from "../components/User/Header/LocationPopup";
-import Loader from "../Loader/Loader";
-import PrivacyPolicy from "../components/User/Profile/Privacy";
-import Help from "../components/User/Profile/Help";
-import Terms from "../components/User/Footer/Terms&Condition";
-import Shipping from "../components/User/Footer/ShippingPolicy";
-import ScrollToTop from "../utils/ScrollToTop";
 
 /* ✅ Move ProtectedRoute OUTSIDE the component */
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   // ✅ Fixed: Check both sessionStorage and sessionStorage for token
-  const token = sessionStorage.getItem("auth_token") || sessionStorage.getItem("auth_token");
+  const token = sessionStorage.getItem("accessToken") || sessionStorage.getItem("accessToken");
   const { loading } = useAppContext();
 
   if (loading) {
