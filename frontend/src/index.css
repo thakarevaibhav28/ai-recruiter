@@ -15,6 +15,18 @@ body {
 }
 
 
+/* not found page css */
+
+@layer utilities {
+  .animation-delay-2000 {
+    animation-delay: 2s;
+  }
+  .animation-delay-4000 {
+    animation-delay: 4s;
+  }
+}
+
+
 /* Hide default date icon (Chrome, Edge, Safari) */
 input[type="date"]::-webkit-calendar-picker-indicator {
   opacity: 0;
