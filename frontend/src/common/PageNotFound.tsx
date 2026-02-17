@@ -1,104 +1,84 @@
-import { useLocation, Link } from "react-router-dom";
-import { useEffect, useState } from "react";
+import React from 'react';
 
-const NotFound = () => {
-  const location = useLocation();
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+const PageNotFound: React.FC = () => {
+  const handleGoHome = () => {
+    window.location.href = '/';
+  };
 
-  useEffect(() => {
-    console.error(
-      "404 Error: User attempted to access non-existent route:",
-      location.pathname
-    );
-  }, [location.pathname]);
-
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      setMousePos({
-        x: (e.clientX / window.innerWidth - 0.5) * 20,
-        y: (e.clientY / window.innerHeight - 0.5) * 20,
-      });
-    };
-
-    window.addEventListener("mousemove", handleMouseMove);
-    return () => window.removeEventListener("mousemove", handleMouseMove);
-  }, []);
+  const handleGoBack = () => {
+    window.history.back();
+  };
 
   return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-background px-6">
-      
-      {/* Animated background blobs */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -left-32 -top-32 h-96 w-96 animate-blob rounded-full bg-primary/10 blur-3xl" />
-        <div className="absolute -bottom-32 -right-32 h-96 w-96 animate-blob animation-delay-2000 rounded-full bg-accent/20 blur-3xl" />
-        <div className="absolute left-1/2 top-1/2 h-72 w-72 -translate-x-1/2 -translate-y-1/2 animate-blob animation-delay-4000 rounded-full bg-destructive/10 blur-3xl" />
-      </div>
-
-      {/* Floating 404 */}
-      <div className="relative">
-        <h1
-          className="select-none text-[11rem] font-black leading-none tracking-tighter text-primary/[0.07] transition-transform duration-300 ease-out sm:text-[16rem] lg:text-[20rem]"
-          style={{
-            transform: `translate(${mousePos.x}px, ${mousePos.y}px)`,
-          }}
-        >
-          404
-        </h1>
-
-        {/* Centered content */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-          
-          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-destructive/10">
-            <svg
-              className="h-8 w-8 text-destructive"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
-              />
-            </svg>
+    <div className="min-h-screen bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center p-4">
+      <div className="max-w-2xl w-full">
+        {/* Animated 404 */}
+        <div className="text-center mb-8">
+          <div className="relative inline-block">
+            <h1 className="text-9xl md:text-[12rem] font-bold text-white opacity-20 select-none">
+              404
+            </h1>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-32 h-32 md:w-40 md:h-40 bg-white rounded-full flex items-center justify-center shadow-2xl animate-bounce">
+                <svg
+                  className="w-16 h-16 md:w-20 md:h-20 text-purple-500"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+              </div>
+            </div>
           </div>
+        </div>
 
-          <h2 className="mb-2 text-2xl font-bold text-foreground sm:text-3xl">
-            Lost in space
+        {/* Content Card */}
+        <div className="bg-white rounded-2xl shadow-2xl p-8 md:p-12 text-center transform hover:scale-105 transition-transform duration-300">
+          <h2 className="text-3xl md:text-4xl font-bold text-gray-800 mb-4">
+            Oops! Page Not Found
           </h2>
-
-          <p className="mb-8 max-w-sm text-muted-foreground">
-            The page{" "}
-            <code className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">
-              {location.pathname}
-            </code>{" "}
-            doesn't exist.
+          <p className="text-gray-600 text-lg mb-8">
+            The page you're looking for seems to have wandered off into the digital void. 
+            Don't worry though, we'll help you find your way back!
           </p>
 
-          <Link
-            to="/"
-            className="group inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 transition-all hover:scale-105 hover:shadow-xl hover:shadow-primary/30"
-          >
-            <svg
-              className="h-4 w-4 transition-transform group-hover:-translate-x-1"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
+          {/* Action Buttons */}
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <button
+              onClick={handleGoHome}
+              className="px-8 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold rounded-lg shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"
-              />
-            </svg>
-            Back to Home
-          </Link>
+              Go Home
+            </button>
+            <button
+              onClick={handleGoBack}
+              className="px-8 py-3 bg-gray-100 text-gray-700 font-semibold rounded-lg shadow-md hover:shadow-lg hover:bg-gray-200 transform hover:-translate-y-1 transition-all duration-200"
+            >
+              Go Back
+            </button>
+          </div>
+
+          {/* Decorative Elements */}
+          <div className="mt-12 flex justify-center gap-2">
+            <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></div>
+            <div className="w-2 h-2 bg-pink-400 rounded-full animate-pulse delay-75"></div>
+            <div className="w-2 h-2 bg-indigo-400 rounded-full animate-pulse delay-150"></div>
+          </div>
         </div>
+
+        {/* Floating Elements */}
+        <div className="absolute top-10 left-10 w-20 h-20 bg-white opacity-10 rounded-full animate-pulse"></div>
+        <div className="absolute bottom-10 right-10 w-32 h-32 bg-white opacity-10 rounded-full animate-pulse delay-300"></div>
+        <div className="absolute top-1/2 right-20 w-16 h-16 bg-white opacity-10 rounded-full animate-pulse delay-500"></div>
       </div>
     </div>
   );
 };
 
-export default NotFound;
+export default PageNotFound;

@@ -7,10 +7,11 @@ import TestsAssessments from "./pages/admin/Tests-Assessments";
 import LoginPage from "./pages/admin/AdminLogin";
 import ProtectedRoute from "./routes/ProtectedRoute";
 import PageNotFound from "./common/PageNotFound";
-
+import ToastProvider from "./common/ToastProvider"
 function App() {
   return (
     <Router>
+        <ToastProvider />
          <Routes>
         {/* Public Routes */}
         <Route path="/" element={<LoginPage />} />

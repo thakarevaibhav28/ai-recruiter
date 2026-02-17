@@ -489,8 +489,89 @@ router.post("/interview/mcq", auth("admin"), async (req, res) => {
 //   }
 // );
 // Single candidate addition
+// router.post("/create/candidate", auth("admin"), async (req, res) => {
+//   const {
+//     email,
+//     name,
+//     mobile,
+//     role,
+//     key_Skills,
+//     description,
+//     year_of_experience,
+//   } = req.body;
+
+
+//   // Basic input validation
+//   if (
+//     !email ||
+//     !name ||
+//     !mobile ||
+//     !role ||
+//     !key_Skills ||
+//     !description ||
+//     !year_of_experience
+//   ) {
+//     return res.status(400).json({
+//       message:
+//         "all fields are required.",
+//     });
+//   }
+//   // Email format validation
+//   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+//   if (!emailRegex.test(email)) {
+//     return res.status(400).json({ message: "Invalid email format." });
+//   }
+//   // Mobile number validation (simple, adjust as needed)
+//   const mobileRegex = /^[0-9]{10,15}$/;
+//   if (!mobileRegex.test(mobile)) {
+//     return res.status(400).json({ message: "Invalid mobile number." });
+//   }
+
+//   try {
+//     // Check if candidate already exists for this interview
+//     const existingCandidate = await Candidate.findOne({ email });
+//     if (existingCandidate) {
+//       return res.status(409).json({ message: "Candidate already added." });
+//     }
+
+//     // Create candidate if not exists
+//     const candidate =
+//       existingCandidate ||
+//       (await Candidate.create({
+//         email,
+//         name,
+//         mobile,
+//         role,
+//         key_Skills,
+//         description,
+//         year_of_experience,
+//       }));
+
+//     // const job = await Interview.findById(id);
+//     // if (!job) {
+//     //   return res.status(404).json({ message: 'Interview not found.' });
+//     // }
+
+//     // job.candidates.push({
+//     //   candidateId: candidate._id,
+//     //   interviewLink: null,
+//     //   password: null,
+//     //   scheduledDate: null
+//     // });
+//     // await job.save();
+
+ 
+//     res
+//       .status(201)
+//       .json({ message: "Candidate added", newCandidate: candidate });
+//   } catch (error) {
+//     console.log(error);
+//     res.status(500).json({ message: "Server error" });
+//   }
+// });
 router.post("/create/candidate", auth("admin"), async (req, res) => {
   const {
+    id, // optional for update
     email,
     name,
     mobile,
@@ -511,60 +592,96 @@ router.post("/create/candidate", auth("admin"), async (req, res) => {
     !year_of_experience
   ) {
     return res.status(400).json({
-      message:
-        "Email, name, mobile, role, key_Skills, description, year_of_experience, and id are required.",
+      message: "all fields are required.",
     });
   }
+
   // Email format validation
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(email)) {
     return res.status(400).json({ message: "Invalid email format." });
   }
-  // Mobile number validation (simple, adjust as needed)
+
+  // Mobile validation
   const mobileRegex = /^[0-9]{10,15}$/;
   if (!mobileRegex.test(mobile)) {
     return res.status(400).json({ message: "Invalid mobile number." });
   }
 
   try {
-    // Check if candidate already exists for this interview
+    // 🔥 UPDATE FLOW
+    if (id) {
+      const updatedCandidate = await Candidate.findByIdAndUpdate(
+        id,
+        {
+          email,
+          name,
+          mobile,
+          role,
+          key_Skills,
+          description,
+          year_of_experience,
+        },
+        { new: true, runValidators: true }
+      );
+
+      if (!updatedCandidate) {
+        return res.status(404).json({ message: "Candidate not found." });
+      }
+
+      return res.status(200).json({
+        message: "Candidate updated successfully.",
+        newCandidate: updatedCandidate,
+      });
+    }
+
+    //  CREATE FLOW
     const existingCandidate = await Candidate.findOne({ email });
+
     if (existingCandidate) {
       return res.status(409).json({ message: "Candidate already added." });
     }
 
-    // Create candidate if not exists
-    const candidate =
-      existingCandidate ||
-      (await Candidate.create({
-        email,
-        name,
-        mobile,
-        role,
-        key_Skills,
-        description,
-        year_of_experience,
-      }));
+    const candidate = await Candidate.create({
+      email,
+      name,
+      mobile,
+      role,
+      key_Skills,
+      description,
+      year_of_experience,
+    });
 
-    // const job = await Interview.findById(id);
-    // if (!job) {
-    //   return res.status(404).json({ message: 'Interview not found.' });
-    // }
+    res.status(201).json({
+      message: "Candidate added",
+      newCandidate: candidate,
+    });
 
-    // job.candidates.push({
-    //   candidateId: candidate._id,
-    //   interviewLink: null,
-    //   password: null,
-    //   scheduledDate: null
-    // });
-    // await job.save();
-
-    res
-      .status(201)
-      .json({ message: "Candidate added", newCandidate: candidate });
   } catch (error) {
     console.log(error);
     res.status(500).json({ message: "Server error" });
+  }
+});
+
+
+// get All candidate
+router.get("/candidates", auth("admin"), async (req, res) => {
+  try {
+    const candidates = await Candidate.find()
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: candidates.length,
+      data: candidates,
+    });
+  } catch (error) {
+    console.error("Error fetching candidates:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch candidates",
+      error: error.message,
+    });
   }
 });
 
