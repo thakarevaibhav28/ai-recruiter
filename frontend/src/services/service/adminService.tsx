@@ -9,7 +9,12 @@ class AdminService {
     return adminApi.bulk_add_candidate(data);
   }
 
-  
+  // add candidate 
+  addCandidate(data:any){
+    return adminApi.addCandidate(data)
+  }
+
+
 }
 
 export const adminService = new AdminService();

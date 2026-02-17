@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { X } from "lucide-react";
 
+import { adminService } from "../../services/service/adminService";
+
 interface AddCandidateModalProps {
   isOpen: boolean;
   onClose: () => void;

@@ -64,7 +64,7 @@ router.post("/register", async (req, res) => {
       return res.status(400).json({ message: "Admin already exists" });
     }
 
-    admin = new Admin({ email, password });
+    admin = new Admin({ email, password,role:"admin" });
     await admin.save();
 
     const accessToken = jwt.sign(
