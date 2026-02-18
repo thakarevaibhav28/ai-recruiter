@@ -4,7 +4,7 @@ import { api } from "../api";
 class AdminApi {
   private _url = {
     LOGIN: "/admin/login",
-    ADD_CANDIDATE: "/admin/candidate",
+    ADD_CANDIDATE: "admin/create/candidate",
     bulk_add_candidate: "/admin/interview/candidates/bulk",
     CREATE_ASESMENT_TEMPLATE: "/admin/assessment/template",
     GET_ASSESMENTS: "/admin/assessment/mcq/list",
@@ -14,6 +14,7 @@ class AdminApi {
     GENERATE_AI_INTERVIEW: "/admin/create/interview/ai",
     SEND_AI_INVITES: "/admin/send-invitations",
     GET_DRAFT: "/admin/interviews/draft",
+    DELETE_CANDIDATE:"/admin/candidate"
   };
 
   login = (data: any) => {
@@ -35,9 +36,20 @@ class AdminApi {
     return api._get(this._url.GET_ASSESMENTS);
   }
 
+  // create candiate
+  addCandidate(data:any){
+    return api._post(this._url.ADD_CANDIDATE,data)
+  }
+
+
   //get all candidates
   getAllCandidate() {
     return api._get(this._url.GET_CANDIDATES);
+  }
+
+  // update Candidate 
+  updateCandidate(id:string, data:any){
+    return api._patch(`${this._url.DELETE_CANDIDATE}/${id}`, data )
   }
 
   //send invites
