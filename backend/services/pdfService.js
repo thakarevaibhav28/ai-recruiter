@@ -1,7 +1,7 @@
-const PDFDocument = require('pdfkit');
-const fs = require('fs');
+import PDFDocument from "pdfkit";
+import fs from "fs";
 
-const generateScorecardPDF = (candidate, scores, totalScore, summary, outputPath) => {
+export const generateScorecardPDF = (candidate, scores, totalScore, summary, outputPath) => {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument();
     const stream = fs.createWriteStream(outputPath);
@@ -30,4 +30,3 @@ const generateScorecardPDF = (candidate, scores, totalScore, summary, outputPath
   });
 };
 
-module.exports = { generateScorecardPDF };

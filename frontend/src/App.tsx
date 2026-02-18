@@ -1,35 +1,16 @@
-import { Route, BrowserRouter as Router, Routes } from "react-router-dom";
-import Dashboard from "./pages/admin/AdminDashboard";
-import Candidate from "./pages/admin/AdminCandidate";
-import Reports from "./pages/admin/ReportsInsights";
-import AIVideoInterview from "./pages/admin/AIVideoInterview";
-import TestsAssessments from "./pages/admin/Tests-Assessments";
-import LoginPage from "./pages/admin/AdminLogin";
-import ProtectedRoute from "./routes/ProtectedRoute";
-import PageNotFound from "./common/PageNotFound";
-import ToastProvider from "./common/ToastProvider"
+import { Routes, Route } from "react-router-dom";
+import UserRoutes from "./routes/UserRoutes";
+import AdminRoutes from "./routes/AdminRoutes";
 function App() {
   return (
-    <Router>
-        <ToastProvider />
-         <Routes>
-        {/* Public Routes */}
-        <Route path="/" element={<LoginPage />} />
-        <Route path="/admin/login" element={<LoginPage />} />
+    <>
+    <Routes>
+      <Route path="/admin/*" element={<AdminRoutes />} />
+       <Route path="/*" element={<UserRoutes />} />
 
-        {/* Protected Routes */}
-        <Route element={<ProtectedRoute  />}>
-          <Route path="/admin/dashboard" element={<Dashboard />} />
-          <Route path="/admin/candidates" element={<Candidate />} />
-          <Route path="/admin/tests" element={<TestsAssessments />} />
-          <Route path="/admin/video" element={<AIVideoInterview />} />
-          <Route path="/admin/reports" element={<Reports />} />
-        </Route>
-
-        {/* ✅ 404 Route (Always Last) */}
-        <Route path="*" element={<PageNotFound />} />
-      </Routes>
-    </Router>
+    </Routes>
+   
+     </>
   );
 }
 

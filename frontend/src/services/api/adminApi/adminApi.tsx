@@ -5,25 +5,27 @@ class AdminApi {
   private _url = {
     LOGIN: "/admin/login",
     ADD_CANDIDATE: "admin/create/candidate",
-    bulk_add_candidate: "/admin/interview/candidates/bulk",
+    BULK_ADD_CANDIDATE: "/admin/candidates/bulk",
     CREATE_ASESMENT_TEMPLATE: "/admin/assessment/template",
     GET_ASSESMENTS: "/admin/assessment/mcq/list",
     GET_CANDIDATES: "/admin/candidates",
     SEND_INVITES: "/admin/assessment/:assessmentId/invite",
     GENERATE_AND_INVITE: "/admin/assessment/send-invites",
-    GENERATE_AI_INTERVIEW: "/admin/create/interview/ai",
-    SEND_AI_INVITES: "/admin/send-invitations",
-    GET_DRAFT: "/admin/interviews/draft",
-    DELETE_CANDIDATE:"/admin/candidate"
+    GENERATE_AI_INTERVIEW: "/admin/interview/template",
+    SEND_AI_INVITES: "/admin/interview/send-invites",
+    GET_DRAFT: "/admin/interviews/list",
+    DELETE_CANDIDATE:"/admin/candidate",
+    GET_ME: "/admin/me"
   };
 
+ 
   login = (data: any) => {
     return api._post(this._url.LOGIN, data);
   };
 
   // bulk add candidate
   bulk_add_candidate(data: any) {
-    return api._postFormData(this._url.bulk_add_candidate, data);
+    return api._postFormData(this._url.BULK_ADD_CANDIDATE, data);
   }
 
   //create assessment template
@@ -73,7 +75,9 @@ class AdminApi {
   sendInvitations(data: any) {
     return api._post(this._url.SEND_AI_INVITES, data);
   }
-
+ getMe(){
+    return api._get(this._url.GET_ME);
+  };
 }
 
 export const adminApi = new AdminApi();

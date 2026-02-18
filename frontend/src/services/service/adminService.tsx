@@ -1,6 +1,7 @@
 import { adminApi } from "../api/adminApi/adminApi";
 
 class AdminService {
+ 
   login(data: any) {
     return adminApi.login(data);
   }
@@ -52,6 +53,9 @@ class AdminService {
   getDraft() {
     return adminApi.getDraft();
   }
+   getMe(){
+    return adminApi.getMe();
+  };
 }
 
 export const adminService = new AdminService();

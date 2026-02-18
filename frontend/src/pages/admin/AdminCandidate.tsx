@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, use } from "react";
 import AdminLayout from "../../common/AdminLayout";
 import AddCandidateModal from "../../components/admin/Candidates/AddCandidate";
 import ViewCandidateModal from "../../components/admin/Candidates/ViewCandidate";
 import { Plus, Filter, MoreVertical } from "lucide-react";
 import BulkUpload from "../../components/admin/Candidates/BulkUpload";
 import toast from "react-hot-toast";
+import { socket } from "../../utils/socket";
 import { adminService } from "../../services/service/adminService";
 
 const statusStyles = {
@@ -81,6 +82,23 @@ const Candidates = () => {
     }
   };
 
+  useEffect(() => {
+    socket.on("candidate-added", (newCandidate: Candidate) => {
+      setData((prevData) => [newCandidate, ...prevData]);
+    });
+    socket.on("candidate-updated", (updatedCandidate: Candidate) => {
+      setData((prevData) =>
+        prevData.map((candidate) =>
+          candidate._id === updatedCandidate._id ? updatedCandidate : candidate,
+        ),
+      );
+    });
+
+    return () => {
+      socket.off("candidate-updated");
+      socket.off("candidate-added");
+    };
+  },[])
   const toggleSelectAll = () => {
     if (selected.length === data.length) setSelected([]);
     else setSelected(data.map((d) => d._id));
@@ -121,22 +139,22 @@ const Candidates = () => {
     setOpenMenuId(null);
   };
 
-  const handleDeleteCandidate = async (candidateId: string) => {
-    if (window.confirm("Are you sure you want to delete this candidate?")) {
-      try {
-        await adminService.deleteCandidate(candidateId);
+  // const handleDeleteCandidate = async (candidateId: string) => {
+  //   if (window.confirm("Are you sure you want to delete this candidate?")) {
+  //     try {
+  //       await adminService.deleteCandidate(candidateId);
 
-        // Remove candidate from the list
-        setData((prevData) => prevData.filter((c) => c._id !== candidateId));
+  //       // Remove candidate from the list
+  //       setData((prevData) => prevData.filter((c) => c._id !== candidateId));
 
-        toast.success("Candidate deleted successfully!");
-        setOpenMenuId(null);
-      } catch (error) {
-        console.error("Error deleting candidate:", error);
-        toast.error("Failed to delete candidate");
-      }
-    }
-  };
+  //       toast.success("Candidate deleted successfully!");
+  //       setOpenMenuId(null);
+  //     } catch (error) {
+  //       console.error("Error deleting candidate:", error);
+  //       toast.error("Failed to delete candidate");
+  //     }
+  //   }
+  // };
 
   const handleUpdateCandidateStatus = async (
     candidateId: string,

@@ -1,4 +1,4 @@
-const mongoose = require("mongoose");
+import mongoose from "mongoose";
 
 const candidateSchema = new mongoose.Schema({
   name: { type: String, required: true },
@@ -22,4 +22,4 @@ const candidateSchema = new mongoose.Schema({
   photo: { type: String, default: null },
 });
 
-module.exports = mongoose.model("Candidate", candidateSchema);
+export default mongoose.model("Candidate", candidateSchema);

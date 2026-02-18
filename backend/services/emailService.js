@@ -1,70 +1,8 @@
-// const nodemailer = require('nodemailer');
+import dotenv from "dotenv";
+import nodemailer from "nodemailer";
 
-// const transporter = nodemailer.createTransport({
-//   service: 'gmail',
-//   auth: {
-//     user: "sumedhzodape8003@gmail.com",
-//     pass: "lftp sagn lweq ibjk",
-//   },
-// });
-
-// const sendMCQInterviewLink = async (to, interviewLink, password,start_Date,
-//         end_Date) => {
-
-//   console.log("------------",password)
-//   const mailOptions = {
-//     from: "sumedhzodape8003@gmail.com",
-//     to,
-//     subject: 'Interview Schedule',
-//     text: `Your interview is scheduled. Use the following link and password to access it:\nLink: ${interviewLink}\nPassword: ${password} and date :${start_Date} to ${end_Date}`,
-//   };
-
-//   await transporter.sendMail(mailOptions);
-// };
-
-// const sendMCQScorecard = async (to, pdfPath) => {
-//   const mailOptions = {
-//     from: "sumedhzodape8003@gmail.com",
-//     to,
-//     subject: 'Interview Scorecard',
-//     text: 'Please find your interview scorecard attached.',
-//     attachments: [{ path: pdfPath }],
-//   };
-
-//   await transporter.sendMail(mailOptions);
-// };
-
-
-// const sendAIInterviewLink = async (to, interviewLink, password,subjectLine,personalizedBody,scheduledEndDate,scheduledStartDate) => {
-
-//   console.log("------------",password)
-//   const mailOptions = {
-//     from: "sumedhzodape8003@gmail.com",
-//     to,
-//     subject:`${subjectLine}` ,
-//     text: `${personalizedBody} and
-//     Use the following link and password to access it:\nLink: ${interviewLink}\nPassword: ${password}
-//     date : ${scheduledStartDate} to ${scheduledEndDate}`,
-//   };
-
-//   await transporter.sendMail(mailOptions);
-// };
-// const sendAIScorecard = async (to, pdfPath) => {
-//   const mailOptions = {
-//     from: "sumedhzodape8003@gmail.com",
-//     to,
-//     subject: 'Interview Scorecard',
-//     text: 'Please find your interview scorecard attached.',
-//     attachments: [{ path: pdfPath }],
-//   };
-
-//   await transporter.sendMail(mailOptions);
-// };
-
-// module.exports = { sendMCQInterviewLink, sendAIInterviewLink, sendMCQScorecard,sendAIScorecard};
-const dotenv = require("dotenv");
 dotenv.config();
-const nodemailer = require("nodemailer");
+
 
 // Email transporter configuration
 const transporter = nodemailer.createTransport({
@@ -112,7 +50,9 @@ const formatTime = (date) => {
  * @param {Date} startDate - Start date
  * @param {Date} endDate - End date
  */
-const sendMCQInterviewLink = async (
+
+// Send AI Interview invitation email
+export const sendMCQInterviewLink = async (
   candidateEmail,
   candidateName,
   interviewLink,
@@ -403,10 +343,8 @@ const sendMCQInterviewLink = async (
   }
 };
 
-/**
- * Send AI Interview invitation email
- */
-const sendAIInterviewLink = async (
+// Send AI Interview invitation email
+export const sendAIInterviewLink = async (
   candidateEmail,
   interviewLink,
   password,
@@ -515,10 +453,8 @@ const sendAIInterviewLink = async (
   }
 };
 
-/**
- * Send MCQ Scorecard email
- */
-const sendMCQScorecard = async (candidateEmail, candidateName, scoreData) => {
+//Send MCQ Scorecard email
+export const sendMCQScorecard = async (candidateEmail, candidateName, scoreData) => {
   const emailHTML = `
     <!DOCTYPE html>
     <html>
@@ -570,17 +506,9 @@ const sendMCQScorecard = async (candidateEmail, candidateName, scoreData) => {
   }
 };
 
-/**
- * Send AI Interview Scorecard
- */
-const sendAIScorecard = async (candidateEmail, candidateName, scoreData) => {
+ //Send AI Interview Scorecard
+export const sendAIScorecard = async (candidateEmail, candidateName, scoreData) => {
   // Similar to MCQ scorecard but for AI interviews
   return sendMCQScorecard(candidateEmail, candidateName, scoreData);
 };
 
-module.exports = {
-  sendMCQInterviewLink,
-  sendAIInterviewLink,
-  sendMCQScorecard,
-  sendAIScorecard,
-};

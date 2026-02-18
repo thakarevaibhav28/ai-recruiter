@@ -1,0 +1,331 @@
+import { randomUUID } from "crypto";
+import AI_Interview from "../../models/AI_Interview.js";
+import Candidate from "../../models/Candidate.js";
+
+export const CreateAITemplate = async (req, res) => {
+  try {
+    const {
+      position,
+      description,
+      passingScore,
+      difficulty,
+      skills,
+      duration,
+      numberOfQuestions,
+    } = req.body;
+
+    const file = req.file;
+
+    // ================= VALIDATION =================
+    if (
+      !file ||
+      !difficulty ||
+      !duration ||
+      !position ||
+      !description ||
+      !skills ||
+      !passingScore ||
+      !numberOfQuestions
+    ) {
+      return res.status(400).json({
+        message:
+          "Job description file, difficulty, duration, position, description, passing score,skills and number of questions are required.",
+      });
+    }
+
+    // ================= FORMAT FILE PATH =================
+    const jobDescription = file.path.replace(/\\/g, "/");
+    // examType = "Interview";
+    // ================= GENERATE QUESTIONS USING AI =================
+    // const questions = await generateQuestions(
+    //   jobDescription,
+    //   position,
+    //   difficulty,
+    //   examType,
+    //   parseInt(numberOfQuestions)
+    // );
+
+    // ================= CREATE INTERVIEW =================
+    const interview = await AI_Interview.create({
+      jobDescription: jobDescription,
+      position,
+      difficulty,
+      duration,
+      skills,
+      passingScore,
+      numberOfQuestions,
+      createdBy: req.user.id, // from auth middleware
+      // questions,
+      candidates: [],
+      status: "draft", // default
+    });
+
+    // ================= RESPONSE =================
+    return res.status(201).json({
+      jobId: interview._id,
+      interview: {
+        _id: interview._id,
+        position: interview.position,
+        difficulty: interview.difficulty,
+        duration: interview.duration,
+        createdAt: interview.createdAt,
+        questions: interview.questions,
+        skills: interview.skills,
+        passingScore: interview.passingScore,
+        description: interview.description,
+        numberOfQuestions: interview.numberOfQuestions,
+      },
+      // questions,
+    });
+  } catch (error) {
+    console.error("Generate AI Interview Error:", error);
+    return res.status(500).json({
+      message: "Server error while generating AI interview",
+      error: error.message,
+    });
+  }
+};
+export const GetAllAIInterview = async (req, res) => {
+  try {
+    const adminId = req.user.id;
+
+    const drafts = await AI_Interview.find({
+      createdBy: adminId,
+      status: "draft",
+    })
+      .sort({ createdAt: -1 })
+      .select(
+        "_id position difficulty duration skills passingScore numberOfQuestions description status createdAt",
+      );
+
+    const formattedDrafts = drafts.map((item) => ({
+      jobId: item._id, // 🔥 send as jobId
+      _id: item._id,
+      position: item.position,
+      difficulty: item.difficulty,
+      duration: item.duration,
+      skills: item.skills,
+      passingScore: item.passingScore,
+      numberOfQuestions: item.numberOfQuestions,
+      description: item.description,
+      status: item.status,
+      createdAt: item.createdAt,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      totalDrafts: formattedDrafts.length,
+      drafts: formattedDrafts,
+    });
+  } catch (error) {
+    console.error("Get Draft Interviews Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message,
+    });
+  }
+}
+export const AIInterviewInvitation = async (req, res) => {
+  try {
+    const { jobId, candidateIds, messageBody, startDate, endDate, testTitle } =
+      req.body;
+
+    if (
+      !jobId ||
+      !candidateIds ||
+      !messageBody ||
+      !startDate ||
+      !endDate ||
+      !testTitle
+    ) {
+      return res.status(400).json({
+        message: "All fields are required.",
+      });
+    }
+
+    const interview = await AI_Interview.findById(jobId);
+    if (!interview) {
+      return res.status(404).json({ message: "Interview not found." });
+    }
+
+    const candidates = await Candidate.find({
+      _id: { $in: candidateIds },
+    });
+
+    if (candidates.length !== candidateIds.length) {
+      return res.status(400).json({
+        message: "Some candidate IDs are invalid.",
+      });
+    }
+
+    interview.candidates = [];
+
+    for (const candidate of candidates) {
+      const interviewLink = `https://your-app.com/interview/${randomUUID()}`;
+      const password = randomUUID().slice(0, 8);
+
+      interview.candidates.push({
+        candidateId: candidate._id,
+        interviewLink,
+        password,
+        scheduledStartDate: new Date(startDate),
+        scheduledEndDate: new Date(endDate),
+        emailBody: messageBody,
+      });
+
+      const finalMessage = messageBody
+        .replace("[Candidate Name]", candidate.name)
+        .replace("[Job Role]", testTitle);
+
+      await sendAIInterviewLink(
+        candidate.email,
+        interviewLink,
+        password,
+        `AI Interview Invitation - ${testTitle}`,
+        finalMessage,
+        new Date(endDate),
+        new Date(startDate),
+      );
+    }
+
+    interview.status = "scheduled";
+    await interview.save();
+
+    res.status(200).json({
+      message: "Invitations sent successfully",
+      totalCandidates: candidates.length,
+    });
+  } catch (error) {
+    console.error("Error sending invitations:", error);
+    res.status(500).json({
+      message: "Server error",
+      error: error.message,
+    });
+  }
+};
+export const UpdateInterviewStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    // ✅ Validate status
+    const allowedStatus = ["draft", "scheduled"];
+
+    if (!status || !allowedStatus.includes(status)) {
+      return res.status(400).json({
+        message: `Invalid status. Allowed values: ${allowedStatus.join(", ")}`,
+      });
+    }
+
+    const interview = await AI_Interview.findById(id);
+
+    if (!interview) {
+      return res.status(404).json({
+        message: "Interview not found",
+      });
+    }
+
+    interview.status = status;
+    await interview.save();
+
+    return res.status(200).json({
+      message: "Interview status updated successfully",
+      interviewId: interview._id,
+      newStatus: interview.status,
+    });
+  } catch (error) {
+    console.error("Update Interview Status Error:", error);
+    return res.status(500).json({
+      message: "Server error",
+      error: error.message,
+    });
+  }
+}
+
+ export const ScheduleAiInterview = async (req, res) => {
+    try {
+      const {
+        candidates,
+        scheduledStartDate,
+        scheduledEndDate,
+        subjectLine,
+        messageBody,
+      } = req.body;
+
+      const { interviewId } = req.params;
+
+      if (
+        !scheduledStartDate ||
+        !scheduledEndDate ||
+        !subjectLine ||
+        !messageBody ||
+        !candidates
+      ) {
+        return res.status(400).json({ message: "All fields are required" });
+      }
+
+      const candidateArray =
+        typeof candidates === "string" ? JSON.parse(candidates) : candidates;
+      if (!Array.isArray(candidateArray) || candidateArray.length === 0)
+        return res.status(400).json({ message: "Candidates must be an array" });
+
+      // 🔍 Get existing interview
+      const interview = await AI_Interview.findById(interviewId);
+      if (!interview)
+        return res.status(404).json({ message: "Interview not found" });
+
+      const scheduledCandidates = [];
+
+      for (const candId of candidateArray) {
+        const candidate = await Candidate.findById(candId);
+        if (!candidate)
+          return res
+            .status(404)
+            .json({ message: `Candidate ID ${candId} not found` });
+
+        const interviewLink = `http://localhost:5173/candidate/interview/ai/${interviewId}`;
+        const password = Math.random().toString(36).slice(-8);
+
+        const personalizedBody = messageBody
+          .replace("[Candidates Name]", candidate.name)
+          .replace("[job role]", candidate.role || "your applied role")
+          .replace("[Date]", new Date(scheduledEndDate).toDateString())
+          .replace("[Interview link]", interviewLink);
+
+        const entry = {
+          candidateId: candidate._id,
+          interviewLink,
+          password,
+          scheduledStartDate: new Date(scheduledStartDate),
+          scheduledEndDate: new Date(scheduledEndDate),
+          emailSubject: subjectLine,
+          emailBody: personalizedBody,
+        };
+
+        interview.candidates.push(entry);
+        scheduledCandidates.push(entry);
+
+        await sendAIInterviewLink(
+          candidate.email,
+          entry.interviewLink,
+          entry.password,
+          subjectLine,
+          personalizedBody,
+          scheduledEndDate,
+          scheduledStartDate,
+        );
+      }
+
+      await interview.save();
+
+      res.status(200).json({
+        message: "Interview invitations sent",
+        interviewId,
+        scheduledCandidates,
+      });
+    } catch (err) {
+      console.error("Error scheduling AI interview:", err);
+      res.status(500).json({ message: "Server error", details: err.message });
+    }
+  }
