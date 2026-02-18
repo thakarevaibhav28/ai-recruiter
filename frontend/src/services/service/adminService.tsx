@@ -1,5 +1,4 @@
-
-import { adminApi } from '../api/adminApi/adminApi';
+import { adminApi } from "../api/adminApi/adminApi";
 
 class AdminService {
   login(data: any) {
@@ -9,49 +8,50 @@ class AdminService {
     return adminApi.bulk_add_candidate(data);
   }
 
-
-  // add candidate 
-  addCandidate(data:any){
-    return adminApi.getAllCandidate(data)
+  // add candidate
+  addCandidate(data: any) {
+    return adminApi.addCandidate(data);
   }
 
   //create assessment template
-  createAssessmentTemplate(data:any){
-    return adminApi.createAssessmentTemplate(data)
+  createAssessmentTemplate(data: any) {
+    return adminApi.createAssessmentTemplate(data);
   }
 
-  //ge t all assesments
-  getAssesments(){
-    return adminApi.getAssesments()
+  //get all assesments
+  getAssesments() {
+    return adminApi.getAssesments();
   }
 
   //get all candidates
-  getAllCandidate(){
-    return adminApi.getAllCandidate()
+  getAllCandidate() {
+    return adminApi.getAllCandidate();
+  }
+
+  // update candidate status
+  updateCandidate(id: string, data: any) {
+    return adminApi.updateCandidate(id, data);
   }
 
   //send invites
-  sendInvites(assessmentId:any, data:any){
-    return adminApi.sendInvites(assessmentId, data)
+  sendInvites(assessmentId: any, data: any) {
+    return adminApi.sendInvites(assessmentId, data);
   }
 
   //generate and invite candidates
-  generateAndInvite(data:any){
-    return adminApi.generateAndInvite(data)
+  generateAndInvite(data: any) {
+    return adminApi.generateAndInvite(data);
   }
   //create AI interview
-  generateAIInterview(data:any){
-    return adminApi.generateAIInterview(data)
+  generateAIInterview(data: any) {
+    return adminApi.generateAIInterview(data);
   }
-  sendInvitations(data:any){
-    return adminApi.sendInvitations(data)
+  sendInvitations(data: any) {
+    return adminApi.sendInvitations(data);
   }
-  getDraft(){
-    return adminApi.getDraft()
+  getDraft() {
+    return adminApi.getDraft();
   }
-
-
-
 }
 
 export const adminService = new AdminService();
