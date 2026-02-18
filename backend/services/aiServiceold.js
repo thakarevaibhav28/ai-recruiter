@@ -1,15 +1,13 @@
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
 
 const genAI = new GoogleGenerativeAI("AIzaSyDDq4xW3YZoTBLCybwaNYbyRXPXBtj1-cg");
 const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
 
 const cleanResponseText = (text) => {
-  // Remove Markdown code fences and any leading/trailing whitespace
   return text.replace(/```json\n|```|\n/g, '').trim();
 };
-// console.log("hii")
-
 
 const callGeminiWithRetry = async (prompt, maxRetries = 4) => {
   let attempt = 0;
@@ -29,7 +27,7 @@ const callGeminiWithRetry = async (prompt, maxRetries = 4) => {
     }
   }
 };
-const generateQuestions = async (jobDescription, test_title, difficulty, Exam_Type, no_of_questions) => {
+export const generateQuestions = async (jobDescription, test_title, difficulty, Exam_Type, no_of_questions) => {
  
   let prompt;
 
@@ -90,7 +88,7 @@ const generateQuestions = async (jobDescription, test_title, difficulty, Exam_Ty
   }
 };
 
-const evaluateAnswer = async (question, answer) => {
+export const evaluateAnswer = async (question, answer) => {
   const prompt = `
   Evaluate the following answer for the given question. Provide a score out of 10 and a brief feedback.
   Question: ${question}
@@ -115,7 +113,7 @@ const evaluateAnswer = async (question, answer) => {
     throw new Error('Failed to evaluate answer');
   }
 };
-const generateSummary = async (scores) => {
+export const generateSummary = async (scores) => {
   const prompt = `
   Given the following scores and feedback for ${no_of_questions} questions, provide a summary of the candidate's performance.
   Input: ${JSON.stringify(scores)}
@@ -139,5 +137,3 @@ const generateSummary = async (scores) => {
     throw new Error('Failed to generate summary');
   }
 };
-
-module.exports = { generateQuestions, evaluateAnswer, generateSummary }; 
