@@ -37,26 +37,6 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 console.log("upload", upload);
-// This endpoint allows the admin to register by providing an email and password.
-// router.post("/register", async (req, res) => {
-//   const { email, password } = req.body;
-//   try {
-//     let admin = await Admin.findOne({ email });
-//     if (admin) return res.status(400).json({ message: "Admin already exists" });
-
-//     admin = new Admin({ email, password });
-//     await admin.save();
-
-//     const token = jwt.sign(
-//       { id: admin._id, role: "admin" },
-//       process.env.JWT_SECRET,
-//       { expiresIn: "1h" }
-//     );
-//     res.status(201).json({ token });
-//   } catch (error) {
-//     res.status(500).json({ message: "Server error" });
-//   }
-// });
 
 router.post("/register", async (req, res) => {
   const { email, password } = req.body;
@@ -107,28 +87,7 @@ router.post("/register", async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
-// This endpoint allows the admin to log in and receive a JWT token for authentication.
-// router.post("/login", async (req, res) => {
-//   const { email, password } = req.body;
-//   try {
-//     const admin = await Admin.findOne({ email });
-//     console.log(admin)
-//     if (!admin) return res.status(400).json({ message: "Invalid credentials" });
 
-//     const isMatch = await admin.comparePassword(password);
-//     if (!isMatch)
-//       return res.status(400).json({ message: "Invalid credentials" });
-
-//     const token = jwt.sign(
-//       { id: admin._id, role: "admin" },
-//       process.env.JWT_SECRET,
-//       { expiresIn: "1h" }
-//     );
-//     res.json({ token });
-//   } catch (error) {
-//     res.status(500).json({ message: "Server error" });
-//   }
-// });
 router.post("/login", async (req, res) => {
   const { email, password } = req.body;
 
@@ -181,27 +140,9 @@ router.post("/login", async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
-// get All candidate
-router.get("/candidates", auth("admin"), async (req, res) => {
-  try {
-    const candidates = await Candidate.find()
-      .select("name email mobile role key_Skills year_of_experience status")
-      .sort({ createdAt: -1 });
 
-    res.status(200).json({
-      success: true,
-      count: candidates.length,
-      data: candidates,
-    });
-  } catch (error) {
-    console.error("Error fetching candidates:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to fetch candidates",
-      error: error.message,
-    });
-  }
-});
+
+// interview ai ccreate
 router.post(
   "/interview/ai",
   auth("admin"),
@@ -464,135 +405,7 @@ router.post("/interview/mcq", auth("admin"), async (req, res) => {
   }
 });
 
-// router.post('/interview/mcq',auth('admin'),async (req, res) => {
-//     const {
-//       test_title, difficulty, duration,
-//       no_of_questions, primary_skill,
-//       secondary_skill, passing_score,
-//     } = req.body;
-
-//     try {
-//       if ([test_title, difficulty, duration, no_of_questions,
-//            primary_skill, secondary_skill, passing_score].some(v => !v))
-//         return res.status(400).json({ message: 'All fields are required' });
-
-//       const jobDescription = req.file ? req.file.path.replace(/\\/g, '/') : "";
-
-//       const questions = await generateQuestions(
-//         jobDescription,
-//         test_title,
-//         difficulty,
-//         'MCQ',
-//         no_of_questions,
-//       );
-
-//       const interview = await MCQ_Interview.create({
-//         test_title,
-//         difficulty,
-//         duration,
-//         no_of_questions,
-//         primary_skill,
-//         secondary_skill,
-//         passing_score,
-//         createdBy: req.user.id,
-//       });
-
-//       const questionDocs = questions.map(q => ({
-//         interviewId:   interview._id,
-//         questionText:  q.question,
-//         options:       q.options,
-//         correctAnswer: q.correctAnswer,
-//       }));
-//       await Question.insertMany(questionDocs);
-
-//       return res.status(201).json({ interview, questions });
-//     } catch (err) {
-//       console.error(err);
-//       res.status(500).json({ message: 'Server error', details: err.message });
-//     }
-//   }
-// );
-// Single candidate addition
-// router.post("/create/candidate", auth("admin"), async (req, res) => {
-//   const {
-//     email,
-//     name,
-//     mobile,
-//     role,
-//     key_Skills,
-//     description,
-//     year_of_experience,
-//   } = req.body;
-
-
-//   // Basic input validation
-//   if (
-//     !email ||
-//     !name ||
-//     !mobile ||
-//     !role ||
-//     !key_Skills ||
-//     !description ||
-//     !year_of_experience
-//   ) {
-//     return res.status(400).json({
-//       message:
-//         "all fields are required.",
-//     });
-//   }
-//   // Email format validation
-//   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-//   if (!emailRegex.test(email)) {
-//     return res.status(400).json({ message: "Invalid email format." });
-//   }
-//   // Mobile number validation (simple, adjust as needed)
-//   const mobileRegex = /^[0-9]{10,15}$/;
-//   if (!mobileRegex.test(mobile)) {
-//     return res.status(400).json({ message: "Invalid mobile number." });
-//   }
-
-//   try {
-//     // Check if candidate already exists for this interview
-//     const existingCandidate = await Candidate.findOne({ email });
-//     if (existingCandidate) {
-//       return res.status(409).json({ message: "Candidate already added." });
-//     }
-
-//     // Create candidate if not exists
-//     const candidate =
-//       existingCandidate ||
-//       (await Candidate.create({
-//         email,
-//         name,
-//         mobile,
-//         role,
-//         key_Skills,
-//         description,
-//         year_of_experience,
-//       }));
-
-//     // const job = await Interview.findById(id);
-//     // if (!job) {
-//     //   return res.status(404).json({ message: 'Interview not found.' });
-//     // }
-
-//     // job.candidates.push({
-//     //   candidateId: candidate._id,
-//     //   interviewLink: null,
-//     //   password: null,
-//     //   scheduledDate: null
-//     // });
-//     // await job.save();
-
- 
-//     res
-//       .status(201)
-//       .json({ message: "Candidate added", newCandidate: candidate });
-//   } catch (error) {
-//     console.log(error);
-//     res.status(500).json({ message: "Server error" });
-//   }
-// });
+// Create Candidate
 router.post("/create/candidate", auth("admin"), async (req, res) => {
   const {
     id, // optional for update
@@ -708,6 +521,50 @@ router.get("/candidates", auth("admin"), async (req, res) => {
     });
   }
 });
+
+// Update Candidate Status api
+router.patch(
+  "/candidate/:id",
+  auth("admin"),
+  async (req, res) => {
+    const { id } = req.params;
+    const { candidate_status } = req.body;
+
+    // Validate status
+    if (!["active", "inactive"].includes(candidate_status)) {
+      return res.status(400).json({
+        message: "Invalid status value.",
+      });
+    }
+
+    try {
+      const candidate = await Candidate.findByIdAndUpdate(
+        id,
+        { candidate_status },
+        { new: true }
+      );
+
+      if (!candidate) {
+        return res.status(404).json({
+          message: "Candidate not found.",
+        });
+      }
+
+
+      return res.status(200).json({
+        message: `Candidate ${candidate_status} successfully.`,
+        data: candidate,
+      });
+
+    } catch (error) {
+      console.log(error);
+      return res.status(500).json({
+        message: "Server error",
+      });
+    }
+  }
+);
+
 
 // Get all Schedule data
 router.get("/total-schedule", auth("admin"), async (req, res) => {

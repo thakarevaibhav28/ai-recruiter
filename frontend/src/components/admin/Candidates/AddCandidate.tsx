@@ -19,7 +19,7 @@ interface CandidateFormData {
   role: string;
   year_of_experience: string;
   key_Skills: string;
-  description?: string;
+  description: string;
 }
 
 const AddCandidateModal: React.FC<AddCandidateModalProps> = ({
@@ -58,62 +58,47 @@ const AddCandidateModal: React.FC<AddCandidateModalProps> = ({
   const onSubmit = async (data: CandidateFormData) => {
     setIsLoading(true);
 
-    // Show loading toast
     const loadingToast = toast.loading(
-      isEditMode ? "Updating candidate..." : "Adding candidate...",
+      isEditMode ? "Updating candidate..." : "Adding candidate..."
     );
 
     try {
-      let response;
+      // Prepare payload - include ID if editing
+      const payload = isEditMode 
+        ? { ...data, id: candidateData._id }
+        : data;
 
-      if (isEditMode) {
-        // Update existing candidate
-        response = await adminService.updateCandidate(candidateData._id, data);
+      // Use same API service for both create and update
+      const response = await adminService.addCandidate(payload);
 
-        // Dismiss loading toast
-        toast.dismiss(loadingToast);
-
-        // Show success toast
-        toast.success("Candidate updated successfully!");
-
-        // Pass the updated candidate data to parent
-        if (response.data && response.data) {
-          onUpdate(response.data);
-        } else if (response.data) {
-          onUpdate(response.data);
-        }
-      } else {
-        // Add new candidate
-        response = await adminService.addCandidate(data);
-
-        // Dismiss loading toast
-        toast.dismiss(loadingToast);
-
-        // Show success toast
-        toast.success("Candidate added successfully!");
-
-        // Pass the new candidate data to parent
-        if (response.data && response.data.data) {
-          onAdd(response.data.data);
-        } else if (response.data) {
-          onAdd(response.data);
-        }
-      }
-
-      // Reset form and close modal
-      reset();
-      onClose();
-    } catch (err) {
-      // Dismiss loading toast
       toast.dismiss(loadingToast);
 
-      // Show error toast
-      toast.error(
-        isEditMode
-          ? "Failed to update candidate. Please try again."
-          : "Failed to add candidate. Please try again.",
+      // Show success toast
+      toast.success(
+        isEditMode 
+          ? "Candidate updated successfully!" 
+          : "Candidate added successfully!"
       );
 
+      // Backend returns newCandidate in both create and update
+      const newCandidate = response.data?.newCandidate;
+      
+      if (newCandidate) {
+        isEditMode ? onUpdate(newCandidate) : onAdd(newCandidate);
+      }
+
+      reset();
+      onClose();
+    } catch (err: any) {
+      toast.dismiss(loadingToast);
+      
+      // Show specific error message from backend
+      const errorMessage = err.response?.data?.message || 
+        (isEditMode
+          ? "Failed to update candidate. Please try again."
+          : "Failed to add candidate. Please try again.");
+      
+      toast.error(errorMessage);
       console.error("Candidate operation error:", err);
     } finally {
       setIsLoading(false);
@@ -323,9 +308,18 @@ const AddCandidateModal: React.FC<AddCandidateModalProps> = ({
               <textarea
                 placeholder="Any additional information about the candidates"
                 rows={4}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent outline-none resize-none"
-                {...register("description")}
+                className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent outline-none resize-none ${
+                  errors.description ? "border-red-500" : "border-gray-300"
+                }`}
+                {...register("description", {
+                  required: "Description is required",
+                })}
               />
+              {errors.description && (
+                <p className="text-xs text-red-500 mt-1">
+                  {errors.description.message}
+                </p>
+              )}
             </div>
           </div>
 
