@@ -1,10 +1,5 @@
-
-
 const BATCH_SIZE = 5;
 
-// ─────────────────────────────────────────────
-// Exact same fetch logic as your working code
-// ─────────────────────────────────────────────
 const fetchBatch = async (prompt) => {
   const response = await fetch(
     "https://router.huggingface.co/v1/chat/completions",
@@ -46,7 +41,7 @@ const fetchBatch = async (prompt) => {
 // ─────────────────────────────────────────────
 // MAIN EXPORT: generateQuestions
 // ─────────────────────────────────────────────
-const generateQuestions = async (
+export const generateQuestions = async (
   jobDescription,
   test_title,
   difficulty,
@@ -108,5 +103,3 @@ Format exactly like this:
   console.log(`✅ Done! Generated ${allQuestions.length} ${Exam_Type} questions`);
   return allQuestions.slice(0, count);
 };
-
-module.exports = { generateQuestions };

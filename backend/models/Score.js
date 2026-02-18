@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from "mongoose";
 
 const scoreSchema = new mongoose.Schema({
   interviewId: { type: mongoose.Schema.Types.ObjectId, ref: 'Interview', required: true },
@@ -9,4 +9,4 @@ const scoreSchema = new mongoose.Schema({
   pdfPath: String,
 });
 
-module.exports = mongoose.model('Score', scoreSchema);
+export default mongoose.model('Score', scoreSchema);

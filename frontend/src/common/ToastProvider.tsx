@@ -6,29 +6,48 @@ const ToastProvider: React.FC = () => {
     <Toaster
       position="top-right"
       reverseOrder={false}
-      gutter={8}
+      gutter={12}
+      containerStyle={{
+        top: 20,
+        right: 20,
+      }}
       toastOptions={{
         duration: 4000,
         style: {
-          background: "#fff",
-          color: "#363636",
-          padding: "16px",
-          borderRadius: "8px",
+          background: "#ffffff",
+          color: "#111827",
+          padding: "14px 18px",
+          borderRadius: "12px",
           fontSize: "14px",
-          boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
+          fontWeight: 500,
+          border: "1px solid #E5E7EB",
+          boxShadow:
+            "0 10px 25px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0,0,0,0.04)",
         },
+
         success: {
           duration: 3000,
           style: {
-            background: "#10B981",
-            color: "#fff",
+            background: "#ffffff",
+            color: "#065F46",
+            border: "1px solid #A7F3D0",
+          },
+          iconTheme: {
+            primary: "#10B981",
+            secondary: "#ffffff",
           },
         },
+
         error: {
           duration: 4000,
           style: {
-            background: "#EF4444",
-            color: "#fff",
+            background: "#ffffff",
+            color: "#7F1D1D",
+            border: "1px solid #FCA5A5",
+          },
+          iconTheme: {
+            primary: "#EF4444",
+            secondary: "#ffffff",
           },
         },
       }}
