@@ -38,7 +38,9 @@ const Candidates = () => {
   const [rowsPerPage] = useState(5);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
-  const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
+  const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(
+    null,
+  );
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -86,7 +88,7 @@ const Candidates = () => {
 
   const toggleRow = (id: string) => {
     setSelected((prev) =>
-      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id],
     );
   };
 
@@ -102,10 +104,9 @@ const Candidates = () => {
     // Update the candidate in the list
     setData((prevData) =>
       prevData.map((candidate) =>
-        candidate._id === updatedCandidate._id ? updatedCandidate : candidate
-      )
+        candidate._id === updatedCandidate._id ? updatedCandidate : candidate,
+      ),
     );
-    toast.success("Candidate updated successfully!");
   };
 
   const handleViewCandidate = (candidate: Candidate) => {
@@ -124,16 +125,45 @@ const Candidates = () => {
     if (window.confirm("Are you sure you want to delete this candidate?")) {
       try {
         await adminService.deleteCandidate(candidateId);
-        
+
         // Remove candidate from the list
         setData((prevData) => prevData.filter((c) => c._id !== candidateId));
-        
+
         toast.success("Candidate deleted successfully!");
         setOpenMenuId(null);
       } catch (error) {
         console.error("Error deleting candidate:", error);
         toast.error("Failed to delete candidate");
       }
+    }
+  };
+
+  const handleUpdateCandidateStatus = async (
+    candidateId: string,
+    newStatus: "active" | "inactive",
+  ) => {
+    try {
+      const response = await adminService.updateCandidate(candidateId, {
+        candidate_status: newStatus,
+      });
+
+      if (response.data && response.data.data) {
+        // Update the candidate in the list
+        setData((prevData) =>
+          prevData.map((candidate) =>
+            candidate._id === candidateId ? response.data.data : candidate,
+          ),
+        );
+
+        toast.success(`Candidate ${newStatus} successfully!`);
+      }
+
+      setOpenMenuId(null);
+    } catch (error: any) {
+      console.error("Error updating candidate status:", error);
+      const errorMessage =
+        error.response?.data?.message || "Failed to update candidate status";
+      toast.error(errorMessage);
     }
   };
 
@@ -354,12 +384,32 @@ const Candidates = () => {
                               >
                                 Edit
                               </button>
-                              <button
-                                onClick={() => handleDeleteCandidate(row._id)}
-                                className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
-                              >
-                                Delete
-                              </button>
+
+                              {row.candidate_status === "active" ? (
+                                <button
+                                  onClick={() =>
+                                    handleUpdateCandidateStatus(
+                                      row._id,
+                                      "inactive",
+                                    )
+                                  }
+                                  className="w-full text-left px-4 py-2 text-sm text-orange-600 hover:bg-orange-50 transition-colors"
+                                >
+                                  Mark as Inactive
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() =>
+                                    handleUpdateCandidateStatus(
+                                      row._id,
+                                      "active",
+                                    )
+                                  }
+                                  className="w-full text-left px-4 py-2 text-sm text-green-600 hover:bg-green-50 transition-colors"
+                                >
+                                  Mark as Active
+                                </button>
+                              )}
                             </div>
                           )}
                         </td>
