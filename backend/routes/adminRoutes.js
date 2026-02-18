@@ -1258,4 +1258,465 @@ router.get("/interviews/draft", auth("admin"), async (req, res) => {
   }
 });
 
+
+// ==================== MCQ ASSESSMENT ROUTES ====================
+
+
+// POST Create MCQ Assessment Template (without candidates - no email sent)
+router.post(
+  "/assessment/template",
+  auth("admin"),
+  upload.single("jobDescription"),
+  async (req, res) => {
+    try {
+      const {
+        test_title,
+        difficulty,
+        duration,
+        no_of_questions,
+        primary_skill,
+        secondary_skill,
+        passing_score,
+      } = req.body;
+
+      // Validate required fields
+      if (
+        !test_title ||
+        !difficulty ||
+        !duration ||
+        !no_of_questions ||
+        !primary_skill ||
+        !passing_score
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Please provide all required fields",
+        });
+      }
+
+      // Get job description file path if uploaded
+      const jobDescription = req.file
+        ? req.file.path.replace(/\\/g, "/")
+        : "";
+
+      // Generate questions using AI
+      const questions = await generateQuestions(
+        jobDescription,
+        test_title,
+        difficulty,
+        "MCQ",
+        parseInt(no_of_questions)
+      );
+      console.log("Generated questions for template:", questions);
+
+      // Create interview template
+      const interview = await MCQ_Interview.create({
+        test_title,
+        difficulty,
+        duration,
+        no_of_questions: parseInt(no_of_questions),
+        primary_skill,
+        secondary_skill: secondary_skill || "",
+        passing_score,
+        jobDescription,
+        createdBy: req.user.id,
+        isTemplate: true, // Mark as template
+      });
+
+      // Save questions
+      const questionDocs = questions.map((q) => ({
+        interviewId: interview._id,
+        questionText: q.question,
+        options: q.options,
+        correctAnswer: q.correctAnswer,
+      }));
+      await Question.insertMany(questionDocs);
+
+      res.status(201).json({
+        success: true,
+        message: "Assessment template created successfully",
+        data: {
+          interview,
+          questionCount: questions.length,
+        },
+      });
+    } catch (error) {
+      console.error("Error creating template:", error);
+      res.status(500).json({
+        success: false,
+        message: "Failed to create assessment template",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// POST Create MCQ Assessment and Send Invites (with candidates - emails sent)
+router.post(
+  "/assessment/send-invites",
+  auth("admin"),
+  upload.single("jobDescription"),
+  async (req, res) => {
+    try {
+      const {
+        test_title,
+        difficulty,
+        duration,
+        no_of_questions,
+        primary_skill,
+        secondary_skill,
+        passing_score,
+        start_date,
+        end_date,
+        candidates,
+      } = req.body;
+
+      // Validate required fields
+      if (
+        !test_title ||
+        !difficulty ||
+        !duration ||
+        !no_of_questions ||
+        !primary_skill ||
+        !passing_score ||
+        !start_date ||
+        !end_date ||
+        !candidates
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Please provide all required fields including candidates",
+        });
+      }
+
+      // Parse candidates array
+      let candidateArray;
+      try {
+        candidateArray =
+          typeof candidates === "string" ? JSON.parse(candidates) : candidates;
+        if (!Array.isArray(candidateArray) || candidateArray.length === 0) {
+          throw new Error("Invalid candidates array");
+        }
+      } catch (err) {
+        return res.status(400).json({
+          success: false,
+          message: "Please select at least one candidate",
+        });
+      }
+
+      // Validate dates
+      const startDate = new Date(start_date);
+      const endDate = new Date(end_date);
+
+      if (endDate <= startDate) {
+        return res.status(400).json({
+          success: false,
+          message: "End date must be after start date",
+        });
+      }
+
+      // Get job description file path
+      const jobDescription = req.file
+        ? req.file.path.replace(/\\/g, "/")
+        : "";
+
+      // Generate questions using AI
+      const questions = await generateQuestions(
+        jobDescription,
+        test_title,
+        difficulty,
+        "MCQ",
+        parseInt(no_of_questions)
+      );
+
+      // Create interview
+      const interview = await MCQ_Interview.create({
+        test_title,
+        difficulty,
+        duration,
+        no_of_questions: parseInt(no_of_questions),
+        primary_skill,
+        secondary_skill: secondary_skill || "",
+        passing_score,
+        jobDescription,
+        createdBy: req.user.id,
+        isTemplate: false,
+      });
+
+      // Save questions
+      const questionDocs = questions.map((q) => ({
+        interviewId: interview._id,
+        questionText: q.question,
+        options: q.options,
+        correctAnswer: q.correctAnswer,
+      }));
+      await Question.insertMany(questionDocs);
+
+      // Schedule candidates and send emails
+      const scheduledCandidates = [];
+      const emailResults = [];
+
+      for (const candId of candidateArray) {
+        const candidate = await Candidate.findById(candId);
+        if (!candidate) {
+          console.warn(`Candidate ${candId} not found, skipping...`);
+          continue;
+        }
+
+        // Generate credentials
+        const username = `user_${Math.random().toString(36).substring(2, 10)}`;
+        const password = Math.random().toString(36).slice(-8);
+        const interviewLink = `${process.env.FRONTEND_URL || "http://localhost:5173"}/candidate/interview/${interview._id}`;
+
+        const entry = {
+          candidateId: candidate._id,
+          interviewLink,
+          username,
+          password,
+          start_Date: startDate,
+          end_Date: endDate,
+        };
+
+        interview.candidates.push(entry);
+        scheduledCandidates.push({
+          ...entry,
+          name: candidate.name,
+          email: candidate.email,
+        });
+
+        // Send email
+        try {
+          await sendMCQInterviewLink(
+            candidate.email,
+            candidate.name,
+            interviewLink,
+            username,
+            password,
+            test_title,
+            difficulty,
+            duration,
+            no_of_questions,
+            passing_score,
+            primary_skill,
+            secondary_skill,
+            startDate,
+            endDate
+          );
+          emailResults.push({ candidate: candidate.email, status: "sent" });
+        } catch (emailError) {
+          console.error(
+            `Failed to send email to ${candidate.email}:`,
+            emailError
+          );
+          emailResults.push({
+            candidate: candidate.email,
+            status: "failed",
+            error: emailError.message,
+          });
+        }
+      }
+
+      await interview.save();
+
+      const successfulEmails = emailResults.filter(
+        (r) => r.status === "sent"
+      ).length;
+      const failedEmails = emailResults.filter(
+        (r) => r.status === "failed"
+      ).length;
+
+      res.status(201).json({
+        success: true,
+        message: `Assessment created and invitations sent to ${successfulEmails} candidate(s)`,
+        data: {
+          interview,
+          questionCount: questions.length,
+          scheduledCandidates,
+          emailStats: {
+            total: emailResults.length,
+            successful: successfulEmails,
+            failed: failedEmails,
+          },
+          emailResults,
+        },
+      });
+    } catch (error) {
+      console.error("Error creating assessment and sending invites:", error);
+      res.status(500).json({
+        success: false,
+        message: "Failed to create assessment and send invites",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// GET all MCQ interviews/templates
+router.get("/assessment/mcq/list", auth("admin"), async (req, res) => {
+  try {
+    const interviews = await MCQ_Interview.find({ createdBy: req.user.id })
+      .sort({ createdAt: -1 })
+      .populate("createdBy", "email");
+
+    res.status(200).json({
+      success: true,
+      count: interviews.length,
+      data: interviews,
+    });
+  } catch (error) {
+    console.error("Error fetching MCQ assessments:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch assessments",
+      error: error.message,
+    });
+  }
+});
+
+router.post(
+  "/assessment/:assessmentId/invite",
+  auth("admin"),
+  async (req, res) => {
+    try {
+      const { assessmentId } = req.params;
+      const { candidateIds, start_date, end_date } = req.body;
+
+      // ── Validate fields ──────────────────────────────────────
+      if (!candidateIds || !start_date || !end_date) {
+        return res.status(400).json({
+          success: false,
+          message: "Please provide candidateIds, start_date, and end_date",
+        });
+      }
+
+      // ── Parse candidateIds ───────────────────────────────────
+      let candidateArray;
+      try {
+        candidateArray =
+          typeof candidateIds === "string"
+            ? JSON.parse(candidateIds)
+            : candidateIds;
+        if (!Array.isArray(candidateArray) || candidateArray.length === 0) {
+          throw new Error("Invalid candidateIds array");
+        }
+      } catch (err) {
+        return res.status(400).json({
+          success: false,
+          message: "Please select at least one candidate",
+        });
+      }
+
+      // ── Validate dates ───────────────────────────────────────
+      const startDate = new Date(start_date);
+      const endDate = new Date(end_date);
+
+      if (endDate <= startDate) {
+        return res.status(400).json({
+          success: false,
+          message: "End date must be after start date",
+        });
+      }
+
+      // ── Find the existing assessment ─────────────────────────
+      const interview = await MCQ_Interview.findById(assessmentId);
+      if (!interview) {
+        return res.status(404).json({
+          success: false,
+          message: "Assessment not found",
+        });
+      }
+
+      // ── Loop candidates — same logic as your existing route ──
+      const scheduledCandidates = [];
+      const emailResults = [];
+
+      for (const candId of candidateArray) {
+        const candidate = await Candidate.findById(candId);
+        if (!candidate) {
+          console.warn(`Candidate ${candId} not found, skipping...`);
+          continue;
+        }
+
+        // Generate credentials (same as your existing route)
+        const username = `user_${Math.random().toString(36).substring(2, 10)}`;
+        const password = Math.random().toString(36).slice(-8);
+        const interviewLink = `${process.env.FRONTEND_URL || "http://localhost:5173"}/candidate/interview/${interview._id}`;
+
+        const entry = {
+          candidateId: candidate._id,
+          interviewLink,
+          username,
+          password,
+          start_Date: startDate,
+          end_Date: endDate,
+        };
+
+        // Push to assessment candidates array
+        interview.candidates.push(entry);
+        scheduledCandidates.push({
+          ...entry,
+          name: candidate.name,
+          email: candidate.email,
+        });
+
+        // Send email — exact same call as your existing route
+        try {
+          await sendMCQInterviewLink(
+            candidate.email,
+            candidate.name,
+            interviewLink,
+            username,
+            password,
+            interview.test_title,
+            interview.difficulty,
+            interview.duration,
+            interview.no_of_questions,
+            interview.passing_score,
+            interview.primary_skill,
+            interview.secondary_skill,
+            startDate,
+            endDate
+          );
+          emailResults.push({ candidate: candidate.email, status: "sent" });
+        } catch (emailError) {
+          console.error(`Failed to send email to ${candidate.email}:`, emailError);
+          emailResults.push({
+            candidate: candidate.email,
+            status: "failed",
+            error: emailError.message,
+          });
+        }
+      }
+
+      // ── Save updated assessment ──────────────────────────────
+      await interview.save();
+
+      const successfulEmails = emailResults.filter((r) => r.status === "sent").length;
+      const failedEmails = emailResults.filter((r) => r.status === "failed").length;
+
+      return res.status(200).json({
+        success: true,
+        message: `Invitations sent to ${successfulEmails} candidate(s)`,
+        data: {
+          assessmentId: interview._id,
+          scheduledCandidates,
+          emailStats: {
+            total: emailResults.length,
+            successful: successfulEmails,
+            failed: failedEmails,
+          },
+          emailResults,
+        },
+      });
+    } catch (error) {
+      console.error("Error sending invites:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to send invites",
+        error: error.message,
+      });
+    }
+  }
+);
+
 module.exports = router;
