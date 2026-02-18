@@ -72,29 +72,29 @@ const ActiveInterviews: React.FC<ActiveInterviewsProps> = ({ onNavigateToIntervi
             <div key={index} className="bg-white rounded-lg shadow-md p-4 border border-gray-200 w-[290px]">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  {/* <h3 className="text-lg font-semibold text-gray-900">{assessment.drafts.position}</h3> */}
+                  <h3 className="text-lg font-semibold text-gray-900">{assessment.position}</h3>
                   <span className="border border-[#C2410C] text-[#C2410C] text-xs font-medium px-2 py-1 rounded-xl">{assessment.difficulty}</span>
                 </div>
                 <img src={File} alt="" className="w-5 -mt-3" />
               </div>
               <div className="text-sm text-gray-500 mb-4">
-                {/* {assessment.drafts.skills.map((skill: string, i: number) => (
+                {assessment.skills.map((skill: string, i: number) => (
                   <span key={i} className="inline-block bg-gray-200 text-gray-800 text-xs px-2 py-1 rounded-full mr-2 mb-2">
                     {skill}
                   </span>
-                ))} */}
+                ))}
               </div>
               <div className="flex items-center text-sm text-gray-500 mb-4">
                 <span className="flex items-center mr-4">
                   <img src={Comment} alt="" className="w-4 h-4 mr-3" />
-                  {/* {assessment.numberOfQuestions} questions */}
+                  {assessment.numberOfQuestions} questions
                 </span>
                 <span className="flex items-center">
                   <img src={Calender} alt="" className="w-4 h-4 mr-3" />
-                  {/* {assessment.createdDate} */}
+                  {assessment.createdDate}
                 </span>
               </div>
-              {/* <p className="text-sm text-gray-500 mb-6"> Last Use: {getTimeAgo(assessment.drafts.createdAt)}</p> */}
+              <p className="text-sm text-gray-500 mb-6"> Last Use: {getTimeAgo(assessment.createdAt)}</p>
               <div className="flex space-x-3">
                 <button
                 onClick={() => onNavigateToInterviewSetup(assessment)}
