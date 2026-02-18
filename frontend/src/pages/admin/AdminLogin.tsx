@@ -30,6 +30,13 @@ const LoginPage: React.FC = () => {
       const response = await adminService.login(data);
       console.log(response);
 
+      if(response.user.role !== "admin"){
+        setError("Unauthorized access. Only admins can log in.");
+        setIsLoading(false);
+          navigate("/admin/login");
+        return;
+      }
+
       const { accessToken, refreshToken, user } = response;
 
       // Store access token

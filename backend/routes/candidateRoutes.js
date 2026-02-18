@@ -1,16 +1,19 @@
-const express = require('express');
+import express from "express";
+import jwt from "jsonwebtoken";
+import multer from "multer";
+import path from "path";
+
+import Candidate from "../models/Candidate.js";
+import Interview from "../models/MCQ_Interview.js";
+import Admin from "../models/Admin.js";
+import Question from "../models/Question.js";
+import Score from "../models/Score.js";
+import auth from "../middleware/auth.js";
+
+import { evaluateAnswer, generateSummary } from "../services/aiServiceold.js";
+import { generateScorecardPDF } from "../services/pdfService.js";
+
 const router = express.Router();
-const jwt = require('jsonwebtoken');
-const Candidate = require('../models/Candidate');
-const Interview = require('../models/MCQ_Interview');
-const Admin = require('../models/Admin');
-const Question = require('../models/Question');
-const Score = require('../models/Score');
-const auth = require('../middleware/auth');
-const { evaluateAnswer, generateSummary } = require('../services/aiService');
-const { generateScorecardPDF, sendScorecard } = require('../services/pdfService');
-const multer = require('multer');
-const path = require('path');
 
 // Candidate login for interview
 router.post('/login/:id', async (req, res) => {
@@ -219,8 +222,8 @@ router.post('/interview/:id/submit', auth('candidate'), async (req, res) => {
     await score.save();
 
     const admin = await Admin.findById((await Interview.findById(id)).createdBy);
-    await sendScorecard(candidate.email, pdfPath);
-    await sendScorecard(admin.email, pdfPath);
+    await generateScorecardPDF(candidate.email, pdfPath);
+    await generateScorecardPDF(admin.email, pdfPath);
 
     res.json({ message: 'Interview submitted, scorecard sent' });
   } catch (error) {
@@ -228,4 +231,4 @@ router.post('/interview/:id/submit', auth('candidate'), async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

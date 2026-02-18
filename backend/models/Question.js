@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from "mongoose";
 
 const questionSchema = new mongoose.Schema({
   interviewId: { type: mongoose.Schema.Types.ObjectId, ref: 'Interview', required: true },
@@ -13,4 +13,4 @@ const questionSchema = new mongoose.Schema({
   }],
 });
 
-module.exports = mongoose.model('Question', questionSchema);
+export default mongoose.model('Question', questionSchema);

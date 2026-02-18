@@ -1,4 +1,4 @@
-const mongoose = require("mongoose");
+import mongoose from "mongoose";
 
 const aiInterviewSchema = new mongoose.Schema(
   {
@@ -44,4 +44,4 @@ const aiInterviewSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-module.exports = mongoose.model("AI_Interview", aiInterviewSchema);
+export default mongoose.model("AI_Interview", aiInterviewSchema);

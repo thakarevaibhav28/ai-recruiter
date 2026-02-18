@@ -1,5 +1,4 @@
-const jwt = require('jsonwebtoken');
-
+import jwt from 'jsonwebtoken';
 const auth = (role) => (req, res, next) => {
   const token = req.header('Authorization')?.replace('Bearer ', '');
   if (!token) return res.status(401).json({ message: 'No token provided' });
@@ -16,4 +15,4 @@ const auth = (role) => (req, res, next) => {
   }
 };
 
-module.exports = auth;
+export default auth;
