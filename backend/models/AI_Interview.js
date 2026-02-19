@@ -6,6 +6,7 @@ const aiInterviewSchema = new mongoose.Schema(
     description: { type: String },
 
     jobDescription: { type: String, required: true }, // file path
+    secondaryJobDescription: { type: String }, // file path
 
     difficulty: { type: String, required: true },
     duration: { type: String, required: true },
@@ -19,7 +20,10 @@ const aiInterviewSchema = new mongoose.Schema(
       ref: "Admin",
       required: true,
     },
-
+ examType:{
+      type:String,
+      default:"AI"
+    },
     status: {
       type: String,
       enum: ["draft", "scheduled"],
