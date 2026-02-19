@@ -1,4 +1,12 @@
-import { useState, type DragEvent, type ChangeEvent, useEffect ,useRef, use} from "react";
+import {
+  useState,
+  type DragEvent,
+  type ChangeEvent,
+  useEffect,
+  useRef,
+  use,
+} from "react";
+import { CheckCircle2, X } from "lucide-react";
 import AdminLayout from "../../common/AdminLayout";
 import AI from "../../assets/admin/AI_Power.png";
 import Mail from "../../assets/admin/Mail_Icon.png";
@@ -39,10 +47,9 @@ export default function InterviewSetup() {
   const [showDropdown, setShowDropdown] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
 
- 
   const [activeTab, setActiveTab] = useState("setup");
 
-console.log("createdJobId",createdJobId)
+  console.log("createdJobId", createdJobId);
 
   const handleFileDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -80,11 +87,13 @@ console.log("createdJobId",createdJobId)
       formData.append("duration", duration);
       formData.append("passingScore", passingScore);
       formData.append("numberOfQuestions", numberOfQuestions);
-      formData.append("skills", JSON.stringify(skills));
+      skills.forEach((skill) => {
+        formData.append("skills", skill);
+      });
 
       const response = await adminService.generateAIInterview(formData);
       console.log("Interview Created:", response);
-     setCreatedJobId(response.jobId); 
+      setCreatedJobId(response.jobId);
 
       setIsGenerated(true);
 
@@ -118,12 +127,13 @@ console.log("createdJobId",createdJobId)
       formData.append("duration", duration);
       formData.append("passingScore", passingScore);
       formData.append("numberOfQuestions", numberOfQuestions);
-      formData.append("skills", JSON.stringify(skills));
+      skills.forEach((skill) => {
+        formData.append("skills", skill);
+      });
 
       const response = await adminService.generateAIInterview(formData);
       console.log("Interview Created:", response);
-      setCreatedJobId(response.jobId); 
-
+      setCreatedJobId(response.jobId);
     } catch (error: any) {
       console.error(error.response?.data || error.message);
       alert(error.response?.data?.message || "Something went wrong");
@@ -135,7 +145,7 @@ console.log("createdJobId",createdJobId)
   const onNavigateToInterviewSetup = (assessment: any) => {
     setActiveTab("setup"); // go back to setup tab
     setIsGenerated(true); // open email template section
-  setCreatedJobId(assessment.jobId); // 🔥 VERY IMPORTANT
+    setCreatedJobId(assessment.jobId); // 🔥 VERY IMPORTANT
     // Optional: Pre-fill values
     setPosition(assessment.position);
     setDescription(assessment.description || "");
@@ -211,24 +221,23 @@ console.log("createdJobId",createdJobId)
       alert(error.response?.data?.message || "Failed to send invitations");
     }
   };
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const candidateDropdownRef = useRef(null);
   useEffect(() => {
-  const handleClickOutside = (event: MouseEvent) => {
-    if (
-      dropdownRef.current &&
-      !dropdownRef.current.contains(event.target as Node)
-    ) {
-      setShowDropdown(false);
-    }
-  };
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        candidateDropdownRef.current &&
+        !candidateDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowDropdown(false);
+      }
+    };
 
-  document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
 
-  return () => {
-    document.removeEventListener("mousedown", handleClickOutside);
-  };
-}, []);
-
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   const handleCopyLink = () => {
     navigator.clipboard
@@ -240,6 +249,8 @@ console.log("createdJobId",createdJobId)
         console.error("Failed to copy link: ", err);
       });
   };
+
+   
 
   return (
     <>
@@ -395,27 +406,55 @@ console.log("createdJobId",createdJobId)
                   <h3 className="text-gray-800 pb-2 text-xs sm:text-sm">
                     Skills
                   </h3>
-                  <input
-                    type="text"
-                    className="w-full p-2 mb-3 border border-gray-300 rounded-lg outline-none text-xs sm:text-sm"
-                    value={inputValue}
-                    onChange={(e) => {
-                      const value = e.target.value;
 
-                      // If user types comma
-                      if (value.endsWith(",")) {
-                        const newSkill = value.slice(0, -1).trim();
+                  <div className="w-full p-2 mb-3 border border-gray-300 rounded-lg flex flex-wrap gap-2 items-center">
+                    {/* Existing Skill Tags */}
+                    {skills.map((skill, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-xs sm:text-sm"
+                      >
+                        {skill}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSkills(skills.filter((_, i) => i !== index))
+                          }
+                          className="ml-2 text-indigo-500 hover:text-indigo-700"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
 
-                        if (newSkill && !skills.includes(newSkill)) {
-                          setSkills([...skills, newSkill]);
+                    {/* Input */}
+                    <input
+                      type="text"
+                      value={inputValue}
+                      onChange={(e) => setInputValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        // Add skill when user presses comma or Enter
+                        if (e.key === "," || e.key === "Enter") {
+                          e.preventDefault();
+
+                          const newSkill = inputValue.trim().replace(",", "");
+
+                          if (newSkill && !skills.includes(newSkill)) {
+                            setSkills([...skills, newSkill]);
+                          }
+
+                          setInputValue("");
                         }
 
-                        setInputValue(""); // Clear input
-                      } else {
-                        setInputValue(value);
-                      }
-                    }}
-                  />
+                        // Remove last skill when backspace and input empty
+                        if (e.key === "Backspace" && !inputValue) {
+                          setSkills((prev) => prev.slice(0, -1));
+                        }
+                      }}
+                      className="flex-1 min-w-[120px] outline-none text-xs sm:text-sm"
+                      placeholder="Type skill and press comma..."
+                    />
+                  </div>
 
                   <div className="mt-4 flex flex-col md:flex-row gap-4">
                     <div className="w-full md:w-1/2">
@@ -451,9 +490,10 @@ console.log("createdJobId",createdJobId)
                   <div className="mt-6">
                     {!isGenerated ? (
                       <div className="flex justify-end gap-4">
-                        <button 
+                        <button
                           onClick={handleDraft}
-                        className="flex items-center justify-center gap-2 rounded-lg bg-white text-[#4318FFE5] border border-[#4318FFE5] px-4 py-2">
+                          className="flex items-center justify-center gap-2 rounded-lg bg-white text-[#4318FFE5] border border-[#4318FFE5] px-4 py-2"
+                        >
                           <img src={Bookmark} alt="" className="w-5 h-5" />
                           <span className="text-sm">
                             Generate & Save as template
@@ -520,99 +560,132 @@ console.log("createdJobId",createdJobId)
                   )}
 
                   {isGenerated && (
-                    <div className="w-full mt-4">
-                      <label className="block text-xs sm:text-sm text-gray-600 mb-1">
-                        Candidate
-                      </label>
+                    <div className="relative w-full mt-4" ref={candidateDropdownRef}>
+                     <label className="block text-sm font-medium text-gray-700 mb-2">
+    Candidate
+    {selectedCandidates.length > 0 && (
+      <span className="ml-2 text-xs text-indigo-600">
+        {selectedCandidates.length} Selected
+      </span>
+    )}
+  </label>
 
                       {/* Candidate Dropdown */}
-                     <div ref={dropdownRef} className="relative">
-                        <div
-                          className="flex items-center space-x-4 cursor-pointer"
-                          onClick={() => {
-                            setShowDropdown(!showDropdown);
-                            if (!candidates.length) fetchCandidates();
-                          }}
-                        >
-                          <input
-                            type="text"
-                            value={
-                              selectedCandidates.length
-                                ? `${selectedCandidates.length} candidate(s) selected`
-                                : "Select Candidates to invite"
-                            }
-                            readOnly
-                            className="w-full p-2 border border-gray-300 rounded-md text-[14px] text-gray-600 outline-none font-normal cursor-pointer"
-                          />
-                        </div>
+                      <div
+    className="w-full min-h-[42px] px-3 py-2 border border-gray-300 rounded-lg cursor-pointer hover:border-gray-400 transition-all"
+    onClick={() => {
+      setShowDropdown(!showDropdown);
+      if (!candidates.length) fetchCandidates();
+    }}
+  >
+    {selectedCandidates.length === 0 ? (
+      <span className="text-gray-400 text-sm">
+        Select Candidates to invite
+      </span>
+    ) : (
+      <div className="flex flex-wrap gap-2">
+        {selectedCandidates.map((c: any) => (
+          <span
+            key={c._id}
+            className="inline-flex items-center gap-1 px-2 py-1 bg-indigo-100 text-indigo-700 text-xs rounded-md"
+          >
+            {c.name}
+            <X
+              className="h-3 w-3 cursor-pointer hover:text-indigo-900"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedCandidates((prev) =>
+                  prev.filter((item) => item._id !== c._id),
+                );
+              }}
+            />
+          </span>
+        ))}
+      </div>
+    )}
+  </div>
 
-                        {showDropdown && (
-                          <div
-  className={`absolute z-50 mt-2 w-full bg-white border border-gray-200 rounded-xl shadow-xl max-h-72 overflow-hidden transition-all duration-200 ${
-    showDropdown ? "opacity-100 scale-100" : "opacity-0 scale-95 pointer-events-none"
-  }`}
->
-                            {/* Search Bar */}
-                            <div className="p-3 border-b bg-gray-50">
-                              <input
-                                type="text"
-                                placeholder="Search by name..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full p-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-[#4318FF]"
-                              />
-                            </div>
+  {/* Dropdown */}
+  {showDropdown && (
+    <>
+    
+    <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-hidden">
+      
+      {/* Search */}
+      <div className="p-2 border-b border-gray-200">
+        <input
+          type="text"
+          placeholder="Search by name or role..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          onClick={(e) => e.stopPropagation()}
+          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md outline-none focus:ring-2 focus:ring-indigo-500"
+        />
+      </div>
 
-                            {/* Candidate List */}
-                            <div className="max-h-60 overflow-y-auto">
-                              {filteredCandidates.map((candidate: any) => {
-                                const isSelected = selectedCandidates.find(
-                                  (c) => c._id === candidate._id,
-                                );
+      {/* List */}
+      <div className="max-h-48 overflow-y-auto">
+        {filteredCandidates.length === 0 ? (
+          <div className="px-4 py-3 text-sm text-gray-500 text-center">
+            No candidates found
+          </div>
+        ) : (
+          filteredCandidates.map((candidate: any) => {
+            const isSelected = selectedCandidates.some(
+              (c) => c._id === candidate._id,
+            );
 
-                                return (
-                                  <div
-                                    key={candidate._id}
-                                    onClick={() =>
-                                      handleSelectCandidate(candidate)
-                                    }
-                                    className={`flex items-start gap-3 px-4 py-3 cursor-pointer transition-all duration-150
-              ${isSelected ? "bg-[#F4F7FE]" : "hover:bg-gray-50"}
-            `}
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={!!isSelected}
-                                      readOnly
-                                      className="mt-1 accent-[#4318FF]"
-                                    />
+            return (
+              <div
+                key={candidate._id}
+                className={`px-4 py-2 cursor-pointer transition-colors ${
+                  isSelected
+                    ? "bg-indigo-50 hover:bg-indigo-100"
+                    : "hover:bg-gray-50"
+                }`}
+                onClick={(e) => {
+                  e.stopPropagation();
 
-                                    <div className="flex flex-col">
-                                      <span className="text-sm font-semibold text-gray-800">
-                                        {candidate.name}
-                                      </span>
+                  if (isSelected) {
+                    setSelectedCandidates((prev) =>
+                      prev.filter((c) => c._id !== candidate._id),
+                    );
+                  } else {
+                    setSelectedCandidates((prev) => [
+                      ...prev,
+                      candidate,
+                    ]);
+                  }
+                }}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm font-medium text-gray-900">
+                      {candidate.name}
+                      {candidate.role && (
+                        <span className="ml-1 text-xs text-gray-400 font-normal">
+                          — {candidate.role}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {candidate.email}
+                    </div>
+                  </div>
 
-                                      <span className="text-xs text-gray-500">
-                                        {candidate.email}
-                                      </span>
+                  {isSelected && (
+                    <CheckCircle2 className="h-4 w-4 text-indigo-600" />
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+    </>
+  )}
 
-                                      <span className="text-xs text-[#4318FF] font-medium mt-1">
-                                        {candidate.role}
-                                      </span>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-
-                              {filteredCandidates.length === 0 && (
-                                <div className="p-4 text-center text-sm text-gray-400">
-                                  No candidates found
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </div>
 
                       <div className="w-full mt-4">
                         <label className="block text-xs sm:text-sm text-gray-500 mb-1">
@@ -625,75 +698,79 @@ console.log("createdJobId",createdJobId)
                         />
                       </div>
 
-        <div className="w-full mt-4 flex gap-4">
-  {/* Start Date */}
-  <div className="w-1/2">
-    <label className="block text-xs sm:text-sm text-gray-600 mb-1">
-      Start Date
-    </label>
+                      <div className="w-full mt-4 flex gap-4">
+                        {/* Start Date */}
+                        <div className="w-1/2">
+                          <label className="block text-xs sm:text-sm text-gray-600 mb-1">
+                            Start Date
+                          </label>
 
-    <div className="relative">
-      <input
-        type="date"
-        value={startDate ? startDate.toISOString().split("T")[0] : ""}
-        min={new Date().toISOString().split("T")[0]}
-        onChange={(e) => {
-          const value = e.target.value;
-          const selected = value ? new Date(value) : null;
-          setStartDate(selected);
+                          <div className="relative">
+                            <input
+                              type="date"
+                              value={
+                                startDate
+                                  ? startDate.toISOString().split("T")[0]
+                                  : ""
+                              }
+                              min={new Date().toISOString().split("T")[0]}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                const selected = value ? new Date(value) : null;
+                                setStartDate(selected);
 
-          // Reset end date if invalid
-          if (endDate && selected && endDate < selected) {
-            setEndDate(null);
-          }
-        }}
-        className="w-full border border-gray-300 rounded-md px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-[#4318FF]"
-      />
+                                // Reset end date if invalid
+                                if (endDate && selected && endDate < selected) {
+                                  setEndDate(null);
+                                }
+                              }}
+                              className="calender w-full border border-gray-300 rounded-md px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-[#4318FF]"
+                            />
 
-      <img
-        src={Calender}
-        alt="calendar"
-        className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 opacity-60 pointer-events-none"
-      />
-    </div>
-  </div>
+                            <img
+                              src={Calender}
+                              alt="calendar"
+                              className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 opacity-60 pointer-events-none"
+                            />
+                          </div>
+                        </div>
 
-  {/* End Date */}
-  <div className="w-1/2">
-    <label className="block text-xs sm:text-sm text-gray-600 mb-1">
-      End Date
-    </label>
+                        {/* End Date */}
+                        <div className="w-1/2">
+                          <label className="block text-xs sm:text-sm text-gray-600 mb-1">
+                            End Date
+                          </label>
 
-    <div className="relative">
-      <input
-        type="date"
-        value={endDate ? endDate.toISOString().split("T")[0] : ""}
-        min={
-          startDate
-            ? startDate.toISOString().split("T")[0]
-            : new Date().toISOString().split("T")[0]
-        }
-        onChange={(e) => {
-          const value = e.target.value;
-          setEndDate(value ? new Date(value) : null);
-        }}
-        className="w-full border border-gray-300 rounded-md px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-[#4318FF]"
-      />
+                          <div className="relative">
+                            <input
+                              type="date"
+                              value={
+                                endDate
+                                  ? endDate.toISOString().split("T")[0]
+                                  : ""
+                              }
+                              min={
+                                startDate
+                                  ? startDate.toISOString().split("T")[0]
+                                  : new Date().toISOString().split("T")[0]
+                              }
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setEndDate(value ? new Date(value) : null);
+                              }}
+                              className="calender w-full border border-gray-300 rounded-md px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-[#4318FF]"
+                            />
 
-      <img
-        src={Calender}
-        alt="calendar"
-        className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 opacity-60 pointer-events-none"
-      />
-    </div>
-  </div>
-</div>
-
-
+                            <img
+                              src={Calender}
+                              alt="calendar"
+                              className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 opacity-60 pointer-events-none"
+                            />
+                          </div>
+                        </div>
+                      </div>
 
                       <div className="w-full mt-6 flex justify-end gap-2 flex-wrap">
-                      
-
                         <button
                           onClick={handleSendInvitations}
                           className="flex items-center gap-2 px-4 py-2 bg-[#4318FF] text-white rounded-md text-xs sm:text-sm"

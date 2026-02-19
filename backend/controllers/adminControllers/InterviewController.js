@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import AI_Interview from "../../models/AI_Interview.js";
 import Candidate from "../../models/Candidate.js";
+import { sendAIInterviewLink } from "../../services/emailService.js";
 
 export const CreateAITemplate = async (req, res) => {
   try {
@@ -99,7 +100,7 @@ export const GetAllAIInterview = async (req, res) => {
       );
 
     const formattedDrafts = drafts.map((item) => ({
-      jobId: item._id, // 🔥 send as jobId
+      jobId: item._id,
       _id: item._id,
       position: item.position,
       difficulty: item.difficulty,
@@ -145,6 +146,7 @@ export const AIInterviewInvitation = async (req, res) => {
     }
 
     const interview = await AI_Interview.findById(jobId);
+    console.log("Interview found:", interview);
     if (!interview) {
       return res.status(404).json({ message: "Interview not found." });
     }
@@ -163,6 +165,7 @@ export const AIInterviewInvitation = async (req, res) => {
 
     for (const candidate of candidates) {
       const interviewLink = `https://your-app.com/interview/${randomUUID()}`;
+      const username = `user_${Math.random().toString(36).substring(2, 10)}`;
       const password = randomUUID().slice(0, 8);
 
       interview.candidates.push({
@@ -183,6 +186,7 @@ export const AIInterviewInvitation = async (req, res) => {
         interviewLink,
         password,
         `AI Interview Invitation - ${testTitle}`,
+        interview.passingScore,
         finalMessage,
         new Date(endDate),
         new Date(startDate),
@@ -274,7 +278,7 @@ export const UpdateInterviewStatus = async (req, res) => {
       const interview = await AI_Interview.findById(interviewId);
       if (!interview)
         return res.status(404).json({ message: "Interview not found" });
-
+      console.log("interview existing candidates:", interview);
       const scheduledCandidates = [];
 
       for (const candId of candidateArray) {

@@ -3,6 +3,8 @@ import Candidate from "../../models/Candidate.js";
 import Question from "../../models/Question.js";
 import Score from "../../models/Score.js";
 import AI_Interview from "../../models/AI_Interview.js";
+import {generateQuestions} from "../../services/aiService.js";
+import { sendMCQInterviewLink } from "../../services/emailService.js";
 
 export const GetAllMCQInterviews = async (req, res) => {
   try {

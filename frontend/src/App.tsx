@@ -4,13 +4,11 @@ import AdminRoutes from "./routes/AdminRoutes";
 function App() {
   return (
     <>
-    <Routes>
-      <Route path="/admin/*" element={<AdminRoutes />} />
-       <Route path="/*" element={<UserRoutes />} />
-
-    </Routes>
-   
-     </>
+      <Routes>
+        <Route path="/admin/*" element={<AdminRoutes />} />
+        <Route path="/*" element={<UserRoutes />} />
+      </Routes>
+    </>
   );
 }
 

@@ -36,10 +36,6 @@ import {
   GetAllSchedule,
   BulkAddCandidates,
 } from "../controllers/candidateControllers/AuthorizationController.js";
-import {
-  sendMCQInterviewLink,
-  sendAIInterviewLink,
-} from "../services/emailService.js";
 
 import { generateQuestions } from "../services/aiService.js";
 

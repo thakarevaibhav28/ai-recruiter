@@ -18,7 +18,7 @@ type AuthContextType = {
   user: User | null;
   setUser: React.Dispatch<React.SetStateAction<User | null>>;
   loading: boolean;
-  //   logout: () => Promise<void>;
+  logout: () => Promise<void>;
 };
 
 /* ================= CONTEXT ================= */
@@ -30,57 +30,65 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  console.log(user)
+  console.log(user);
 
-useEffect(() => {
-  const token = sessionStorage.getItem("accessToken");
+  useEffect(() => {
+    const token =
+      sessionStorage.getItem("accessToken") ||
+      localStorage.getItem("accessToken");
 
-  if (!token) {
-    setLoading(false);
-    return;
-  }
-
-  const fetchMe = async () => {
-    try {
-      const res = await adminService.getMe();
-      setUser(res.user);
-    } catch (error) {
-      setUser(null);
-      localStorage.removeItem("token");
-    } finally {
+    if (!token) {
       setLoading(false);
+      return;
+    }
+
+    const fetchMe = async () => {
+      try {
+        const res = await adminService.getMe();
+        setUser(res.user);
+      } catch (error) {
+        setUser(null);
+        localStorage.removeItem("token");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchMe();
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+
+    socket.connect();
+    socket.emit("user-join-room", user._id);
+
+    if (user.role === "admin") {
+      socket.emit("admin-join-room");
+    }
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [user]);
+
+  const logout = async () => {
+    try {
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("refreshToken");
+      sessionStorage.removeItem("accessToken");
+      sessionStorage.removeItem("refreshToken");
+      localStorage.removeItem("user");
+      socket.disconnect();
+      window.location.href = "/admin/login";
+
+      setUser(null);
+    } catch (error) {
+      console.error("Logout failed:", error);
     }
   };
-
-  fetchMe();
-}, []);
-
-    useEffect(() => {
-      if (!user) return;
-
-      socket.connect();
-
-      socket.emit("user-join-room", user._id);
-
-      if (user.role === "admin") {
-        socket.emit("admin-join-room")
-      }
-
-      return () => {
-        socket.disconnect();
-      };
-    }, [user]);
-
-    // const logout = async () => {
-    //   try {
-    //     await adminService.admin_logout();
-    //   } finally {
-    //     setUser(null);
-    //   }
-    // };
-
   return (
-    <AuthContext.Provider value={{ user, setUser, loading }}>
+    <AuthContext.Provider value={{ user, setUser, loading, logout }}>
       {children}
     </AuthContext.Provider>
   );

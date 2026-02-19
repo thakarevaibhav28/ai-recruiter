@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, use } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import AdminLayout from "../../common/AdminLayout";
 import AddCandidateModal from "../../components/admin/Candidates/AddCandidate";
 import ViewCandidateModal from "../../components/admin/Candidates/ViewCandidate";
@@ -36,17 +36,61 @@ const Candidates = () => {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<string[]>([]);
   const [page, setPage] = useState(1);
-  const [rowsPerPage] = useState(5);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<string>("all");
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(
     null,
   );
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const totalPages = Math.ceil(data.length / rowsPerPage);
-  const paginated = data.slice((page - 1) * rowsPerPage, page * rowsPerPage);
+// 1️⃣ Filtered Data
+const filteredData = useMemo(() => {
+  if (statusFilter === "all") return data;
+
+  return data.filter(
+    (candidate) =>
+      candidate.status?.toLowerCase() === statusFilter.toLowerCase()
+  );
+}, [data, statusFilter]);
+
+// 2️⃣ Pagination based on filtered data
+const totalPages = Math.ceil(filteredData.length / rowsPerPage);
+
+useEffect(() => {
+  setPage(1); // Reset page when filter changes
+}, [statusFilter]);
+
+useEffect(() => {
+  if (page > totalPages) {
+    setPage(1);
+  }
+}, [filteredData, totalPages]);
+
+const paginated = useMemo(() => {
+  const start = (page - 1) * rowsPerPage;
+  return filteredData.slice(start, start + rowsPerPage);
+}, [filteredData, page, rowsPerPage]);
+
+  const getVisiblePages = () => {
+    const pages = [];
+    const maxVisible = 5;
+
+    let start = Math.max(1, page - 2);
+    let end = Math.min(totalPages, start + maxVisible - 1);
+
+    if (end - start < maxVisible - 1) {
+      start = Math.max(1, end - maxVisible + 1);
+    }
+
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
+
+    return pages;
+  };
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -98,7 +142,7 @@ const Candidates = () => {
       socket.off("candidate-updated");
       socket.off("candidate-added");
     };
-  },[])
+  }, []);
   const toggleSelectAll = () => {
     if (selected.length === data.length) setSelected([]);
     else setSelected(data.map((d) => d._id));
@@ -237,15 +281,28 @@ const Candidates = () => {
               setSelectedCandidate(null);
               setIsModalOpen(true);
             }}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-[#00000033] rounded-lg hover:bg-gray-50 transition-colors"
+            className="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-[#00000033] rounded-lg hover:bg-gray-50 transition-colors"
           >
             <Plus className="h-4 w-4" />
             Add Candidates
           </button>
-          <button className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-[#00000033] rounded-lg hover:bg-gray-50 transition-colors">
-            <Filter className="h-4 w-4" />
-            Filter
-          </button>
+          <div className="flex cursor-pointer items-center gap-2 bg-white rounded-lg px-2  border border-[#00000033] focus:outline-none">
+
+            <Filter className="h-4 w-4 text-gray-600" />
+  <select
+    value={statusFilter}
+    onChange={(e) => setStatusFilter(e.target.value)}
+    className="px-3 py-2 text-sm  cursor-pointer border-none outline-none focus:ring-0"
+  >
+    <option value="all">All Status</option>
+    <option value="new">New</option>
+    <option value="Screening">Screening</option>
+    <option value="Interview">Interview</option>
+    <option value="Completed">Completed</option>
+    <option value="Rejected">Rejected</option>
+  </select>
+</div>
+
         </div>
       </div>
 
@@ -438,66 +495,74 @@ const Candidates = () => {
               </div>
 
               {/* Pagination */}
-              <div className="flex justify-between items-center px-6 py-4 border-t border-[#00000033]">
-                <div className="text-sm text-gray-700">
-                  Showing {(page - 1) * rowsPerPage + 1} to{" "}
-                  {Math.min(page * rowsPerPage, data.length)} of {data.length}{" "}
-                  results
+              <div className="flex flex-col md:flex-row justify-between items-center gap-4 px-6 py-4 border-t border-[#00000033]">
+                {/* Info + Rows per page */}
+                <div className="flex items-center gap-4">
+                  <div className="text-sm text-gray-700">
+                    Showing {(page - 1) * rowsPerPage + 1} to{" "}
+                    {Math.min(page * rowsPerPage, data.length)} of {data.length}{" "}
+                    results
+                  </div>
+
+                  <select
+                    value={rowsPerPage}
+                    onChange={(e) => {
+                      setRowsPerPage(Number(e.target.value));
+                      setPage(1);
+                    }}
+                    className="border border-[#00000033] rounded px-2 py-1 text-sm"
+                  >
+                    <option value={5}>5</option>
+                    <option value={10}>10</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                  </select>
                 </div>
-                <div className="flex items-center gap-2">
+
+                {/* Buttons */}
+                <div className="flex items-center gap-1">
                   <button
                     disabled={page === 1}
-                    onClick={() => setPage((p) => p - 1)}
-                    className="px-3 py-1 text-sm border border-[#00000033] rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={() => setPage(1)}
+                    className="px-3 py-1 text-sm border rounded disabled:opacity-50"
                   >
                     «
                   </button>
+
                   <button
                     disabled={page === 1}
-                    onClick={() => setPage((p) => p - 1)}
-                    className="px-3 py-1 text-sm border border-[#00000033] rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    className="px-3 py-1 text-sm border rounded disabled:opacity-50"
                   >
                     ‹
                   </button>
-                  {[...Array(totalPages)].map((_, i) => (
+
+                  {getVisiblePages().map((p) => (
                     <button
-                      key={i}
-                      onClick={() => setPage(i + 1)}
+                      key={p}
+                      onClick={() => setPage(p)}
                       className={`px-3 py-1 text-sm rounded ${
-                        page === i + 1
+                        page === p
                           ? "bg-indigo-600 text-white"
-                          : "border border-[#00000033] hover:bg-gray-50"
+                          : "border hover:bg-gray-50"
                       }`}
                     >
-                      {i + 1}
+                      {p}
                     </button>
                   ))}
-                  {totalPages > 5 && (
-                    <span className="px-2 text-gray-500">...</span>
-                  )}
-                  {totalPages > 1 && (
-                    <button
-                      onClick={() => setPage(totalPages)}
-                      className={`px-3 py-1 text-sm rounded ${
-                        page === totalPages
-                          ? "bg-indigo-600 text-white"
-                          : "border border-[#00000033] hover:bg-gray-50"
-                      }`}
-                    >
-                      {totalPages}
-                    </button>
-                  )}
+
                   <button
                     disabled={page === totalPages}
-                    onClick={() => setPage((p) => p + 1)}
-                    className="px-3 py-1 text-sm border border-[#00000033] rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    className="px-3 py-1 text-sm border rounded disabled:opacity-50"
                   >
                     ›
                   </button>
+
                   <button
                     disabled={page === totalPages}
-                    onClick={() => setPage((p) => p + 1)}
-                    className="px-3 py-1 text-sm border border-[#00000033] rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={() => setPage(totalPages)}
+                    className="px-3 py-1 text-sm border rounded disabled:opacity-50"
                   >
                     »
                   </button>
