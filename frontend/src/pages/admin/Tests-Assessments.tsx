@@ -2,9 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import AdminLayout from "../../common/AdminLayout";
 import {
   Filter, FileText, Clock, Calendar as CalendarIcon,
-  Upload, X, AlertCircle, CheckCircle2, ChevronDown,
+  Upload, X, AlertCircle, CheckCircle2,
 } from "lucide-react";
-import axios from "axios";
 import { adminService } from "../../services/service/adminService";
 
 const EMPTY_FORM = {
@@ -25,13 +24,13 @@ const TestsAssessments = () => {
   const [loading, setLoading] = useState(false);
   const [submitStatus, setSubmitStatus] = useState(null);
   const [mode, setMode] = useState("create");
-  const [activeAssessmentId, setActiveAssessmentId] = useState(null);
+  const [id, setActiveAssessmentId] = useState(null);
   const [assessments, setAssessments] = useState([]);
   const [templatesLoading, setTemplatesLoading] = useState(false);
   const candidateDropdownRef = useRef(null);
 
   useEffect(() => {
-    const handler = (e) => {
+    const handler = (e:any) => {
       if (candidateDropdownRef.current && !candidateDropdownRef.current.contains(e.target))
         setShowCandidateDropdown(false);
     };
@@ -84,28 +83,47 @@ const TestsAssessments = () => {
   };
 
   // ── 📄 icon clicked → edit mode ──────────────────────────
-  const handleEditTemplate = async (item) => {
-    try {
-      const response = await adminService.getAssessmentById(item._id);
-      const data = response.data?.data || response.data;
-      setFormData({
-        ...EMPTY_FORM,
-        testTitle: data.test_title || "",
-        noOfQuestions: String(data.no_of_questions || ""),
-        primarySkill: data.primary_skill || "",
-        passingScore: data.passing_score || "",
-        secondarySkill: data.secondary_skill || "",
-        examLevel: data.difficulty || "",
-        duration: data.duration || "",
-      });
-      setActiveAssessmentId(item._id);
-      setMode("edit");
-      setErrors({});
-      setActiveTab("create");
-    } catch (err) {
-      showToast("error", "Failed to load assessment for editing");
+ const handleEditTemplate = async (item:any) => {
+   try {
+     const response = await adminService.getAssesments(item._id);
+     
+     console.log("item in edit handler:", response)
+    const data = response.data;
+
+    if (!data) {
+      showToast("error", "Assessment data not found");
+      return;
     }
-  };
+
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const fmt = (d) => d.toISOString().split("T")[0];
+
+    setFormData({
+      ...EMPTY_FORM,
+      testTitle: data.test_title || "",
+      noOfQuestions: String(data.no_of_questions || ""),
+      primarySkill: data.primary_skill || "",
+      passingScore: data.passing_score || "",
+      secondarySkill: data.secondary_skill || "",
+      examLevel: data.difficulty || "",
+      duration: data.duration || "",
+      startDate: fmt(today),
+      endDate: fmt(tomorrow),
+    });
+
+    setActiveAssessmentId(data._id);
+    setMode("edit"); // 🔥 IMPORTANT
+    setErrors({});
+    setActiveTab("create");
+
+  } catch (err) {
+    console.error(err);
+    showToast("error", "Failed to load assessment for editing");
+  }
+};
+
 
   const handleResetMode = () => {
     setFormData(EMPTY_FORM);
@@ -114,12 +132,12 @@ const TestsAssessments = () => {
     setErrors({});
   };
 
-  const handleInputChange = (field, value) => {
+  const handleInputChange = (field:any, value:any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
     if (errors[field]) setErrors((prev) => ({ ...prev, [field]: "" }));
   };
 
-  const handleFileUpload = (e) => {
+  const handleFileUpload = (e:any) => {
     const file = e.target.files[0];
     if (!file) return;
     const validTypes = ["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
@@ -136,18 +154,18 @@ const TestsAssessments = () => {
     if (el) el.value = "";
   };
 
-  const toggleCandidateSelection = (candidate) => {
-    const isSelected = formData.candidates.some((c) => c._id === candidate._id);
+  const toggleCandidateSelection = (candidate:any) => {
+    const isSelected = formData.candidates.some((c:any) => c._id === candidate._id);
     handleInputChange("candidates", isSelected
-      ? formData.candidates.filter((c) => c._id !== candidate._id)
+      ? formData.candidates.filter((c:any) => c._id !== candidate._id)
       : [...formData.candidates, candidate]);
   };
 
-  const removeCandidateChip = (id) => {
-    handleInputChange("candidates", formData.candidates.filter((c) => c._id !== id));
+  const removeCandidateChip = (id:any) => {
+    handleInputChange("candidates", formData.candidates.filter((c:any) => c._id !== id));
   };
 
-  const filteredCandidates = candidatesList?.filter((c) =>
+  const filteredCandidates = candidatesList?.filter((c:any) =>
     `${c.name} ${c.role || ""} ${c.email}`.toLowerCase().includes(candidateSearch.toLowerCase())
   );
 
@@ -156,45 +174,86 @@ const TestsAssessments = () => {
     setTimeout(() => setSubmitStatus(null), duration);
   };
 
-  const validateForm = (requireCandidates = false) => {
-    const newErrors = {};
-    if (requireCandidates && formData.candidates.length === 0)
-      newErrors.candidates = "Please select at least one candidate to send invites";
-    if (!formData.startDate) newErrors.startDate = "Start date is required";
-    if (!formData.endDate) newErrors.endDate = "End date is required";
-    if (!formData.testTitle) newErrors.testTitle = "Test title is required";
-    if (!formData.noOfQuestions) newErrors.noOfQuestions = "Number of questions is required";
-    if (!formData.primarySkill) newErrors.primarySkill = "Primary skill is required";
-    if (!formData.passingScore) newErrors.passingScore = "Passing score is required";
-    if (!formData.examLevel) newErrors.examLevel = "Exam level is required";
-    if (!formData.duration) newErrors.duration = "Duration is required";
-    if (formData.startDate && formData.endDate && new Date(formData.endDate) <= new Date(formData.startDate))
-      newErrors.endDate = "End date must be after start date";
-    if (formData.passingScore) {
-      const s = parseInt(formData.passingScore);
-      if (isNaN(s) || s < 0 || s > 100) newErrors.passingScore = "Score must be between 0 and 100";
-    }
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
+ const validateForm = (requireCandidates = false) => {
+  const newErrors: any = {};
 
-  const buildFd = (includeDatesAndCandidates = false) => {
-    const fd = new FormData();
-    fd.append("difficulty", formData.examLevel);
-    fd.append("duration", formData.duration);
-    fd.append("test_title", formData.testTitle);
-    fd.append("no_of_questions", formData.noOfQuestions);
-    fd.append("primary_skill", formData.primarySkill);
-    fd.append("secondary_skill", formData.secondarySkill || "");
-    fd.append("passing_score", formData.passingScore);
-    if (formData.jobDescription) fd.append("jobDescription", formData.jobDescription);
-    if (includeDatesAndCandidates) {
-      fd.append("start_date", formData.startDate);
-      fd.append("end_date", formData.endDate);
-      fd.append("candidates", JSON.stringify(formData.candidates.map((c) => c._id)));
+  if (!formData.testTitle?.trim())
+    newErrors.testTitle = "Test title is required";
+
+  if (!formData.noOfQuestions)
+    newErrors.noOfQuestions = "Number of questions is required";
+
+  if (!formData.primarySkill?.trim())
+    newErrors.primarySkill = "Primary skill is required";
+
+  if (!formData.passingScore)
+    newErrors.passingScore = "Passing score is required";
+
+  if (!formData.examLevel)
+    newErrors.examLevel = "Exam level is required";
+
+  if (!formData.duration)
+    newErrors.duration = "Duration is required";
+
+  if (!formData.startDate)
+    newErrors.startDate = "Start date is required";
+
+  if (!formData.endDate)
+    newErrors.endDate = "End date is required";
+
+  if (
+    formData.startDate &&
+    formData.endDate &&
+    new Date(formData.endDate) <= new Date(formData.startDate)
+  ) {
+    newErrors.endDate = "End date must be after start date";
+  }
+
+  if (formData.passingScore) {
+    const score = Number(formData.passingScore);
+    if (isNaN(score) || score < 0 || score > 100) {
+      newErrors.passingScore = "Score must be between 0 and 100";
     }
-    return fd;
-  };
+  }
+
+  if (requireCandidates && formData.candidates.length === 0) {
+    newErrors.candidates =
+      "Please select at least one candidate to send invites";
+  }
+
+  setErrors(newErrors);
+  return Object.keys(newErrors).length === 0;
+};
+
+
+const buildFd = (includeDatesAndCandidates = false) => {
+  const fd = new FormData();
+
+  fd.append("difficulty", formData.examLevel);
+  fd.append("duration", formData.duration);
+  fd.append("test_title", formData.testTitle);
+  fd.append("no_of_questions", formData.noOfQuestions);
+  fd.append("primary_skill", formData.primarySkill);
+  fd.append("secondary_skill", formData.secondarySkill || "");
+  fd.append("passing_score", formData.passingScore);
+
+  // 🔥 Append file only if it's actually a File
+  if (formData.jobDescription instanceof File) {
+    fd.append("jobDescription", formData.jobDescription);
+  }
+
+  if (includeDatesAndCandidates) {
+    fd.append("start_date", formData.startDate);
+    fd.append("end_date", formData.endDate);
+    fd.append(
+      "candidates",
+      JSON.stringify(formData.candidates.map((c) => c._id))
+    );
+  }
+
+  return fd;
+};
+
 
   // ── 1. Generate & Save Template (create mode) ─────────────
   const handleGenerateAndSave = async () => {
@@ -233,7 +292,7 @@ const TestsAssessments = () => {
     if (!validateForm(false)) { showToast("error", "Please fill all required fields correctly"); return; }
     setLoading(true);
     try {
-      await adminService.updateAssessment(activeAssessmentId, buildFd());
+      await adminService.updateAssessmentTemplate(id, buildFd());
       showToast("success", "Assessment updated successfully!", 2000);
       setTimeout(() => {
         setFormData(EMPTY_FORM);
@@ -250,7 +309,7 @@ const TestsAssessments = () => {
   // ── 4. Send Invite Only (prefill mode) ───────────────────
   //       Calls sendInvites — NO question generation, uses existing assessment
   const handleInviteOnly = async () => {
-    const newErrors = {};
+    const newErrors:any = {};
     if (formData.candidates.length === 0) newErrors.candidates = "Please select at least one candidate";
     if (!formData.startDate) newErrors.startDate = "Start date is required";
     if (!formData.endDate) newErrors.endDate = "End date is required";
@@ -552,7 +611,7 @@ const TestsAssessments = () => {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {assessments.map((item) => (
+              {assessments.map((item:any) => (
                 <div key={item._id} className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-lg transition-shadow">
                   <div className="flex justify-between items-center mb-4">
                     <span className="px-3 py-1 bg-gray-100 text-gray-700 text-xs font-medium rounded-full">{item.passing_score}%</span>

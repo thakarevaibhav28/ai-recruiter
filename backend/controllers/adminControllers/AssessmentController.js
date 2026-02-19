@@ -3,23 +3,60 @@ import Candidate from "../../models/Candidate.js";
 import Question from "../../models/Question.js";
 import Score from "../../models/Score.js";
 import AI_Interview from "../../models/AI_Interview.js";
-import {generateQuestions} from "../../services/aiService.js";
+import { generateQuestions } from "../../services/aiService.js";
 import { sendMCQInterviewLink } from "../../services/emailService.js";
+import mongoose from "mongoose";
 
 export const GetAllMCQInterviews = async (req, res) => {
   try {
-    const interviews = await MCQ_Interview.find({ createdBy: req.user.id })
+    const adminId = req.user.id;
+    const { id } = req.query; // 👈 id from query
+
+    /* ================= GET SINGLE ================= */
+
+    if (id) {
+      // Optional but recommended validation
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid interview ID",
+        });
+      }
+
+      const interview = await MCQ_Interview.findOne({
+        _id: id,
+        createdBy: adminId, // 🔐 security
+      }).populate("createdBy", "email");
+
+      if (!interview) {
+        return res.status(404).json({
+          success: false,
+          message: "Interview not found",
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        data: interview,
+      });
+    }
+
+    /* ================= GET ALL ================= */
+
+    const interviews = await MCQ_Interview.find({
+      createdBy: adminId,
+    })
       .sort({ createdAt: -1 })
       .populate("createdBy", "email");
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       count: interviews.length,
       data: interviews,
     });
   } catch (error) {
     console.error("Error fetching MCQ assessments:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Failed to fetch assessments",
       error: error.message,
@@ -56,6 +93,7 @@ export const CreateMCQTemplate = async (req, res) => {
 
     // Get job description file path if uploaded
     const jobDescription = req.file ? req.file.path.replace(/\\/g, "/") : "";
+    console.log("Job description path:", jobDescription);
 
     // Generate questions using AI
     const questions = await generateQuestions(
@@ -449,99 +487,174 @@ export const AssessmentInvitationByID = async (req, res) => {
   }
 };
 
-
 export const GetCandidatesInInterview = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // Find the interview and populate candidate details
+    const interview = await AI_Interview.findById(id).populate(
+      "candidates.candidateId",
+    );
+    if (!interview) {
+      return res.status(404).json({ message: "Interview not found" });
+    }
+
+    // Get all candidate IDs in this interview
+    const candidateIds = interview.candidates
+      .map((c) => c.candidateId && c.candidateId._id)
+      .filter(Boolean);
+
+    // Get all scores for this interview and these candidates
+    const scores = await Score.find({
+      interviewId: id,
+      candidateId: { $in: candidateIds },
+    });
+
+    // Map candidateId to score for quick lookup
+    const scoreMap = {};
+    scores.forEach((score) => {
+      scoreMap[score.candidateId.toString()] = score;
+    });
+
+    // Get Exam_Type for logic
+    const examType = interview.Exam_Type;
+
+    // Build response
+    let candidates = interview.candidates
+      .map((c) => {
+        const candidate = c.candidateId;
+        if (!candidate) return null;
+        const score = scoreMap[candidate._id.toString()];
+        let result = null;
+        let totalScore = null;
+
+        // Calculate result if score exists
+        if (score && examType === "MCQ") {
+          // MCQ: full mark is 10, passing is 60% (6/10)
+          const totalQuestions = score.scores ? score.scores.length : 0;
+          const correctAnswers = score.scores
+            ? score.scores.filter((q) => q.score === 1).length
+            : 0;
+          totalScore = correctAnswers;
+          result =
+            totalQuestions > 0 && correctAnswers / totalQuestions >= 0.6
+              ? "Pass"
+              : "Fail";
+        } else if (score && examType === "Interview") {
+          // Interview: no MCQ, so pass/fail logic can be based on totalScore >= 60%
+          // If totalScore is out of 10, use same logic, else just pass totalScore
+          if (typeof score.totalScore === "number") {
+            totalScore = score.totalScore;
+            result = score.totalScore >= 6 ? "Pass" : "Fail";
+          }
+        }
+
+        return {
+          _id: candidate._id,
+          name: candidate.name,
+          email: candidate.email,
+          mobile: candidate.mobile,
+          aadharFront: candidate.aadharFront,
+          aadharBack: candidate.aadharBack,
+          photo: candidate.photo,
+          scoreCard: score ? score.totalScore : null,
+          scores: score ? score.scores : null,
+          summary: score ? score.summary : null,
+          pdfPath: score ? score.pdfPath : null,
+          totalScore: totalScore,
+          scheduledDate: c.scheduledDate || null,
+          Exam_Type: examType,
+          result: score ? result : null,
+        };
+      })
+      .filter(Boolean);
+
+    // Sort candidates so the latest added is on top (descending by scheduledDate)
+    candidates.sort((a, b) => {
+      const aTime = a.scheduledDate ? new Date(a.scheduledDate).getTime() : 0;
+      const bTime = b.scheduledDate ? new Date(b.scheduledDate).getTime() : 0;
+      return bTime - aTime;
+    });
+
+    res.json({ candidates });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const updateMCQInterview = async (req, res) => {
+  try {
     const { id } = req.params;
 
-    try {
-      // Find the interview and populate candidate details
-      const interview = await AI_Interview.findById(id).populate(
-        "candidates.candidateId",
-      );
-      if (!interview) {
-        return res.status(404).json({ message: "Interview not found" });
+    const interview = await MCQ_Interview.findById(id);
+    if (!interview) {
+      return res.status(404).json({ message: "Interview not found" });
+    }
+
+    /* ================= FILE UPDATE ================= */
+
+    if (req.file) {
+      // Delete old file safely
+      if (interview.jobDescription) {
+        const oldPath = path.resolve(interview.jobDescription);
+
+        if (fs.existsSync(oldPath)) {
+          try {
+            fs.unlinkSync(oldPath);
+          } catch (err) {
+            console.error("Failed to delete old job description:", err);
+          }
+        }
       }
 
-      // Get all candidate IDs in this interview
-      const candidateIds = interview.candidates
-        .map((c) => c.candidateId && c.candidateId._id)
-        .filter(Boolean);
-
-      // Get all scores for this interview and these candidates
-      const scores = await Score.find({
-        interviewId: id,
-        candidateId: { $in: candidateIds },
-      });
-
-      // Map candidateId to score for quick lookup
-      const scoreMap = {};
-      scores.forEach((score) => {
-        scoreMap[score.candidateId.toString()] = score;
-      });
-
-      // Get Exam_Type for logic
-      const examType = interview.Exam_Type;
-
-      // Build response
-      let candidates = interview.candidates
-        .map((c) => {
-          const candidate = c.candidateId;
-          if (!candidate) return null;
-          const score = scoreMap[candidate._id.toString()];
-          let result = null;
-          let totalScore = null;
-
-          // Calculate result if score exists
-          if (score && examType === "MCQ") {
-            // MCQ: full mark is 10, passing is 60% (6/10)
-            const totalQuestions = score.scores ? score.scores.length : 0;
-            const correctAnswers = score.scores
-              ? score.scores.filter((q) => q.score === 1).length
-              : 0;
-            totalScore = correctAnswers;
-            result =
-              totalQuestions > 0 && correctAnswers / totalQuestions >= 0.6
-                ? "Pass"
-                : "Fail";
-          } else if (score && examType === "Interview") {
-            // Interview: no MCQ, so pass/fail logic can be based on totalScore >= 60%
-            // If totalScore is out of 10, use same logic, else just pass totalScore
-            if (typeof score.totalScore === "number") {
-              totalScore = score.totalScore;
-              result = score.totalScore >= 6 ? "Pass" : "Fail";
-            }
-          }
-
-          return {
-            _id: candidate._id,
-            name: candidate.name,
-            email: candidate.email,
-            mobile: candidate.mobile,
-            aadharFront: candidate.aadharFront,
-            aadharBack: candidate.aadharBack,
-            photo: candidate.photo,
-            scoreCard: score ? score.totalScore : null,
-            scores: score ? score.scores : null,
-            summary: score ? score.summary : null,
-            pdfPath: score ? score.pdfPath : null,
-            totalScore: totalScore,
-            scheduledDate: c.scheduledDate || null,
-            Exam_Type: examType,
-            result: score ? result : null,
-          };
-        })
-        .filter(Boolean);
-
-      // Sort candidates so the latest added is on top (descending by scheduledDate)
-      candidates.sort((a, b) => {
-        const aTime = a.scheduledDate ? new Date(a.scheduledDate).getTime() : 0;
-        const bTime = b.scheduledDate ? new Date(b.scheduledDate).getTime() : 0;
-        return bTime - aTime;
-      });
-
-      res.json({ candidates });
-    } catch (error) {
-      console.log(error);
-      res.status(500).json({ message: "Server error" });
+      interview.jobDescription = req.file.path.replace(/\\/g, "/");
     }
+
+    /* ================= FIELD UPDATES ================= */
+
+    const allowedFields = [
+      "difficulty",
+      "duration",
+      "test_title",
+      "no_of_questions",
+      "primary_skill",
+      "secondary_skill",
+      "passing_score",
+      "isTemplate",
+    ];
+
+    allowedFields.forEach((field) => {
+      if (req.body[field] !== undefined && req.body[field] !== "") {
+        interview[field] = req.body[field];
+      }
+    });
+
+    /* ================= SAVE ================= */
+
+    await interview.save();
+
+    res.json({
+      message: "Assessment updated successfully",
+      interview,
+    });
+  } catch (error) {
+    console.error("Update error:", error);
+    res.status(500).json({ message: "Server error" });
   }
+};
+export const getMCQInterviewById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const interview = await MCQ_Interview.findById(id)
+      .select("-candidates -__v")
+      .lean();
+    if (!interview) {
+      return res.status(404).json({ message: "Interview not found" });
+    }
+    res.json({ interview });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
