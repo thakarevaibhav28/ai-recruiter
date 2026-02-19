@@ -81,7 +81,7 @@ const SelfieVerification: React.FC = () => {
 
       <div className="relative z-10 min-h-screen">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 sm:p-6 md:p-8 bg-[#0a1342]/30 backdrop-blur-sm">
+        <div className="flex items-center justify-between p-4 sm:p-4 md:p-4 bg-[#0a1342]/30 backdrop-blur-sm">
           <button className="flex items-center gap-2 text-white hover:text-gray-300 transition-colors">
             <ArrowLeft className="h-5 w-5" /><span className="text-sm sm:text-base">Identity Verification</span>
           </button>

@@ -1,5 +1,14 @@
 import React, { useState, useEffect } from "react";
-import { ArrowLeft, Video, Mic, RefreshCw, CheckCircle, User } from "lucide-react";
+import { useNavigate, useParams } from "react-router-dom";
+import {
+  ArrowLeft,
+  Video,
+  Mic,
+  RefreshCw,
+  CheckCircle,
+  User,
+  XCircle,
+} from "lucide-react";
 import { motion } from "framer-motion";
 
 interface SystemTest {
@@ -8,9 +17,12 @@ interface SystemTest {
   description: string;
   status: "checking" | "working" | "failed";
   icon: React.ReactNode;
+  errorMessage?: string;
 }
 
 const SystemCompatibilityCheck: React.FC = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
   const [tests, setTests] = useState<SystemTest[]>([
     {
       id: "camera",
@@ -29,51 +41,167 @@ const SystemCompatibilityCheck: React.FC = () => {
   ]);
 
   const [allReady, setAllReady] = useState(false);
+  const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
 
-  // Simulate system checks
+  // Run system checks on mount
   useEffect(() => {
-    const runTests = async () => {
-      // Check camera
-      setTimeout(() => {
-        setTests((prev) =>
-          prev.map((test) =>
-            test.id === "camera" ? { ...test, status: "working" } : test
-          )
-        );
-      }, 1500);
+    runSystemChecks();
 
-      // Check microphone
-      setTimeout(() => {
-        setTests((prev) =>
-          prev.map((test) =>
-            test.id === "microphone" ? { ...test, status: "working" } : test
-          )
-        );
-        setAllReady(true);
-      }, 2500);
+    // Cleanup: stop media tracks when component unmounts
+    return () => {
+      if (mediaStream) {
+        mediaStream.getTracks().forEach((track) => track.stop());
+      }
     };
-
-    runTests();
   }, []);
 
-  const handleRunTestsAgain = () => {
-    setAllReady(false);
+  // Check if all tests passed
+  useEffect(() => {
+    const allPassed = tests.every((test) => test.status === "working");
+    setAllReady(allPassed);
+  }, [tests]);
+
+  const runSystemChecks = async () => {
+    // Reset all tests to checking
     setTests((prev) =>
-      prev.map((test) => ({ ...test, status: "checking" }))
+      prev.map((test) => ({
+        ...test,
+        status: "checking",
+        errorMessage: undefined,
+      })),
     );
 
+    try {
+      // Request camera and microphone access
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: true,
+      });
+
+      setMediaStream(stream);
+
+      // Check camera
+      const videoTracks = stream.getVideoTracks();
+      if (videoTracks.length > 0 && videoTracks[0].enabled) {
+        setTests((prev) =>
+          prev.map((test) =>
+            test.id === "camera" ? { ...test, status: "working" } : test,
+          ),
+        );
+      } else {
+        setTests((prev) =>
+          prev.map((test) =>
+            test.id === "camera"
+              ? {
+                  ...test,
+                  status: "failed",
+                  errorMessage: "Camera not detected",
+                }
+              : test,
+          ),
+        );
+      }
+
+      // Check microphone
+      const audioTracks = stream.getAudioTracks();
+      if (audioTracks.length > 0 && audioTracks[0].enabled) {
+        setTests((prev) =>
+          prev.map((test) =>
+            test.id === "microphone" ? { ...test, status: "working" } : test,
+          ),
+        );
+      } else {
+        setTests((prev) =>
+          prev.map((test) =>
+            test.id === "microphone"
+              ? {
+                  ...test,
+                  status: "failed",
+                  errorMessage: "Microphone not detected",
+                }
+              : test,
+          ),
+        );
+      }
+    } catch (error: any) {
+      console.error("Media access error:", error);
+
+      // Handle specific permission errors
+      if (
+        error.name === "NotAllowedError" ||
+        error.name === "PermissionDeniedError"
+      ) {
+        // User denied permission
+        setTests((prev) =>
+          prev.map((test) => ({
+            ...test,
+            status: "failed",
+            errorMessage: "Permission denied",
+          })),
+        );
+      } else if (
+        error.name === "NotFoundError" ||
+        error.name === "DevicesNotFoundError"
+      ) {
+        // No devices found
+        setTests((prev) =>
+          prev.map((test) => ({
+            ...test,
+            status: "failed",
+            errorMessage: "Device not found",
+          })),
+        );
+      } else if (
+        error.name === "NotReadableError" ||
+        error.name === "TrackStartError"
+      ) {
+        // Device is already in use
+        setTests((prev) =>
+          prev.map((test) => ({
+            ...test,
+            status: "failed",
+            errorMessage: "Device in use",
+          })),
+        );
+      } else {
+        // Other errors
+        setTests((prev) =>
+          prev.map((test) => ({
+            ...test,
+            status: "failed",
+            errorMessage: "Access failed",
+          })),
+        );
+      }
+    }
+  };
+
+  const handleRunTestsAgain = () => {
+    // Stop existing media stream
+    if (mediaStream) {
+      mediaStream.getTracks().forEach((track) => track.stop());
+    }
+
     // Re-run tests
-    setTimeout(() => {
-      setTests((prev) =>
-        prev.map((test) => ({ ...test, status: "working" }))
-      );
-      setAllReady(true);
-    }, 2000);
+    runSystemChecks();
   };
 
   const handleContinue = () => {
-    console.log("Continue to instructions");
-    // Navigate to next page
+    // Stop media stream before navigation
+    if (mediaStream) {
+      mediaStream.getTracks().forEach((track) => track.stop());
+    }
+
+    // Navigate to identity verification
+    navigate(`/user/${id}/identity-verification`);
+  };
+
+  const handleBack = () => {
+    // Stop media stream before navigation
+    if (mediaStream) {
+      mediaStream.getTracks().forEach((track) => track.stop());
+    }
+    navigate(-1);
   };
 
   return (
@@ -110,16 +238,16 @@ const SystemCompatibilityCheck: React.FC = () => {
       {/* Content */}
       <div className="relative z-10 min-h-screen">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 sm:p-6 md:p-8 bg-[#0a1342]/30 backdrop-blur-sm">
-          <button className="flex items-center gap-2 text-white hover:text-gray-300 transition-colors">
+        <div className="flex items-center justify-between p-4 sm:p-4 md:p-4 bg-[#0a1342]/30 backdrop-blur-sm">
+          <button
+            onClick={handleBack}
+            className="flex items-center gap-2 text-white hover:text-gray-300 transition-colors"
+          >
             <ArrowLeft className="h-5 w-5" />
             <span className="text-sm sm:text-base">System Check</span>
           </button>
 
           <div className="flex items-center gap-3">
-            {/* <button className="text-gray-400 hover:text-white transition-colors">
-              <RefreshCw className="h-5 w-5" />
-            </button> */}
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-400 to-indigo-600 flex items-center justify-center">
               <User className="h-5 w-5 text-white" />
             </div>
@@ -140,7 +268,8 @@ const SystemCompatibilityCheck: React.FC = () => {
                 System Compatibility Check
               </h1>
               <p className="text-gray-400 text-sm sm:text-base">
-                We're testing your device to ensure the best interview experience
+                We're testing your device to ensure the best interview
+                experience
               </p>
             </div>
 
@@ -211,6 +340,19 @@ const SystemCompatibilityCheck: React.FC = () => {
                           </span>
                         </motion.div>
                       )}
+                      {test.status === "failed" && (
+                        <motion.div
+                          className="flex items-center gap-2"
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                          transition={{ type: "spring", stiffness: 200 }}
+                        >
+                          <XCircle className="h-5 w-5 text-red-500" />
+                          <span className="text-red-500 text-xs sm:text-sm font-medium">
+                            {test.errorMessage || "Access denied"}
+                          </span>
+                        </motion.div>
+                      )}
                     </div>
                   </motion.div>
                 ))}
@@ -241,10 +383,10 @@ const SystemCompatibilityCheck: React.FC = () => {
               </div>
             </motion.div>
 
-            {/* All Systems Ready Badge */}
-            {allReady && (
+            {/* Status Badge */}
+            {allReady ? (
               <motion.div
-                className="flex items-center justify-center gap-2 mt-6 px-4 py-2 bg-green-500/20 border border-green-500/30 rounded-full w-fit mx-auto"
+                className="flex items-center justify-center gap-2 mt-4 px-4 py-2 bg-green-500/20 border border-green-500/30 rounded-full w-fit mx-auto"
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5 }}
@@ -254,7 +396,19 @@ const SystemCompatibilityCheck: React.FC = () => {
                   All systems ready!
                 </span>
               </motion.div>
-            )}
+            ) : tests.some((test) => test.status === "failed") ? (
+              <motion.div
+                className="flex items-center justify-center gap-2 mt-4 px-4 py-2 bg-red-500/20 border border-red-500/30 rounded-full w-fit mx-auto"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
+              >
+                <XCircle className="h-5 w-5 text-red-500" />
+                <span className="text-red-500 text-sm font-medium">
+                  Please grant camera and microphone access
+                </span>
+              </motion.div>
+            ) : null}
           </motion.div>
         </div>
       </div>
