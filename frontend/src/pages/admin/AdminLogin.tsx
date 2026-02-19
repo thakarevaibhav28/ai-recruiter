@@ -1,9 +1,10 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
-import SignIN_BG_Image from "../../assets/sign_in_bg.png";
-import { adminService } from "../../services/service/adminService";
 import { AxiosError } from "axios";
+import { adminService } from "../../services/service/adminService";
+import { useAuth } from "../../context/context";
+import SignIN_BG_Image from "../../assets/sign_in_bg.png";
 
 interface LoginFormData {
   email: string;
@@ -13,8 +14,10 @@ interface LoginFormData {
 
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
+  const { setUser } = useAuth();
+
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string>("");
+  const [error, setError] = useState("");
 
   const {
     register,
@@ -28,32 +31,33 @@ const LoginPage: React.FC = () => {
 
     try {
       const response = await adminService.login(data);
-      console.log(response);
-
-      if(response.user.role !== "admin"){
-        setError("Unauthorized access. Only admins can log in.");
-        setIsLoading(false);
-          navigate("/admin/login");
-        return;
-      }
 
       const { accessToken, refreshToken, user } = response;
 
-      // Store access token
-      if (data.rememberMe && accessToken) {
+      if (!user || user.role !== "admin") {
+        setError("Unauthorized access. Only admins can log in.");
+        setIsLoading(false);
+        return;
+      }
+
+      // 🔥 Save Tokens Properly
+      if (data.rememberMe) {
         localStorage.setItem("accessToken", accessToken);
         localStorage.setItem("refreshToken", refreshToken);
-      } else if (accessToken) {
+      } else {
         sessionStorage.setItem("accessToken", accessToken);
         sessionStorage.setItem("refreshToken", refreshToken);
       }
 
-      // Store user
-      if (user) {
-        localStorage.setItem("user", JSON.stringify(user));
-      }
+      // 🔥 Set User In Context
+      setUser(user);
 
-      navigate("/admin/dashboard");
+      // Optional: store user for persistence
+      localStorage.setItem("user", JSON.stringify(user));
+
+      // 🔥 Navigate AFTER user is set
+      navigate("/admin/dashboard", { replace: true });
+
     } catch (err) {
       const axiosError = err as AxiosError<{ message: string }>;
 
@@ -64,7 +68,7 @@ const LoginPage: React.FC = () => {
       } else if (axiosError.request) {
         setError("Network error. Please check your connection.");
       } else {
-        setError("An unexpected error occurred. Please try again.");
+        setError("Something went wrong. Please try again.");
       }
 
       console.error("Login error:", err);
@@ -82,25 +86,25 @@ const LoginPage: React.FC = () => {
           alt="Background"
         />
 
-        <div className="absolute w-[90%] top-0 left-1/2 -translate-x-1/2 flex-1 text-black flex flex-wrap items-center justify-between px-8 py-12 md:py-24">
-          {/* Left Side - Branding */}
+        <div className="absolute w-[90%] top-0 left-1/2 -translate-x-1/2 flex items-center justify-between px-8 py-12 md:py-24">
+          
+          {/* Left Branding */}
           <div className="text-white">
-            <div className="text-2xl mb-4 z-10 font-bold">Vitric IQ</div>
-            <h1 className="text-2xl md:text-4xl font-bold leading-snug z-10">
+            <div className="text-2xl mb-4 font-bold">Vitric IQ</div>
+            <h1 className="text-2xl md:text-4xl font-bold leading-snug">
               Streamline Interview <br /> Management Easily
             </h1>
           </div>
 
-          {/* Right Side - Login Form */}
-          <div className="w-[36%] h-[90%] rounded-xl py-10 px-10 bg-white">
+          {/* Login Card */}
+          <div className="w-[36%] rounded-xl py-10 px-10 bg-white shadow-xl">
             <h2 className="text-2xl font-bold text-gray-900 mb-1 text-center">
               Welcome Back
             </h2>
             <p className="text-sm text-gray-500 mb-6 text-center">
-              Please Enter Your Email & Password
+              Please enter your email & password
             </p>
 
-            {/* Error Message */}
             {error && (
               <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
                 <p className="text-sm text-red-600 text-center">{error}</p>
@@ -108,23 +112,19 @@ const LoginPage: React.FC = () => {
             )}
 
             <form className="space-y-5" onSubmit={handleSubmit(onSubmit)}>
-              {/* Email Field */}
+              
+              {/* Email */}
               <div>
                 <label className="text-sm text-gray-600 mb-1 block">
                   Email
                 </label>
                 <input
                   type="email"
-                  placeholder="Ex: Maguire@lReduxi.com"
-                  className={`w-full px-4 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  className={`w-full px-4 py-2 border rounded-md text-sm focus:ring-2 focus:ring-indigo-500 outline-none ${
                     errors.email ? "border-red-500" : "border-gray-300"
                   }`}
                   {...register("email", {
                     required: "Email is required",
-                    pattern: {
-                      value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                      message: "Invalid email address",
-                    },
                   })}
                 />
                 {errors.email && (
@@ -134,23 +134,18 @@ const LoginPage: React.FC = () => {
                 )}
               </div>
 
-              {/* Password Field */}
+              {/* Password */}
               <div>
                 <label className="text-sm text-gray-600 mb-1 block">
                   Password
                 </label>
                 <input
                   type="password"
-                  placeholder="Enter Password"
-                  className={`w-full px-4 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  className={`w-full px-4 py-2 border rounded-md text-sm focus:ring-2 focus:ring-indigo-500 outline-none ${
                     errors.password ? "border-red-500" : "border-gray-300"
                   }`}
                   {...register("password", {
                     required: "Password is required",
-                    minLength: {
-                      value: 6,
-                      message: "Password must be at least 6 characters",
-                    },
                   })}
                 />
                 {errors.password && (
@@ -160,26 +155,19 @@ const LoginPage: React.FC = () => {
                 )}
               </div>
 
-              {/* Remember Me Checkbox */}
+              {/* Remember Me */}
               <div className="flex items-center">
-                <input
-                  id="rememberMe"
-                  type="checkbox"
-                  className="mr-2"
-                  {...register("rememberMe")}
-                />
-                <label htmlFor="rememberMe" className="text-sm text-gray-600">
+                <input type="checkbox" className="mr-2" {...register("rememberMe")} />
+                <label className="text-sm text-gray-600">
                   Keep me signed in
                 </label>
               </div>
 
-              {/* Login Button */}
+              {/* Submit */}
               <button
                 type="submit"
                 disabled={isLoading}
-                className={`w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-md text-sm font-semibold transition-all ${
-                  isLoading ? "opacity-50 cursor-not-allowed" : ""
-                }`}
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-md text-sm font-semibold transition-all disabled:opacity-50"
               >
                 {isLoading ? "Logging in..." : "Login →"}
               </button>
