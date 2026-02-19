@@ -32,30 +32,30 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
   console.log(user);
 
-  useEffect(() => {
-    const token =
-      sessionStorage.getItem("accessToken") ||
-      localStorage.getItem("accessToken");
+  // useEffect(() => {
+  //   const token =
+  //     sessionStorage.getItem("accessToken") ||
+  //     localStorage.getItem("accessToken");
 
-    if (!token) {
-      setLoading(false);
-      return;
-    }
+  //   if (!token) {
+  //     setLoading(false);
+  //     return;
+  //   }
 
-    const fetchMe = async () => {
-      try {
-        const res = await adminService.getMe();
-        setUser(res.user);
-      } catch (error) {
-        setUser(null);
-        localStorage.removeItem("token");
-      } finally {
-        setLoading(false);
-      }
-    };
+  //   const fetchMe = async () => {
+  //     try {
+  //       const res = await adminService.getMe();
+  //       setUser(res.user);
+  //     } catch (error) {
+  //       setUser(null);
+  //       localStorage.removeItem("accessToken");
+  //     } finally {
+  //       setLoading(false);
+  //     }
+  //   };
 
-    fetchMe();
-  }, []);
+  //   fetchMe();
+  // }, []);
 
   useEffect(() => {
     if (!user) return;
