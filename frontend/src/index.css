@@ -26,10 +26,24 @@ body {
   }
 }
 
-
-/* Hide default date icon (Chrome, Edge, Safari) */
-input[type="date"]::-webkit-calendar-picker-indicator {
+/* Hide default calendar icon - Chrome, Edge, Safari */
+.calender::-webkit-calendar-picker-indicator {
   opacity: 0;
-  /* display: none; */
+  position: absolute;
+  right: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
 }
 
+/* Remove inner clear button (Edge) */
+.calender::-webkit-clear-button {
+  display: none;
+}
+
+/* Firefox fix */
+.calender {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+}

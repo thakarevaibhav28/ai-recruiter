@@ -1,3 +1,6 @@
+import dotenv from "dotenv";
+dotenv.config();
+
 export const generateMCQs = async (req, res) => {
   try {
     const { topic, difficulty, count } = req.body;

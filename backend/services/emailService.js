@@ -347,8 +347,10 @@ export const sendMCQInterviewLink = async (
 export const sendAIInterviewLink = async (
   candidateEmail,
   interviewLink,
+  username,
   password,
   subjectLine,
+  passingScore,
   messageBody,
   scheduledEndDate,
   scheduledStartDate
@@ -390,6 +392,28 @@ export const sendAIInterviewLink = async (
           border-radius: 8px;
           text-align: center;
         }
+           .credentials h3 {
+          margin-top: 0;
+          color: #856404;
+          font-size: 18px;
+        }
+        .credential-item {
+          margin: 15px 0;
+          font-size: 16px;
+        }
+        .credential-item strong {
+          display: inline-block;
+          width: 100px;
+          color: #856404;
+        }
+        .credential-item span {
+          background-color: #fff;
+          padding: 8px 20px;
+          border-radius: 4px;
+          font-family: 'Courier New', monospace;
+          font-weight: bold;
+          border: 1px solid #ffc107;
+        }
         .button {
           display: inline-block;
           background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
@@ -399,6 +423,24 @@ export const sendAIInterviewLink = async (
           border-radius: 5px;
           font-weight: bold;
           margin: 20px 0;
+        }
+           .important-note {
+          background-color: #e7f3ff;
+          border-left: 4px solid #2196F3;
+          padding: 15px;
+          margin: 20px 0;
+          border-radius: 4px;
+        }
+        .important-note h4 {
+          margin-top: 0;
+          color: #1976D2;
+        }
+        .important-note ul {
+          margin: 10px 0;
+          padding-left: 20px;
+        }
+        .important-note li {
+          margin: 8px 0;
         }
         .footer {
           background-color: #f8f9fa;
@@ -417,9 +459,17 @@ export const sendAIInterviewLink = async (
         <div class="content">
           ${messageBody}
           
-          <div class="credentials">
-            <h3>🔐 Your Access Password</h3>
-            <p style="font-family: monospace; font-size: 24px; font-weight: bold;">${password}</p>
+         <div class="credentials">
+            <h3>🔐 Your Login Credentials</h3>
+            <p style="color: #856404; margin: 10px 0;">Please keep these safe and do not share with anyone</p>
+            <div class="credential-item">
+              <strong>Username:</strong>
+              <span>${username}</span>
+            </div>
+            <div class="credential-item">
+              <strong>Password:</strong>
+              <span>${password}</span>
+            </div>
           </div>
           
           <p><strong>Scheduled:</strong> ${formatDate(scheduledStartDate)} at ${formatTime(scheduledStartDate)}</p>
@@ -429,6 +479,24 @@ export const sendAIInterviewLink = async (
             <a href="${interviewLink}" class="button">Join Interview</a>
           </div>
         </div>
+        <div class="important-note">
+            <h4>⚠️ Important Guidelines:</h4>
+            <ul>
+              <li>Keep your login credentials safe and confidential</li>
+              <li>Complete the assessment within the specified time window</li>
+              <li>Ensure you have a stable internet connection</li>
+              <li>Once started, the timer cannot be paused</li>
+                <li>You need to score at least ${passingScore}% to pass</li>
+              <li>Make sure to submit your answers before the timer expires</li>
+              <li>Any form of malpractice will result in immediate disqualification</li>
+            </ul>
+          </div>
+          
+          <p>Good luck with your assessment! If you experience any technical difficulties or have questions, please contact our support team immediately.</p>
+          
+          <p>Best regards,<br>
+          <strong>Recruitment Team</strong></p>
+          </div>
         <div class="footer">
           <p>This is an automated email. Please do not reply.</p>
         </div>
