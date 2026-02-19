@@ -2,7 +2,7 @@ import WatchIcon from "../assets/icons/report/eyes.png";
 import Comment from "../assets/icons/report/comment2.png";
 import Calendar from "../assets/icons/report/calendar.png";
 import CheckMark from "../assets/icons/report/check1.png";
-import FeedbackPopup from "../components/admin/Report/PopUP/FeedbackPopUp";
+// import FeedbackPopup from "../components/admin/Report/PopUP/FeedbackPopUp";
 import { useState } from "react";
 
 interface VideoInterviewResultCardProps {
@@ -34,15 +34,15 @@ export default function VideoInterviewResultCard({
       ? "bg-green-100 text-green-700"
       : "bg-orange-100 text-orange-700";
 
-      const [isAddComment, setIsAddComment] = useState(false);
+      // const [isAddComment, setIsAddComment] = useState(false);
 
       const handleOpenAddComment = () => {
-    setIsAddComment(true);
+    // setIsAddComment(true);
   };
 
-  const handleCloseAddComment = () => {
-    setIsAddComment(false);
-  };
+  // const handleCloseAddComment = () => {
+  //   setIsAddComment(false);
+  // };
 
   return (
     <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-5 w-full max-w-2xl space-y-4 h-auto min-h-[320px]">
@@ -113,7 +113,7 @@ export default function VideoInterviewResultCard({
         </button>
       </div>
 
-       <FeedbackPopup open={isAddComment} onClose={handleCloseAddComment} />
+       {/* <FeedbackPopup open={isAddComment} onClose={handleCloseAddComment} /> */}
     </div>
   );
 }

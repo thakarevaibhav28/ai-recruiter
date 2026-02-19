@@ -6,6 +6,7 @@ import {
   useRef,
   use,
 } from "react";
+import toast from "react-hot-toast";
 import { CheckCircle2, X } from "lucide-react";
 import AdminLayout from "../../common/AdminLayout";
 import AI from "../../assets/admin/AI_Power.png";
@@ -19,11 +20,14 @@ import Bookmark from "../../assets/admin/assessment/bookmark.png";
 import Edit from "../../assets/admin/assessment/edit1.png";
 import ActiveInterviews from "../../components/admin/AI Interview/ActiveInterviews";
 import { adminService } from "../../services/service/adminService";
+import { set } from "react-hook-form";
 
 export default function InterviewSetup() {
   const [fileName, setFileName] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [description, setDescription] = useState<string>("");
+  const [secondaryJobDescription, setSecondaryJobDescription] =
+    useState<string>("");
   const [position, setPosition] = useState<string>("");
   const [skills, setSkills] = useState<string[]>([]);
   const [inputValue, setInputValue] = useState("");
@@ -39,6 +43,7 @@ export default function InterviewSetup() {
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [isGenerated, setIsGenerated] = useState(false);
   const [createdJobId, setCreatedJobId] = useState<string | null>(null);
+  const [existingFilePath, setExistingFilePath] = useState<string | null>(null);
 
   // Candidate States
   const [candidates, setCandidates] = useState<any[]>([]);
@@ -49,7 +54,9 @@ export default function InterviewSetup() {
 
   const [activeTab, setActiveTab] = useState("setup");
 
-  console.log("createdJobId", createdJobId);
+  //edit
+  const [editMode, setEditMode] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const handleFileDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -72,7 +79,7 @@ export default function InterviewSetup() {
   const handleGenerateAndSendInvites = async () => {
     try {
       if (!file) {
-        alert("Please upload job description file");
+        toast.error("Please upload job description file");
         return;
       }
 
@@ -86,6 +93,7 @@ export default function InterviewSetup() {
       formData.append("difficulty", difficulty);
       formData.append("duration", duration);
       formData.append("passingScore", passingScore);
+      formData.append("secondaryJobDescription", secondaryJobDescription);
       formData.append("numberOfQuestions", numberOfQuestions);
       skills.forEach((skill) => {
         formData.append("skills", skill);
@@ -104,7 +112,7 @@ export default function InterviewSetup() {
       );
     } catch (error: any) {
       console.error(error.response?.data || error.message);
-      alert(error.response?.data?.message || "Something went wrong");
+      toast.error(error.response?.data?.message || "Something went wrong");
     } finally {
       setLoading(false);
     }
@@ -112,7 +120,7 @@ export default function InterviewSetup() {
   const handleDraft = async () => {
     try {
       if (!file) {
-        alert("Please upload job description file");
+        toast.error("Please upload job description file");
         return;
       }
 
@@ -126,6 +134,7 @@ export default function InterviewSetup() {
       formData.append("difficulty", difficulty);
       formData.append("duration", duration);
       formData.append("passingScore", passingScore);
+      formData.append("secondaryJobDescription", secondaryJobDescription);
       formData.append("numberOfQuestions", numberOfQuestions);
       skills.forEach((skill) => {
         formData.append("skills", skill);
@@ -136,24 +145,70 @@ export default function InterviewSetup() {
       setCreatedJobId(response.jobId);
     } catch (error: any) {
       console.error(error.response?.data || error.message);
-      alert(error.response?.data?.message || "Something went wrong");
+      toast.error(error.response?.data?.message || "Something went wrong");
     } finally {
       setLoading(false);
     }
   };
 
-  const onNavigateToInterviewSetup = (assessment: any) => {
-    setActiveTab("setup"); // go back to setup tab
-    setIsGenerated(true); // open email template section
-    setCreatedJobId(assessment.jobId); // 🔥 VERY IMPORTANT
-    // Optional: Pre-fill values
-    setPosition(assessment.position);
-    setDescription(assessment.description || "");
-    setSubject("Invitations to Complete Your AI Video Interview");
+  // const onNavigateToInterviewSetup = (assessment: any) => {
+  //   setActiveTab("setup"); // go back to setup tab
+  //   setIsGenerated(true); // open email template section
+  //   setCreatedJobId(assessment.jobId); // 🔥 VERY IMPORTANT
+  //   // Optional: Pre-fill values
+  //   setPosition(assessment.position);
+  //   setDescription(assessment.description || "");
+  //   setSubject("Invitations to Complete Your AI Video Interview");
 
-    setMessageBody(
-      `Hi Dear ,\n\nYou have been invited to complete an AI-powered interview for the ${assessment.position} position.\n\nBest of luck!`,
-    );
+  //   setMessageBody(
+  //     `Hi Dear ,\n\nYou have been invited to complete an AI-powered interview for the ${assessment.position} position.\n\nBest of luck!`,
+  //   );
+  // };
+
+  const onNavigateToInterviewSetup = async (assessment: any) => {
+    setActiveTab("setup");
+
+    try {
+      const res = await adminService.getDraft(assessment._id);
+      const data = res.data; // ✅ correct structure
+
+      // This is USE mode (not edit)
+      setEditMode(false);
+      setEditingId(null);
+
+      // Save jobId for sending invites
+      setCreatedJobId(data._id);
+
+      // Fill form fields from API response
+      setPosition(data.position || "");
+      setDescription(data.description || "");
+      setPassingScore(data.passingScore || "");
+      setNumberOfQuestions(data.numberOfQuestions || "");
+      setSecondaryJobDescription(data.secondaryJobDescription || "");
+      setDifficulty(data.difficulty || "");
+      setDuration(data.duration || "");
+      setSkills(data.skills || []);
+
+      // ✅ Handle existing file
+      if (data.jobDescription) {
+        setExistingFilePath(data.jobDescription);
+        setFileName(data.jobDescription.split("/").pop());
+      } else {
+        setExistingFilePath(null);
+        setFileName(null);
+      }
+
+      // Open email section
+      setIsGenerated(true);
+
+      // Default email
+      setSubject("Invitations to Complete Your AI Video Interview");
+      setMessageBody(
+        `Hi Dear ,\n\nYou have been invited to complete an AI-powered interview for the ${data.position} position.\n\nBest of luck!`,
+      );
+    } catch (error) {
+      console.error("Failed to load interview", error);
+    }
   };
 
   // ================= FETCH CANDIDATES =================
@@ -185,25 +240,25 @@ export default function InterviewSetup() {
 
   // ================= SELECT / UNSELECT =================
 
-  const handleSelectCandidate = (candidate: any) => {
-    const exists = selectedCandidates.find((c) => c._id === candidate._id);
+  // const handleSelectCandidate = (candidate: any) => {
+  //   const exists = selectedCandidates.find((c) => c._id === candidate._id);
 
-    if (exists) {
-      setSelectedCandidates(
-        selectedCandidates.filter((c) => c._id !== candidate._id),
-      );
-    } else {
-      setSelectedCandidates([...selectedCandidates, candidate]);
-    }
-  };
+  //   if (exists) {
+  //     setSelectedCandidates(
+  //       selectedCandidates.filter((c) => c._id !== candidate._id),
+  //     );
+  //   } else {
+  //     setSelectedCandidates([...selectedCandidates, candidate]);
+  //   }
+  // };
 
   // ================= SEND INVITATIONS =================
 
   const handleSendInvitations = async () => {
     try {
-      if (!createdJobId) return alert("Create interview first");
-      if (!selectedCandidates.length) return alert("Select candidates");
-      if (!startDate || !endDate) return alert("Select dates");
+      if (!createdJobId) return toast.error("Create interview first");
+      if (!selectedCandidates.length) return toast.error("Select candidates");
+      if (!startDate || !endDate) return toast.error("Select dates");
 
       const data = {
         jobId: createdJobId,
@@ -216,9 +271,9 @@ export default function InterviewSetup() {
 
       await adminService.sendInvitations(data);
 
-      alert("Invitations Sent Successfully");
+      toast.success("Invitations Sent Successfully");
     } catch (error: any) {
-      alert(error.response?.data?.message || "Failed to send invitations");
+      toast.error(error.response?.data?.message || "Failed to send invitations");
     }
   };
   const candidateDropdownRef = useRef(null);
@@ -243,14 +298,96 @@ export default function InterviewSetup() {
     navigator.clipboard
       .writeText(interviewLink)
       .then(() => {
-        alert("Link copied to clipboard!");
+        toast.success("Link copied to clipboard!");
       })
       .catch((err) => {
         console.error("Failed to copy link: ", err);
       });
   };
 
-   
+  const handleUpdateInterview = async () => {
+    if (!editingId) return;
+
+    try {
+      setLoading(true);
+
+      const formData = new FormData();
+
+      // ✅ Only append file if new file selected
+      if (file instanceof File) {
+        formData.append("jobDescription", file);
+      }
+
+      // ✅ Always send required fields
+      formData.append("position", position.trim());
+      formData.append("description", description.trim());
+      formData.append("difficulty", difficulty);
+      formData.append("duration", duration);
+      formData.append("passingScore", String(Number(passingScore)));
+      formData.append("secondaryJobDescription", secondaryJobDescription);
+      formData.append("numberOfQuestions", String(Number(numberOfQuestions)));
+
+      // ✅ Append skills properly
+      if (skills && skills.length > 0) {
+        skills.forEach((skill) => {
+          formData.append("skills", skill);
+        });
+      }
+
+      await adminService.updateAITemplate(editingId, formData);
+
+      toast.success("Interview updated successfully ✅");
+
+      // ✅ Reset everything
+      setEditMode(false);
+      setEditingId(null);
+      setCreatedJobId(null);
+      setFile(null);
+      setFileName(null);
+      setPosition("");
+      setDescription("");
+      setPassingScore("");
+      setNumberOfQuestions("");
+      setDifficulty("");
+      setDuration("");
+      setSecondaryJobDescription("");
+      setSkills([]);
+      setIsGenerated(false);
+
+      // Go back to templates
+      setActiveTab("template");
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error.response?.data?.message || "Update failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEditAssessment = async (assessment: any) => {
+    console.log("Editing assessment:", assessment);
+    setActiveTab("setup");
+
+    try {
+      const res = await adminService.getDraft(assessment._id);
+      console.log("Fetched Interview for Editing:", res);
+      const data = res.data;
+
+      setEditingId(data._id);
+      setEditMode(true);
+      setIsGenerated(false);
+      setSecondaryJobDescription(data.secondaryJobDescription || ""); // new field
+      setPosition(data.position || "");
+      setDescription(data.description || "");
+      setPassingScore(data.passingScore || "");
+      setNumberOfQuestions(data.numberOfQuestions || "");
+      setDifficulty(data.difficulty || "");
+      setDuration(data.duration || "");
+      setSkills(data.skills || []);
+    } catch (error) {
+      console.error("Failed to load interview", error);
+    }
+  };
 
   return (
     <>
@@ -291,6 +428,7 @@ export default function InterviewSetup() {
           {activeTab === "template" && (
             <div className="grid grid-cols-1 gap-4 sm:gap-6 w-full">
               <ActiveInterviews
+                onEditInterview={handleEditAssessment}
                 onNavigateToInterviewSetup={onNavigateToInterviewSetup}
               />
             </div>
@@ -325,17 +463,29 @@ export default function InterviewSetup() {
                   <div
                     onDrop={handleFileDrop}
                     onDragOver={handleDragOver}
-                    className="flex flex-col justify-center gap-2 items-center border-2 border-dashed border-gray-300 rounded-xl p-4 sm:p-6 text-center cursor-pointer"
+                    className="relative flex flex-col items-center justify-center gap-3 border-2 border-dashed border-gray-300 rounded-xl p-6 text-center transition-all duration-200 hover:border-indigo-400 hover:bg-indigo-50/30"
                   >
-                    <img
-                      className="w-6 h-6 sm:w-7 sm:h-7"
-                      src={Upload}
-                      alt="upload"
-                    />
-                    <p className="text-gray-500 text-xs sm:text-sm">
-                      Drag and drop your job description file here, or
-                    </p>
-                    <label className="mt-2 text-xs sm:text-sm inline-block border border-gray-300 py-1 sm:py-[2px] px-2 sm:px-3 rounded-sm font-medium cursor-pointer">
+                    {/* Upload Icon */}
+                    <div className="w-12 h-12 flex items-center justify-center rounded-full bg-indigo-100">
+                      <img
+                        src={Upload}
+                        alt="upload"
+                        className="w-6 h-6 opacity-80"
+                      />
+                    </div>
+
+                    {/* Text */}
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">
+                        Drag & drop your job description here
+                      </p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Supports PDF, DOC, DOCX, TXT (Max 5MB)
+                      </p>
+                    </div>
+
+                    {/* Browse Button */}
+                    <label className="mt-2 inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-md text-sm font-medium text-gray-700 shadow-sm cursor-pointer hover:bg-gray-50 transition">
                       Browse Files
                       <input
                         type="file"
@@ -344,13 +494,39 @@ export default function InterviewSetup() {
                         onChange={handleFileChange}
                       />
                     </label>
-                    <p className="text-[8px] sm:text-[10px] text-gray-400 mt-1">
-                      Supports PDF, DOC, DOCX, TXT (max 5MB)
-                    </p>
-                    {fileName && (
-                      <p className="text-green-600 mt-2 text-xs sm:text-sm">
-                        Uploaded: {fileName}
-                      </p>
+
+                    {/* File Preview */}
+                    {(fileName || existingFilePath) && (
+                      <div className="w-full mt-4 flex items-center justify-between bg-white border border-gray-200 rounded-lg px-4 py-3 shadow-sm">
+                        {/* Left side */}
+                        <div className="flex items-center gap-3 overflow-hidden">
+                          <div className="w-9 h-9 flex items-center justify-center rounded-lg bg-indigo-100 text-indigo-600 font-semibold text-sm">
+                            📄
+                          </div>
+
+                          <div className="flex flex-col overflow-hidden">
+                            <span className="text-sm font-medium text-gray-800 truncate">
+                              {fileName || existingFilePath?.split("/").pop()}
+                            </span>
+                            <span className="text-xs text-gray-400">
+                              Job Description File
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Remove */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFile(null);
+                            setFileName(null);
+                            setExistingFilePath(null);
+                          }}
+                          className="text-sm font-medium text-red-500 hover:text-red-600 transition"
+                        >
+                          Remove
+                        </button>
+                      </div>
                     )}
                   </div>
 
@@ -462,13 +638,14 @@ export default function InterviewSetup() {
                         Interview Durations
                       </h3>
                       <select
-                        className="w-full border border-gray-300 outline-none p-2 rounded-md text-xs sm:text-sm text-gray-700"
+                        value={duration}
                         onChange={(e) => setDuration(e.target.value)}
+                        className="w-full border border-gray-300 outline-none p-2 rounded-md text-xs sm:text-sm text-gray-700"
                       >
-                        <option>Select Duration</option>
-                        <option>15 minutes</option>
-                        <option>30 minutes</option>
-                        <option>60 minutes</option>
+                        <option value="">Select Duration</option>
+                        <option value="15 minutes">15 minutes</option>
+                        <option value="30 minutes">30 minutes</option>
+                        <option value="60 minutes">60 minutes</option>
                       </select>
                     </div>
                     <div className="w-full md:w-1/2">
@@ -478,6 +655,7 @@ export default function InterviewSetup() {
                       <select
                         className="w-full border border-gray-300 outline-none p-2 rounded-md text-xs sm:text-sm text-gray-700"
                         onChange={(e) => setDifficulty(e.target.value)}
+                        value={difficulty}
                       >
                         <option>Select Level</option>
                         <option>Easy</option>
@@ -486,32 +664,53 @@ export default function InterviewSetup() {
                       </select>
                     </div>
                   </div>
-
                   <div className="mt-6">
-                    {!isGenerated ? (
+                    {/* ================= EDIT MODE ================= */}
+                    {editMode && (
+                      <button
+                        onClick={handleUpdateInterview}
+                        disabled={loading}
+                        className="w-full bg-[#4318FF] text-white text-sm py-3 rounded-md hover:bg-[#3214cc] transition disabled:opacity-50"
+                      >
+                        {loading ? "Updating..." : "Update Interview"}
+                      </button>
+                    )}
+
+                    {/* ================= CREATE MODE ================= */}
+                    {!editMode && !isGenerated && (
                       <div className="flex justify-end gap-4">
                         <button
                           onClick={handleDraft}
-                          className="flex items-center justify-center gap-2 rounded-lg bg-white text-[#4318FFE5] border border-[#4318FFE5] px-4 py-2"
+                          disabled={loading}
+                          className="flex items-center justify-center gap-2 rounded-lg bg-white text-[#4318FFE5] border border-[#4318FFE5] px-4 py-2 hover:bg-indigo-50 transition disabled:opacity-50"
                         >
                           <img src={Bookmark} alt="" className="w-5 h-5" />
                           <span className="text-sm">
-                            Generate & Save as template
+                            {loading
+                              ? "Saving..."
+                              : "Generate & Save as template"}
                           </span>
                         </button>
+
                         <button
-                          className="flex items-center justify-center gap-2 bg-[#4318FF] px-4 py-2 rounded-lg"
                           onClick={handleGenerateAndSendInvites}
+                          disabled={loading}
+                          className="flex items-center justify-center gap-2 bg-[#4318FF] px-4 py-2 rounded-lg hover:bg-[#3214cc] transition disabled:opacity-50"
                         >
                           <img src={Edit} alt="" className="w-5 h-5" />
                           <span className="text-white text-sm">
-                            Generate & Send Invites
+                            {loading
+                              ? "Generating..."
+                              : "Generate & Send Invites"}
                           </span>
                         </button>
                       </div>
-                    ) : (
+                    )}
+
+                    {/* ================= GENERATED MODE ================= */}
+                    {!editMode && isGenerated && (
                       <button
-                        className="w-full bg-[#2AAC7E] text-white text-sm py-3 rounded-md flex items-center justify-center gap-2"
+                        className="w-full bg-[#2AAC7E] text-white text-sm py-3 rounded-md flex items-center justify-center gap-2 hover:bg-[#23996d] transition"
                         onClick={() => setIsGenerated(false)}
                       >
                         <img src={Edit} alt="edit" className="w-5 h-5" />
@@ -560,132 +759,134 @@ export default function InterviewSetup() {
                   )}
 
                   {isGenerated && (
-                    <div className="relative w-full mt-4" ref={candidateDropdownRef}>
-                     <label className="block text-sm font-medium text-gray-700 mb-2">
-    Candidate
-    {selectedCandidates.length > 0 && (
-      <span className="ml-2 text-xs text-indigo-600">
-        {selectedCandidates.length} Selected
-      </span>
-    )}
-  </label>
+                    <div
+                      className="relative w-full mt-4"
+                      ref={candidateDropdownRef}
+                    >
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Candidate
+                        {selectedCandidates.length > 0 && (
+                          <span className="ml-2 text-xs text-indigo-600">
+                            {selectedCandidates.length} Selected
+                          </span>
+                        )}
+                      </label>
 
                       {/* Candidate Dropdown */}
                       <div
-    className="w-full min-h-[42px] px-3 py-2 border border-gray-300 rounded-lg cursor-pointer hover:border-gray-400 transition-all"
-    onClick={() => {
-      setShowDropdown(!showDropdown);
-      if (!candidates.length) fetchCandidates();
-    }}
-  >
-    {selectedCandidates.length === 0 ? (
-      <span className="text-gray-400 text-sm">
-        Select Candidates to invite
-      </span>
-    ) : (
-      <div className="flex flex-wrap gap-2">
-        {selectedCandidates.map((c: any) => (
-          <span
-            key={c._id}
-            className="inline-flex items-center gap-1 px-2 py-1 bg-indigo-100 text-indigo-700 text-xs rounded-md"
-          >
-            {c.name}
-            <X
-              className="h-3 w-3 cursor-pointer hover:text-indigo-900"
-              onClick={(e) => {
-                e.stopPropagation();
-                setSelectedCandidates((prev) =>
-                  prev.filter((item) => item._id !== c._id),
-                );
-              }}
-            />
-          </span>
-        ))}
-      </div>
-    )}
-  </div>
+                        className="w-full min-h-[42px] px-3 py-2 border border-gray-300 rounded-lg cursor-pointer hover:border-gray-400 transition-all"
+                        onClick={() => {
+                          setShowDropdown(!showDropdown);
+                          if (!candidates.length) fetchCandidates();
+                        }}
+                      >
+                        {selectedCandidates.length === 0 ? (
+                          <span className="text-gray-400 text-sm">
+                            Select Candidates to invite
+                          </span>
+                        ) : (
+                          <div className="flex flex-wrap gap-2">
+                            {selectedCandidates.map((c: any) => (
+                              <span
+                                key={c._id}
+                                className="inline-flex items-center gap-1 px-2 py-1 bg-indigo-100 text-indigo-700 text-xs rounded-md"
+                              >
+                                {c.name}
+                                <X
+                                  className="h-3 w-3 cursor-pointer hover:text-indigo-900"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedCandidates((prev) =>
+                                      prev.filter((item) => item._id !== c._id),
+                                    );
+                                  }}
+                                />
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
 
-  {/* Dropdown */}
-  {showDropdown && (
-    <>
-    
-    <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-hidden">
-      
-      {/* Search */}
-      <div className="p-2 border-b border-gray-200">
-        <input
-          type="text"
-          placeholder="Search by name or role..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          onClick={(e) => e.stopPropagation()}
-          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md outline-none focus:ring-2 focus:ring-indigo-500"
-        />
-      </div>
+                      {/* Dropdown */}
+                      {showDropdown && (
+                        <>
+                          <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-hidden">
+                            {/* Search */}
+                            <div className="p-2 border-b border-gray-200">
+                              <input
+                                type="text"
+                                placeholder="Search by name or role..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                onClick={(e) => e.stopPropagation()}
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md outline-none focus:ring-2 focus:ring-indigo-500"
+                              />
+                            </div>
 
-      {/* List */}
-      <div className="max-h-48 overflow-y-auto">
-        {filteredCandidates.length === 0 ? (
-          <div className="px-4 py-3 text-sm text-gray-500 text-center">
-            No candidates found
-          </div>
-        ) : (
-          filteredCandidates.map((candidate: any) => {
-            const isSelected = selectedCandidates.some(
-              (c) => c._id === candidate._id,
-            );
+                            {/* List */}
+                            <div className="max-h-48 overflow-y-auto">
+                              {filteredCandidates.length === 0 ? (
+                                <div className="px-4 py-3 text-sm text-gray-500 text-center">
+                                  No candidates found
+                                </div>
+                              ) : (
+                                filteredCandidates.map((candidate: any) => {
+                                  const isSelected = selectedCandidates.some(
+                                    (c) => c._id === candidate._id,
+                                  );
 
-            return (
-              <div
-                key={candidate._id}
-                className={`px-4 py-2 cursor-pointer transition-colors ${
-                  isSelected
-                    ? "bg-indigo-50 hover:bg-indigo-100"
-                    : "hover:bg-gray-50"
-                }`}
-                onClick={(e) => {
-                  e.stopPropagation();
+                                  return (
+                                    <div
+                                      key={candidate._id}
+                                      className={`px-4 py-2 cursor-pointer transition-colors ${
+                                        isSelected
+                                          ? "bg-indigo-50 hover:bg-indigo-100"
+                                          : "hover:bg-gray-50"
+                                      }`}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
 
-                  if (isSelected) {
-                    setSelectedCandidates((prev) =>
-                      prev.filter((c) => c._id !== candidate._id),
-                    );
-                  } else {
-                    setSelectedCandidates((prev) => [
-                      ...prev,
-                      candidate,
-                    ]);
-                  }
-                }}
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-medium text-gray-900">
-                      {candidate.name}
-                      {candidate.role && (
-                        <span className="ml-1 text-xs text-gray-400 font-normal">
-                          — {candidate.role}
-                        </span>
+                                        if (isSelected) {
+                                          setSelectedCandidates((prev) =>
+                                            prev.filter(
+                                              (c) => c._id !== candidate._id,
+                                            ),
+                                          );
+                                        } else {
+                                          setSelectedCandidates((prev) => [
+                                            ...prev,
+                                            candidate,
+                                          ]);
+                                        }
+                                      }}
+                                    >
+                                      <div className="flex items-center justify-between">
+                                        <div>
+                                          <div className="text-sm font-medium text-gray-900">
+                                            {candidate.name}
+                                            {candidate.role && (
+                                              <span className="ml-1 text-xs text-gray-400 font-normal">
+                                                — {candidate.role}
+                                              </span>
+                                            )}
+                                          </div>
+                                          <div className="text-xs text-gray-500">
+                                            {candidate.email}
+                                          </div>
+                                        </div>
+
+                                        {isSelected && (
+                                          <CheckCircle2 className="h-4 w-4 text-indigo-600" />
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })
+                              )}
+                            </div>
+                          </div>
+                        </>
                       )}
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      {candidate.email}
-                    </div>
-                  </div>
-
-                  {isSelected && (
-                    <CheckCircle2 className="h-4 w-4 text-indigo-600" />
-                  )}
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
-    </div>
-    </>
-  )}
-
 
                       <div className="w-full mt-4">
                         <label className="block text-xs sm:text-sm text-gray-500 mb-1">
@@ -696,6 +897,30 @@ export default function InterviewSetup() {
                           onChange={(e) => setMessageBody(e.target.value)}
                           className="w-full p-2 border border-gray-300 rounded-md text-xs sm:text-sm h-28"
                         />
+                      </div>
+
+                      {/* ================= Interview Link Section ================= */}
+                      <div className="mb-5 mt-2">
+                        <label className="block text-xs sm:text-sm text-gray-600 mb-1">
+                          Interview Link
+                        </label>
+
+                        <div className="w-full  flex gap-4">
+                          <input
+                            type="text"
+                            value={interviewLink}
+                            readOnly
+                            className="flex-1 px-4 py-2 text-sm border border-gray-300 rounded-md bg-gray-50 text-gray-700 focus:outline-none"
+                          />
+
+                          <button
+                            type="button"
+                            onClick={handleCopyLink}
+                            className="px-4 py-2 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700 transition"
+                          >
+                            Copy
+                          </button>
+                        </div>
                       </div>
 
                       <div className="w-full mt-4 flex gap-4">
