@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
   Upload,
@@ -8,34 +9,107 @@ import {
   User,
   FileImage,
   RefreshCw,
+  Shield,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { userService } from "../../services/service/userService";
+import toast from "react-hot-toast";
 
 type Step = "document" | "selfie";
 type UploadStatus = "idle" | "uploading" | "verified" | "error";
+type CameraStatus = "idle" | "active" | "processing" | "completed";
 
 const IdentityVerification: React.FC = () => {
+  const navigate = useNavigate();
+const interviewId = sessionStorage.getItem("interviewId");
+  // Step management
   const [currentStep, setCurrentStep] = useState<Step>("document");
+
+  // Document upload states
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>("idle");
   const [uploadedFile, setUploadedFile] = useState<{
     name: string;
     size: string;
+    file: File;
   } | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Selfie capture states
+  const [cameraStatus, setCameraStatus] = useState<CameraStatus>("idle");
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [scanLinePos, setScanLinePos] = useState(0);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const animFrameRef = useRef<number | null>(null);
+  const scanRef = useRef({ pos: 0, dir: 1 });
+
+  // Get user ID from session storage
+  const getInterviewId = () => {
+    const id = sessionStorage.getItem("interviewId");
+    return id ? id : null;
+  };
 
   const formatFileSize = (bytes: number) => {
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   };
 
-  const handleFile = (file: File) => {
-    setUploadStatus("uploading");
-    setUploadedFile({ name: file.name, size: formatFileSize(file.size) });
+  const handleFile = async (file: File) => {
+    // Validate file type
+    const validTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/jpg",
+      "application/pdf",
+    ];
+    if (!validTypes.includes(file.type)) {
+      toast.error("Invalid file type. Please upload JPG, PNG, or PDF");
+      return;
+    }
 
-    setTimeout(() => {
-      setUploadStatus("verified");
-    }, 1800);
+    // Validate file size (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("File size must be less than 5MB");
+      return;
+    }
+
+    setUploadStatus("uploading");
+    setUploadedFile({
+      name: file.name,
+      size: formatFileSize(file.size),
+      file: file,
+    });
+
+    try {
+      const userId = getInterviewId();
+      if (!userId) {
+        toast.error("User not authenticated");
+        setUploadStatus("error");
+        return;
+      }
+
+      // Call adharVerification service
+      const response = await userService.adharVerification(userId, file);
+
+      console.log(response);
+      if (response.status === 200 || response.data.success) {
+        setUploadStatus("verified");
+        toast.success("Aadhaar verified successfully!");
+      } else {
+        setUploadStatus("error");
+        toast.error("Verification failed. Please try again.");
+      }
+    } catch (error: any) {
+      console.error("Aadhaar verification error:", error);
+      setUploadStatus("error");
+
+      const errorMessage =
+        error.response?.data?.message ||
+        "Verification failed. Please try again.";
+      toast.error(errorMessage);
+    }
   };
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -55,6 +129,126 @@ const IdentityVerification: React.FC = () => {
     setUploadedFile(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
+
+  // Selfie capture functions
+  const stopScan = () => {
+    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+  };
+
+  const startScanAnimation = () => {
+    const animate = () => {
+      scanRef.current.pos += scanRef.current.dir * 1.5;
+      if (scanRef.current.pos >= 100) scanRef.current.dir = -1;
+      if (scanRef.current.pos <= 0) scanRef.current.dir = 1;
+      setScanLinePos(scanRef.current.pos);
+      animFrameRef.current = requestAnimationFrame(animate);
+    };
+    animFrameRef.current = requestAnimationFrame(animate);
+  };
+
+  const captureFrame = useCallback((): string | null => {
+    if (videoRef.current && canvasRef.current) {
+      const canvas = canvasRef.current;
+      const video = videoRef.current;
+      canvas.width = video.videoWidth || 480;
+      canvas.height = video.videoHeight || 360;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.drawImage(video, 0, 0);
+        return canvas.toDataURL("image/jpeg", 0.85);
+      }
+    }
+    return null;
+  }, []);
+
+  const startCamera = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user" },
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+      setCameraStatus("active");
+
+      // Auto-capture after 2.5 seconds
+      setTimeout(() => {
+        const img = captureFrame();
+        if (img) setCapturedImage(img);
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach((t) => t.stop());
+        }
+        // start processing state and animation
+        setCameraStatus("processing");
+        scanRef.current = { pos: 0, dir: 1 };
+        startScanAnimation();
+
+        // send captured image to backend as soon as it's available
+        (async () => {
+          try {
+            if (!img) return;
+            // convert dataURL to Blob -> File
+            const blob = await (await fetch(img)).blob();
+            const file = new File([blob], "selfie.jpg", { type: blob.type || "image/jpeg" });
+            const userId = getInterviewId();
+            if (!userId) {
+              toast.error("User not authenticated");
+              return;
+            }
+            const response = await userService.selfieVerification(userId, file);
+            console.log("selfie upload response:", response);
+            if (response && (response.status === 200 || response.data?.success)) {
+              // success handled by existing completion flow
+            } else {
+              toast.error("Selfie upload failed. Please try again.");
+            }
+          } catch (error) {
+            console.error("Selfie upload error:", error);
+            toast.error("Selfie upload failed. Please try again.");
+          }
+        })();
+
+        // Complete after processing
+        setTimeout(() => {
+          stopScan();
+          setCameraStatus("completed");
+          toast.success("Selfie captured successfully!");
+        }, 3000);
+      }, 2500);
+    } catch (error) {
+      console.error("Camera error:", error);
+      toast.error("Failed to access camera");
+      setCameraStatus("idle");
+    }
+  }, [captureFrame]);
+
+  const handleRetake = () => {
+    setCapturedImage(null);
+    setCameraStatus("idle");
+    setScanLinePos(0);
+    stopScan();
+  };
+
+  const handleBack = () => {
+    navigate(-1);
+  };
+
+  const handleComplete = () => {
+    // Navigate to next page
+   navigate(`/user/${interviewId}/interview-instruction`, { replace: true });
+  };
+
+  // Cleanup on unmount
+  React.useEffect(() => {
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+      }
+      stopScan();
+    };
+  }, []);
 
   return (
     <div className="min-h-screen relative overflow-hidden bg-[#050A24] bg-[radial-gradient(circle_at_100%_0%,rgba(45,85,251,0.45),transparent_50%),radial-gradient(circle_at_0%_100%,rgba(45,85,251,0.35),transparent_50%)]">
@@ -83,17 +277,19 @@ const IdentityVerification: React.FC = () => {
         }}
       />
 
+      <canvas ref={canvasRef} className="hidden" />
+
       <div className="relative z-10 min-h-screen">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 sm:p-6 md:p-8 bg-[#0a1342]/30 backdrop-blur-sm">
-          <button className="flex items-center gap-2 text-white hover:text-gray-300 transition-colors">
+        <div className="flex items-center justify-between p-4 sm:p-4 md:p-4 bg-[#0a1342]/30 backdrop-blur-sm">
+          <button
+            onClick={handleBack}
+            className="flex items-center gap-2 text-white hover:text-gray-300 transition-colors"
+          >
             <ArrowLeft className="h-5 w-5" />
             <span className="text-sm sm:text-base">Identity Verification</span>
           </button>
           <div className="flex items-center gap-3">
-            {/* <div className="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center">
-              <User className="h-4 w-4 text-white" />
-            </div> */}
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-400 to-indigo-600 flex items-center justify-center">
               <User className="h-5 w-5 text-white" />
             </div>
@@ -105,26 +301,51 @@ const IdentityVerification: React.FC = () => {
           {/* Step 1 */}
           <div className="flex items-center gap-2">
             <div
-              className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${currentStep === "document" ? "bg-[#2D55FB] text-white" : "bg-[#2D55FB] text-white"}`}
+              className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                uploadStatus === "verified"
+                  ? "bg-green-500 text-white"
+                  : currentStep === "document"
+                    ? "bg-[#2D55FB] text-white"
+                    : "bg-[#2D55FB] text-white"
+              }`}
             >
-              1
+              {uploadStatus === "verified" ? (
+                <CheckCircle className="h-5 w-5" />
+              ) : (
+                "1"
+              )}
             </div>
             <div>
               <p
-                className={`text-xs sm:text-sm font-semibold ${currentStep === "document" ? "text-[#2D55FB]" : "text-[#2D55FB]"}`}
+                className={`text-xs sm:text-sm font-semibold ${
+                  uploadStatus === "verified"
+                    ? "text-green-400"
+                    : currentStep === "document"
+                      ? "text-[#2D55FB]"
+                      : "text-[#2D55FB]"
+                }`}
               >
                 Document Upload
               </p>
-              <p className="text-gray-500 text-xs">Identity verification</p>
+              <p className="text-gray-500 text-xs">
+                {uploadStatus === "verified"
+                  ? "Completed"
+                  : "Identity verification"}
+              </p>
             </div>
           </div>
 
           {/* Connector */}
           <div className="flex-1 max-w-16 h-px bg-gray-700 relative">
             <motion.div
-              className="absolute top-0 left-0 h-full bg-[#2D55FB]"
+              className="absolute top-0 left-0 h-full bg-gradient-to-r from-green-500 to-[#2D55FB]"
               initial={{ width: "0%" }}
-              animate={{ width: currentStep === "selfie" ? "100%" : "0%" }}
+              animate={{
+                width:
+                  uploadStatus === "verified" && currentStep === "selfie"
+                    ? "100%"
+                    : "0%",
+              }}
               transition={{ duration: 0.5 }}
             />
           </div>
@@ -132,17 +353,37 @@ const IdentityVerification: React.FC = () => {
           {/* Step 2 */}
           <div className="flex items-center gap-2">
             <div
-              className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${currentStep === "selfie" ? "bg-[#2D55FB] text-white" : "bg-[#1a2850] text-gray-400 border border-gray-600"}`}
+              className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                cameraStatus === "completed"
+                  ? "bg-green-500 text-white"
+                  : currentStep === "selfie"
+                    ? "bg-[#2D55FB] text-white"
+                    : "bg-[#1a2850] text-gray-400 border border-gray-600"
+              }`}
             >
-              2
+              {cameraStatus === "completed" ? (
+                <CheckCircle className="h-5 w-5" />
+              ) : (
+                "2"
+              )}
             </div>
             <div>
               <p
-                className={`text-xs sm:text-sm font-semibold ${currentStep === "selfie" ? "text-[#2D55FB]" : "text-gray-400"}`}
+                className={`text-xs sm:text-sm font-semibold ${
+                  cameraStatus === "completed"
+                    ? "text-green-400"
+                    : currentStep === "selfie"
+                      ? "text-[#2D55FB]"
+                      : "text-gray-400"
+                }`}
               >
                 Selfie Capture
               </p>
-              <p className="text-gray-500 text-xs">Identity verification</p>
+              <p className="text-gray-500 text-xs">
+                {cameraStatus === "completed"
+                  ? "Completed"
+                  : "Identity verification"}
+              </p>
             </div>
           </div>
         </div>
@@ -162,7 +403,8 @@ const IdentityVerification: React.FC = () => {
                   className="w-full max-w-2xl"
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.6 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.4 }}
                 >
                   {/* Title */}
                   <div className="text-center mb-6">
@@ -250,7 +492,7 @@ const IdentityVerification: React.FC = () => {
                             </div>
                           )}
                         </motion.div>
-                      ) : (
+                      ) : uploadStatus === "verified" ? (
                         <motion.div
                           key="verified"
                           className="border-2 border-green-500/40 rounded-xl p-8 text-center bg-green-500/5"
@@ -288,6 +530,33 @@ const IdentityVerification: React.FC = () => {
                             >
                               <Upload className="h-3 w-3" />
                               Upload Different Document
+                            </button>
+                          </div>
+                        </motion.div>
+                      ) : (
+                        <motion.div
+                          key="error"
+                          className="border-2 border-red-500/40 rounded-xl p-8 text-center bg-red-500/5"
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0 }}
+                        >
+                          <div className="flex flex-col items-center gap-3">
+                            <AlertTriangle className="h-14 w-14 text-red-500" />
+                            <div>
+                              <p className="text-white text-sm font-semibold">
+                                Verification failed
+                              </p>
+                              <p className="text-gray-400 text-xs mt-1">
+                                Please try uploading again
+                              </p>
+                            </div>
+                            <button
+                              onClick={handleUploadDifferent}
+                              className="flex items-center gap-2 px-4 py-2 bg-[#1a2850] border border-[#2D55FB]/40 text-[#2D55FB] text-xs rounded-lg hover:bg-[#2D55FB]/10 transition-colors mt-1"
+                            >
+                              <Upload className="h-3 w-3" />
+                              Try Again
                             </button>
                           </div>
                         </motion.div>
@@ -367,65 +636,199 @@ const IdentityVerification: React.FC = () => {
                   key="selfie"
                   initial={{ opacity: 0, x: 30 }}
                   animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 30 }}
+                  exit={{ opacity: 0, x: -30 }}
                   transition={{ duration: 0.4 }}
                 >
                   {/* Title */}
                   <div className="text-center mb-6">
                     <h1 className="text-white text-2xl sm:text-3xl font-bold mb-2">
-                      Selfie Capture
+                      Selfie Verification
                     </h1>
                     <p className="text-gray-400 text-sm sm:text-base">
-                      Please take a clear selfie to verify your identity
+                      Take a clear selfie to verify your identity and ensure
+                      secure assessment access
                     </p>
                   </div>
 
                   {/* Camera Card */}
-                  <div className="bg-black/40 backdrop-blur-xl rounded-2xl p-5 sm:p-6 border border-white/10 shadow-2xl mb-4">
-                    <h2 className="text-white font-semibold text-sm sm:text-base mb-1">
-                      Selfie Verification
-                    </h2>
+                  <div className="bg-[#0d1535]/80 backdrop-blur-xl rounded-2xl p-5 sm:p-6 border border-white/10 shadow-2xl mb-4">
+                    <div className="flex items-center justify-between mb-1">
+                      <h2 className="text-white font-semibold text-sm sm:text-base">
+                        Live Camera Feed
+                      </h2>
+                      {cameraStatus === "processing" && (
+                        <motion.div
+                          className="flex items-center gap-2 text-[#2D55FB] text-sm"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                        >
+                          <span className="font-medium">AI Processing</span>
+                          <motion.div
+                            animate={{ rotate: 360 }}
+                            transition={{
+                              duration: 1,
+                              repeat: Infinity,
+                              ease: "linear",
+                            }}
+                          >
+                            <RefreshCw className="h-4 w-4" />
+                          </motion.div>
+                        </motion.div>
+                      )}
+                      {cameraStatus === "completed" && (
+                        <motion.div
+                          className="flex items-center gap-2 text-green-400 text-sm"
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ type: "spring", stiffness: 200 }}
+                        >
+                          <span className="font-semibold text-base">
+                            Perfect
+                          </span>
+                          <CheckCircle className="h-5 w-5" />
+                        </motion.div>
+                      )}
+                    </div>
                     <p className="text-gray-500 text-xs mb-4">
-                      Position your face in the center of the frame
+                      Position your face in the center of the frame and ensure
+                      good lighting
                     </p>
 
-                    <div className="border-2 border-dashed border-gray-700 rounded-xl p-10 text-center">
-                      <div className="flex flex-col items-center gap-4">
-                        <div className="w-24 h-24 rounded-full bg-[#1a2850] border-2 border-[#2D55FB]/40 flex items-center justify-center">
-                          <Camera className="h-10 w-10 text-[#2D55FB]" />
+                    {/* Viewport */}
+                    <div
+                      className="relative bg-[#0a0f1e] rounded-xl overflow-hidden flex items-center justify-center"
+                      style={{ minHeight: "260px" }}
+                    >
+                      {/* Live video */}
+                      <video
+                        ref={videoRef}
+                        muted
+                        playsInline
+                        className={`w-full object-cover rounded-xl ${cameraStatus === "active" ? "block" : "hidden"}`}
+                        style={{ maxHeight: "280px", minHeight: "260px" }}
+                      />
+
+                      {/* Captured photo */}
+                      {(cameraStatus === "processing" ||
+                        cameraStatus === "completed") &&
+                        capturedImage && (
+                          <motion.img
+                            src={capturedImage}
+                            alt="Captured selfie"
+                            className="w-full object-cover rounded-xl"
+                            style={{ maxHeight: "280px", minHeight: "260px" }}
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            transition={{ duration: 0.4 }}
+                          />
+                        )}
+
+                      {/* No-camera placeholder */}
+                      {(cameraStatus === "processing" ||
+                        cameraStatus === "completed") &&
+                        !capturedImage && (
+                          <motion.div
+                            className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-[#1a2540] to-[#0d1535]"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                          >
+                            <div className="w-28 h-28 rounded-full bg-[#2a3a60] border-2 border-[#2D55FB]/40 flex items-center justify-center">
+                              <User className="h-16 w-16 text-[#2D55FB]/60" />
+                            </div>
+                          </motion.div>
+                        )}
+
+                      {/* Idle */}
+                      {cameraStatus === "idle" && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
+                          <div className="absolute inset-6 pointer-events-none">
+                            <div className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-[#2D55FB] rounded-tl-lg" />
+                            <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-[#2D55FB] rounded-tr-lg" />
+                            <div className="absolute bottom-0 left-0 w-8 h-8 border-b-2 border-l-2 border-[#2D55FB] rounded-bl-lg" />
+                            <div className="absolute bottom-0 right-0 w-8 h-8 border-b-2 border-r-2 border-[#2D55FB] rounded-br-lg" />
+                          </div>
+                          <Camera className="h-14 w-14 text-gray-600" />
+                          <motion.button
+                            onClick={startCamera}
+                            className="flex items-center gap-2 px-5 py-2.5 bg-[#2D55FB] text-white text-sm rounded-lg hover:bg-[#1e3fd4] transition-colors shadow-lg"
+                            whileHover={{ scale: 1.03 }}
+                            whileTap={{ scale: 0.97 }}
+                          >
+                            <Camera className="h-4 w-4" />
+                            Start Camera
+                          </motion.button>
                         </div>
-                        <div>
-                          <p className="text-white text-sm font-medium">
-                            Enable camera to take selfie
-                          </p>
-                          <p className="text-gray-500 text-xs mt-1">
-                            Ensure good lighting and a clear background
-                          </p>
+                      )}
+
+                      {/* Corner brackets (non-idle) */}
+                      {cameraStatus !== "idle" && (
+                        <div className="absolute inset-0 pointer-events-none z-10">
+                          <div className="absolute inset-6">
+                            <div className="absolute top-0 left-0 w-10 h-10 border-t-2 border-l-2 border-[#2D55FB]" />
+                            <div className="absolute top-0 right-0 w-10 h-10 border-t-2 border-r-2 border-[#2D55FB]" />
+                            <div className="absolute bottom-0 left-0 w-10 h-10 border-b-2 border-l-2 border-[#2D55FB]" />
+                            <div className="absolute bottom-0 right-0 w-10 h-10 border-b-2 border-r-2 border-[#2D55FB]" />
+                          </div>
                         </div>
-                        <motion.button
-                          className="flex items-center gap-2 px-5 py-2.5 bg-[#2D55FB] text-white text-sm rounded-lg hover:bg-[#1e3fd4] transition-colors"
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
+                      )}
+
+                      {/* Scan line */}
+                      {cameraStatus === "processing" && (
+                        <div
+                          className="absolute left-6 right-6 h-0.5 bg-gradient-to-r from-transparent via-[#2D55FB] to-transparent pointer-events-none z-20"
+                          style={{ top: `${scanLinePos}%` }}
+                        />
+                      )}
+
+                      {/* Active indicator */}
+                      {cameraStatus === "active" && (
+                        <motion.div
+                          className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10"
+                          initial={{ opacity: 0, y: 6 }}
+                          animate={{ opacity: 1, y: 0 }}
                         >
-                          <Camera className="h-4 w-4" />
-                          Open Camera
-                        </motion.button>
-                      </div>
+                          <div className="flex items-center gap-2 px-4 py-1.5 bg-black/60 backdrop-blur rounded-full text-white text-xs">
+                            <motion.div
+                              className="w-2 h-2 rounded-full bg-green-400"
+                              animate={{ opacity: [1, 0.3, 1] }}
+                              transition={{ duration: 1.2, repeat: Infinity }}
+                            />
+                            Preparing to capture...
+                          </div>
+                        </motion.div>
+                      )}
+
+                      {/* Retake */}
+                      {cameraStatus === "completed" && (
+                        <motion.div
+                          className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                        >
+                          <button
+                            onClick={handleRetake}
+                            className="flex items-center gap-1.5 px-4 py-1.5 bg-black/60 backdrop-blur border border-white/20 text-white text-xs rounded-full hover:bg-black/80 transition-colors"
+                          >
+                            <RefreshCw className="h-3 w-3" />
+                            Retake
+                          </button>
+                        </motion.div>
+                      )}
                     </div>
                   </div>
 
-                  {/* Selfie Guidelines */}
-                  <div className="bg-black/40 backdrop-blur-xl rounded-2xl p-5 border border-white/10 mb-6">
+                  {/* Guidelines */}
+                  <div className="bg-[#0d1535]/80 backdrop-blur-xl rounded-2xl p-5 border border-white/10 mb-6">
                     <div className="flex items-center gap-2 mb-4">
-                      <AlertTriangle className="h-4 w-4 text-amber-400" />
-                      <h3 className="text-amber-400 font-semibold text-sm">
+                      <Shield className="h-4 w-4 text-[#2D55FB]" />
+                      <h3 className="text-[#2D55FB] font-semibold text-sm">
                         Selfie Guidelines
                       </h3>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <p className="text-amber-400/80 text-xs font-medium mb-2">
-                          Required
+                        <p className="text-[#2D55FB]/80 text-xs font-medium mb-2">
+                          For Best Results
                         </p>
                         {[
                           "Face clearly visible",
@@ -443,7 +846,7 @@ const IdentityVerification: React.FC = () => {
                       </div>
                       <div>
                         <p className="text-amber-400/80 text-xs font-medium mb-2">
-                          Avoid
+                          Avoid Common Issues
                         </p>
                         {[
                           "Wearing sunglasses",
@@ -471,9 +874,19 @@ const IdentityVerification: React.FC = () => {
                       ← Back
                     </button>
                     <motion.button
-                      className="flex items-center gap-2 px-6 py-2.5 bg-[#2D55FB] text-white rounded-lg font-medium text-sm hover:bg-[#1e3fd4] transition-colors"
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
+                      onClick={handleComplete}
+                      disabled={cameraStatus !== "completed"}
+                      className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-medium text-sm transition-all ${
+                        cameraStatus === "completed"
+                          ? "bg-[#2D55FB] text-white hover:bg-[#1e3fd4]"
+                          : "bg-gray-700 text-gray-400 cursor-not-allowed"
+                      }`}
+                      whileHover={
+                        cameraStatus === "completed" ? { scale: 1.02 } : {}
+                      }
+                      whileTap={
+                        cameraStatus === "completed" ? { scale: 0.98 } : {}
+                      }
                     >
                       Complete Verification →
                     </motion.button>
