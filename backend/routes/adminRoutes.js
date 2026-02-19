@@ -19,14 +19,15 @@ import {
   AssessmentInvitation,
   AssessmentInvitationByID,
   GetCandidatesInInterview,
+  updateMCQInterview,
 } from "../controllers/adminControllers/AssessmentController.js";
 
 import {
   CreateAITemplate,
   AIInterviewInvitation,
   GetAllAIInterview,
-  UpdateInterviewStatus,
   ScheduleAiInterview,
+  UpdateAIInterview,
 } from "../controllers/adminControllers/InterviewController.js";
 
 import {
@@ -36,8 +37,6 @@ import {
   GetAllSchedule,
   BulkAddCandidates,
 } from "../controllers/candidateControllers/AuthorizationController.js";
-
-import { generateQuestions } from "../services/aiService.js";
 
 const router = express.Router();
 
@@ -56,7 +55,7 @@ const upload = multer({ storage });
 // Admin registration and login routes
 router.post("/register", RegisterUser);
 router.post("/login", LoginUser);
-router.get("/me",auth("admin"), getMe);
+router.get("/me", auth("admin"), getMe);
 
 // POST Create MCQ Assessment Template
 router.post(
@@ -84,6 +83,13 @@ router.post(
 // GET all MCQ interviews/templates
 router.get("/assessment/mcq/list", auth("admin"), GetAllMCQInterviews);
 
+router.put(
+  "/assessment/template/:id/update",
+  auth("admin"),
+  upload.single("jobDescription"),
+  updateMCQInterview,
+);
+
 //Create AI interview
 router.post(
   "/interview/template",
@@ -96,7 +102,11 @@ router.post(
 router.post("/interview/send-invites", auth("admin"), AIInterviewInvitation);
 
 // Update interview status (draft/scheduled)
-router.patch("/interview/:id/status", auth("admin"), UpdateInterviewStatus);
+router.put(
+  "/interview/template/:id/update",
+  auth("admin"),
+  UpdateAIInterview,
+);
 
 router.get("/interviews/list", auth("admin"), GetAllAIInterview);
 
@@ -109,7 +119,8 @@ router.patch("/candidate/:id", auth("admin"), UpdateCandidate);
 
 // Get all Schedule data
 router.get("/total-schedule", auth("admin"), GetAllSchedule);
-router.post("/candidates/bulk",
+router.post(
+  "/candidates/bulk",
   auth("admin"),
   upload.single("csvFile"),
   BulkAddCandidates,

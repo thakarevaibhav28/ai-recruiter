@@ -1,6 +1,8 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { ArrowLeft, User, Briefcase, LayoutGrid, Monitor, BookOpen, AlertTriangle, Clock, FileText, Video } from "lucide-react";
 import { motion } from "framer-motion";
+import { useNavigate, useParams } from "react-router-dom";
+import { userService } from "../../services/service/userService";
 
 const fadeUp = (delay = 0) => ({
   initial: { opacity: 0, y: 18 },
@@ -9,6 +11,42 @@ const fadeUp = (delay = 0) => ({
 });
 
 const InterviewInstructions: React.FC = () => {
+  const navigate = useNavigate();
+  const { id } = useParams();
+  const [interview, setInterview] = useState<any>(null);
+
+  useEffect(() => {
+    const fetchInterviewInstruction = async (id:string) => {
+      try {
+        const response = await userService.getInterviewInstruction(id!);
+        // console.log(response);
+        setInterview(response?.interview);
+
+      } catch (error) {
+        console.error(error);
+      }
+    };
+    fetchInterviewInstruction(id!);
+  }, []);
+const handleStartAssessment = () => {
+  if (interview?.examType === "MCQ") {
+    navigate(`/user/${id}/mcq-assessment`, {
+      state: {
+        title: interview?.title,
+        time: interview?.duration,
+      },
+    });
+  } else {
+    navigate(`/user/${id}/video-interview`, {
+      state: {
+        title: interview?.title,
+        time: interview?.duration,
+      },
+    });
+  }
+};
+
+
   return (
     <div className="min-h-screen relative overflow-hidden bg-[#050A24] bg-[radial-gradient(circle_at_100%_0%,rgba(45,85,251,0.45),transparent_50%),radial-gradient(circle_at_0%_100%,rgba(45,85,251,0.35),transparent_50%)]">
       {/* Orbs */}
@@ -19,12 +57,11 @@ const InterviewInstructions: React.FC = () => {
 
       <div className="relative z-10 min-h-screen">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 sm:p-6 bg-[#0a1342]/30 backdrop-blur-sm">
+        <div className="flex items-center justify-between p-4 sm:p-4 bg-[#0a1342]/30 backdrop-blur-sm">
           <button className="flex items-center gap-2 text-white hover:text-gray-300 transition-colors">
             <ArrowLeft className="h-5 w-5" /><span className="text-sm">Interview Instructions</span>
           </button>
           <div className="flex items-center gap-3">
-            {/* <div className="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center"><User className="h-4 w-4 text-white" /></div> */}
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-400 to-indigo-600 flex items-center justify-center"><User className="h-5 w-5 text-white" /></div>
           </div>
         </div>
@@ -46,8 +83,10 @@ const InterviewInstructions: React.FC = () => {
                   <Briefcase className="h-4 w-4 text-[#2D55FB]" />
                 </div>
                 <div>
-                  <h2 className="text-white font-semibold text-sm sm:text-base">Senior UI Designer</h2>
-                  <p className="text-gray-500 text-xs">Vitrio Business Solutions</p>
+                  <h2 className="text-white font-semibold text-sm sm:text-base">
+                    {interview?.test_title ?? ""}
+                  </h2>
+                  <p className="text-gray-500 text-xs">Vitric Business Solutions</p>
                 </div>
               </div>
               <div className="border-t border-white/5 pt-3">
@@ -56,7 +95,7 @@ const InterviewInstructions: React.FC = () => {
                   <span className="text-[#2D55FB] text-xs font-medium">Job Description</span>
                 </div>
                 <p className="text-gray-400 text-xs leading-relaxed">
-                  Responsible for designing intuitive, visually appealing user interfaces for web and mobile applications. Collaborates with cross-functional teams to ensure a seamless and consistent user experience across all platforms.
+                  {interview?.jobDescription ?? " No job description provided."}
                 </p>
               </div>
             </motion.div>
@@ -179,29 +218,36 @@ const InterviewInstructions: React.FC = () => {
             </motion.div>
 
             {/* Time Summary */}
-            <motion.div className="bg-[#0d1535]/80 backdrop-blur-xl rounded-2xl p-5 border border-white/10" {...fadeUp(0.3)}>
-              <div className="grid grid-cols-3 divide-x divide-white/10">
-                <div className="flex flex-col items-center gap-1 pr-4">
-                  <Clock className="h-6 w-6 text-[#2D55FB] mb-1" />
-                  <p className="text-white text-lg font-bold">45 min</p>
-                  <p className="text-gray-500 text-xs">Total Time</p>
-                </div>
-                <div className="flex flex-col items-center gap-1 px-4">
-                  <FileText className="h-6 w-6 text-[#2D55FB] mb-1" />
-                  <p className="text-white text-lg font-bold">15 min</p>
-                  <p className="text-gray-500 text-xs">MCQ Assessment</p>
-                </div>
-                <div className="flex flex-col items-center gap-1 pl-4">
-                  <Video className="h-6 w-6 text-[#2D55FB] mb-1" />
-                  <p className="text-white text-lg font-bold">30 min</p>
-                  <p className="text-gray-500 text-xs">Video Interview</p>
-                </div>
-              </div>
-            </motion.div>
+           {/* Time Summary */}
+<motion.div className="bg-[#0d1535]/80 backdrop-blur-xl rounded-2xl p-5 border border-white/10" {...fadeUp(0.3)}>
+  <div className="grid grid-cols-2 divide-x divide-white/10">
+    <div className="flex flex-col items-center gap-1 pr-4">
+      {interview?.examType === "MCQ" ? (
+        <>
+          <FileText className="h-6 w-6 text-[#2D55FB] mb-1" />
+          <p className="text-white text-lg font-bold">{interview?.duration ?? "15 min"}</p>
+          <p className="text-gray-500 text-xs">MCQ Assessment</p>
+        </>
+      ) : (
+        <>
+          <Video className="h-6 w-6 text-[#2D55FB] mb-1" />
+          <p className="text-white text-lg font-bold">{interview?.duration ?? "30 min"}</p>
+          <p className="text-gray-500 text-xs">AI Video Interview</p>
+        </>
+      )}
+    </div>
+    <div className="flex flex-col items-center gap-1 pl-4">
+      <AlertTriangle className="h-6 w-6 text-[#2D55FB] mb-1" />
+      <p className="text-white text-lg font-bold">{interview?.difficulty ?? "—"}</p>
+      <p className="text-gray-500 text-xs">Difficulty Level</p>
+    </div>
+  </div>
+</motion.div>
 
             {/* CTA */}
             <motion.div className="flex flex-col items-center gap-3 pt-2" {...fadeUp(0.35)}>
               <motion.button
+                onClick={handleStartAssessment}
                 className="flex items-center gap-2 px-8 py-3 bg-[#2D55FB] text-white font-semibold rounded-xl hover:bg-[#1e3fd4] transition-all shadow-lg shadow-[#2D55FB]/30"
                 whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
               >

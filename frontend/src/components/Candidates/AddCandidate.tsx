@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { X } from "lucide-react";
 import toast from "react-hot-toast";
-import { adminService } from "../../../services/service/adminService";
+import { adminService } from "../../services/service/adminService";
 
 interface AddCandidateModalProps {
   isOpen: boolean;

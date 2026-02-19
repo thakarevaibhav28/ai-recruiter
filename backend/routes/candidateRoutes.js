@@ -2,6 +2,7 @@ import express from "express";
 import jwt from "jsonwebtoken";
 import multer from "multer";
 import path from "path";
+import fs from "fs";
 
 import Candidate from "../models/Candidate.js";
 import Interview from "../models/MCQ_Interview.js";
@@ -10,49 +11,82 @@ import Question from "../models/Question.js";
 import Score from "../models/Score.js";
 import auth from "../middleware/auth.js";
 
-import { evaluateAnswer, generateSummary } from "../services/aiServiceold.js";
+import { generateSummary } from "../services/aiServiceold.js";
 import { generateScorecardPDF } from "../services/pdfService.js";
+import {getMCQInterviewById} from "../controllers/adminControllers/AssessmentController.js"
 
 const router = express.Router();
 
 // Candidate login for interview
-router.post('/login/:id', async (req, res) => {
+router.post("/login/:id", async (req, res) => {
   const { email, password } = req.body;
   const { id } = req.params;
 
   try {
-    // Find the interview by ID
-    const interview = await Interview.findById(id).populate('candidates.candidateId', 'email');
-
+    const interview = await Interview.findById(id)
+      .populate("candidates.candidateId", "email");
 
     if (!interview) {
-      return res.status(404).json({ message: 'Interview not found' });
+      return res.status(404).json({ message: "Interview not found" });
     }
 
-    // Find the candidate entry in the interview's candidates array
     const candidateEntry = interview.candidates.find(
-      c =>
+      (c) =>
         c.candidateId &&
         c.candidateId.email === email &&
         c.password === password
     );
 
-
     if (!candidateEntry) {
-      return res.status(400).json({ message: 'Invalid credentials' });
+      return res.status(400).json({ message: "Invalid credentials" });
     }
 
-    // Generate JWT token
+    // ✅ REAL-TIME DATE CHECK
+    const now = new Date();
+    const startDate = new Date(candidateEntry.start_Date);
+    const endDate = new Date(candidateEntry.end_Date);
+
+    if (now < startDate) {
+      return res.status(403).json({
+        message: "Interview has not started yet",
+      });
+    }
+
+    if (now > endDate) {
+      return res.status(403).json({
+        message: "Interview has expired",
+      });
+    }
+
+    // Optional: prevent login if already completed
+    if (candidateEntry.status === "completed") {
+      return res.status(403).json({
+        message: "Interview already completed",
+      });
+    }
+
+    // Optional: auto mark expired
+    if (now > endDate) {
+      candidateEntry.status = "expired";
+      await interview.save();
+    }
+
+    // Generate token
     const token = jwt.sign(
-      { id: candidateEntry.candidateId._id, role: 'candidate' },
+      { id: candidateEntry.candidateId._id, role: "candidate" },
       process.env.JWT_SECRET,
-      { expiresIn: '1h' }
+      { expiresIn: "1h" }
     );
 
-    res.json({ token, interviewId: id });
+    res.json({
+      token,
+      interviewId: id,
+      candidateEntry,
+    });
+
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: "Server error" });
   }
 });
 
@@ -62,15 +96,35 @@ router.post('/login/:id', async (req, res) => {
 // Configure multer for multiple file uploads for candidate documents
 const documentsStorage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, 'uploads');
+    let uploadPath = "uploads";
+
+    if (file.fieldname === "aadharCard") {
+      uploadPath = "uploads/aadharCards";
+    } else if (file.fieldname === "photo") {
+      uploadPath = "uploads/candidate-photo";
+    }
+
+    // Create folder if it doesn't exist
+    if (!fs.existsSync(uploadPath)) {
+      fs.mkdirSync(uploadPath, { recursive: true });
+    }
+
+    cb(null, uploadPath);
   },
+
   filename: function (req, file, cb) {
-    cb(null, `${req.params.id}_${file.fieldname}_${Date.now()}${path.extname(file.originalname)}`);
+    const ext = path.extname(file.originalname);
+
+    const fileName = `${req.user.id}_${file.fieldname}_${Date.now()}${ext}`;
+
+    cb(null, fileName);
   }
 });
-const documentsUpload = multer({ storage: documentsStorage });
 
-
+const documentsUpload = multer({
+  storage: documentsStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+});
 
 // Upload candidate documents: aadharFront, aadharBack, photo
 router.put('/:id/upload-aadharCard', auth('candidate'), documentsUpload.fields([
@@ -123,19 +177,37 @@ router.put('/:id/upload-photo', auth('candidate'), documentsUpload.fields([
   }
 });
 
+// Get MCQ interview template for candidate
+router.get("/assessment/template/:id", auth("candidate"), getMCQInterviewById);
 
+
+// Get interview details for candidate examination
 router.get('/interview/:id', auth('candidate'), async (req, res) => {
   const { id } = req.params;
   try {
     const interview = await Interview.findById(id);
     if (!interview) return res.status(404).json({ message: 'Interview not found' });
 
-    const questions = await Question.find({ interviewId: id });
+    const questions = await Question.find({ interviewId: id }).select("-correctAnswer -answers");
     res.json({ interview, questions });
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
   }
 });
+
+
+//get interview MCQ question 
+router.get('/interview/:id/questions', auth('candidate'), async (req, res) => {
+  const { id } = req.params;
+  try {
+    const questions = await Question.find({ interviewId: id });
+    res.json({ questions });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+
 
 router.post('/interview/:id/answer', auth('candidate'), async (req, res) => {
   const { id } = req.params;
@@ -152,17 +224,18 @@ router.post('/interview/:id/answer', auth('candidate'), async (req, res) => {
     );
 
     let evaluation;
-    if (interview.Exam_Type === 'MCQ') {
+    console.log("interview.Exam_Type",interview)
+
       // For MCQ, check if answer is correct, feedback should be blank
       const isCorrect = question.correctAnswer && answerText === question.correctAnswer;
       evaluation = {
+        questionId,
+        candidateId: req.user.id,
+        answerText,
         score: isCorrect ? 10 : 0,
         feedback: ''
       };
-    } else {
-      // For other types, use AI evaluation
-      evaluation = await evaluateAnswer(question.questionText, answerText);
-    }
+  
 
     if (existingAnswerIndex !== -1) {
       // Update existing answer
@@ -172,6 +245,7 @@ router.post('/interview/:id/answer', auth('candidate'), async (req, res) => {
     } else {
       // Add new answer
       question.answers.push({
+        questionId,
         candidateId: req.user.id,
         answerText,
         score: evaluation.score,
@@ -190,24 +264,37 @@ router.post('/interview/:id/answer', auth('candidate'), async (req, res) => {
 
 router.post('/interview/:id/submit', auth('candidate'), async (req, res) => {
   const { id } = req.params;
+
   try {
     const questions = await Question.find({ interviewId: id });
-    const candidateAnswers = questions.flatMap(q => q.answers.filter(a => a.candidateId.toString() === req.user.id));
 
-    if (candidateAnswers.length < 15) {
-      return res.status(400).json({ message: 'All questions must be answered' });
-    }
+    const candidateAnswers = [];
+
+    questions.forEach(q => {
+      q.answers.forEach(a => {
+        if (a.candidateId.toString() === req.user.id) {
+          candidateAnswers.push({
+            questionId: q._id,
+            answerText: a.answerText,
+            score: a.score || 0,
+            feedback: a.feedback || '',
+          });
+        }
+      });
+    });
 
     const scores = candidateAnswers.map(a => ({
       questionId: a.questionId,
       score: a.score,
       feedback: a.feedback,
+      no_of_questions: questions.length
     }));
-    console.log("scores",scores)
-    const totalScore = scores.reduce((sum, s) => sum + s.score, 0);
+
+    const totalScore = scores.reduce((sum, s) => sum + (s.score || 0), 0);
+
     const summary = await generateSummary(scores);
 
-    const score = new Score({
+    const scoreDoc = new Score({
       interviewId: id,
       candidateId: req.user.id,
       scores,
@@ -216,18 +303,28 @@ router.post('/interview/:id/submit', auth('candidate'), async (req, res) => {
     });
 
     const candidate = await Candidate.findById(req.user.id);
-    const pdfPath = `scorecards/${candidate.email}-${id}.pdf`;
-    await generateScorecardPDF(candidate, scores, totalScore, summary, pdfPath);
-    score.pdfPath = pdfPath;
-    await score.save();
 
-    const admin = await Admin.findById((await Interview.findById(id)).createdBy);
-    await generateScorecardPDF(candidate.email, pdfPath);
-    await generateScorecardPDF(admin.email, pdfPath);
+  const pdfPath = `uploads/scorecards/${candidate.email}-${id}-${Date.now()}.pdf`;
+
+
+    // ✅ Generate PDF only once
+    await generateScorecardPDF(candidate, scores, totalScore, summary, pdfPath);
+
+    scoreDoc.pdfPath = pdfPath;
+    await scoreDoc.save();
+
+    const interview = await Interview.findById(id);
+    const admin = await Admin.findById(interview.createdBy);
+
+    // ✅ Send emails properly (NOT generate PDF again)
+    // await sendScorecardEmail(candidate.email, pdfPath);
+    // await sendScorecardEmail(admin.email, pdfPath);
 
     res.json({ message: 'Interview submitted, scorecard sent' });
+
   } catch (error) {
-    res.status(500).json({ message: 'Server error' });
+    console.error("Submit error:", error);
+    res.status(500).json({ message: error.message });
   }
 });
 

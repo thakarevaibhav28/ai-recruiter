@@ -1,10 +1,10 @@
 import { useState } from "react";
 import Papa from "papaparse";
-import { adminService } from "../../../services/service/adminService";
+import { adminService } from "../../services/service/adminService";
 import toast from "react-hot-toast";
-import Upload from "../../../assets/admin/upload.png";
-import Docs from "../../../assets/admin/docs.png";
-import Download from "../../../assets/admin/download.png";
+import Upload from "../../assets/admin/upload.png";
+import Docs from "../../assets/admin/docs.png";
+import Download from "../../assets/admin/download.png";
 
 const BulkUpload = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);

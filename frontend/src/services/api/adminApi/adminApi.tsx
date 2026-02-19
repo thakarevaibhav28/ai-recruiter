@@ -7,13 +7,15 @@ class AdminApi {
     ADD_CANDIDATE: "admin/create/candidate",
     BULK_ADD_CANDIDATE: "/admin/candidates/bulk",
     CREATE_ASESMENT_TEMPLATE: "/admin/assessment/template",
+    UPDATE_ASESMENT_TEMPLATE: "/admin/assessment/template",
     GET_ASSESMENTS: "/admin/assessment/mcq/list",
     GET_CANDIDATES: "/admin/candidates",
     SEND_INVITES: "/admin/assessment/:assessmentId/invite",
     GENERATE_AND_INVITE: "/admin/assessment/send-invites",
-    GENERATE_AI_INTERVIEW: "/admin/interview/template",
+    CREATE_AI_TEMPLATE: "/admin/interview/template",
+    UPDATE_AI_TEMPLATE: "/admin/interview/template",
     SEND_AI_INVITES: "/admin/interview/send-invites",
-    GET_DRAFT: "/admin/interviews/list",
+    GET_AI: "/admin/interviews/list",
     DELETE_CANDIDATE:"/admin/candidate",
     GET_ME: "/admin/me"
   };
@@ -30,13 +32,20 @@ class AdminApi {
 
   //create assessment template
   createAssessmentTemplate(data: any) {
-    return api._post(this._url.CREATE_ASESMENT_TEMPLATE, data);
+    return api._postFormData(this._url.CREATE_ASESMENT_TEMPLATE, data);
+  }
+  updateAssessmentTemplate(id: string, data: any) {
+    return api._putFormData(`${this._url.UPDATE_ASESMENT_TEMPLATE}/${id}/update`, data);
   }
 
-  //get all assesments
-  getAssesments() {
-    return api._get(this._url.GET_ASSESMENTS);
+
+  getAssesments(id?: string) {
+  if (id) {
+      return api._get(`${this._url.GET_ASSESMENTS}/?id=${id}`);
   }
+    return api._get(this._url.GET_ASSESMENTS);
+}
+
 
   // create candiate
   addCandidate(data:any){
@@ -64,12 +73,22 @@ class AdminApi {
   generateAndInvite(data: any) {
     return api._post(this._url.GENERATE_AND_INVITE, data);
   }
-
-  getDraft() {
-    return api._get(this._url.GET_DRAFT);
+  updateAITemplate(id: string, data: any) {
+    return api._put(`${this._url.UPDATE_AI_TEMPLATE}/${id}/update`, data);
   }
+
+
+  getDraft(id?:string) {
+    if(id){
+      return api._get(`${this._url.GET_AI}/?id=${id}`);
+    }
+    return api._get(this._url.GET_AI);
+  }
+
+
+
    generateAIInterview(data: any) {
-    return api._postFormData(this._url.GENERATE_AI_INTERVIEW, data);
+    return api._postFormData(this._url.CREATE_AI_TEMPLATE, data);
   }
 
   sendInvitations(data: any) {

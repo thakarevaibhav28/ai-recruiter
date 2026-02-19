@@ -1,11 +1,31 @@
 import React, { useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { useForm } from "react-hook-form";
+import { AxiosError } from "axios";
 import { Eye, EyeOff } from "lucide-react";
 import { motion } from "framer-motion";
+import { userService } from "../../services/service/userService";
+import { useAuth } from "../../context/context";
+
+interface LoginFormData {
+  email: string;
+  password: string;
+}
 
 const UserLogin: React.FC = () => {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const navigate = useNavigate();
+  const { setUser } = useAuth();
+  const { id } = useParams();
+
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<LoginFormData>();
 
   // Generate dots configuration - dots will circle throughout the whole background
   const dots = Array.from({ length: 80 }, (_, i) => {
@@ -25,10 +45,52 @@ const UserLogin: React.FC = () => {
     };
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    console.log("Login:", { email, password });
-    // Add your login logic here
+  const onSubmit = async (data: LoginFormData) => {
+    setIsLoading(true);
+    setError("");
+    try {
+      const response = await userService.login(id!, data);
+
+      console.log(response);
+
+      const { token, interviewId, candidateEntry } = response;
+
+      if (!candidateEntry && !token && interviewId) {
+        setError("Invalid response from server.");
+        setIsLoading(false);
+        return;
+      }
+
+      // Save tokens in sessionStorage
+      sessionStorage.setItem("accessToken", token);
+      sessionStorage.setItem("interviewId", interviewId);
+      sessionStorage.setItem(
+        "candidateDetails",
+        JSON.stringify(candidateEntry),
+      );
+      // // Set user in context
+      setUser(response);
+
+
+      // Navigate to user dashboard or next page
+      navigate(`/user/${interviewId}/system-check`);
+    } catch (err) {
+      const axiosError = err as AxiosError<{ message: string }>;
+
+      if (axiosError.response) {
+        setError(
+          axiosError.response.data.message || "Invalid email or password",
+        );
+      } else if (axiosError.request) {
+        setError("Network error. Please check your connection.");
+      } else {
+        setError("Something went wrong. Please try again.");
+      }
+
+      console.error("Login error:", err);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -139,7 +201,21 @@ const UserLogin: React.FC = () => {
                 Login to your account
               </h2>
 
-              <form onSubmit={handleSubmit} className="space-y-5 sm:space-y-6">
+              {/* Error Message */}
+              {error && (
+                <motion.div
+                  className="mb-4 p-3 bg-red-500/20 border border-red-500/50 rounded-lg"
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                >
+                  <p className="text-sm text-red-200 text-center">{error}</p>
+                </motion.div>
+              )}
+
+              <form
+                onSubmit={handleSubmit(onSubmit)}
+                className="space-y-5 sm:space-y-6"
+              >
                 {/* Email Field */}
                 <div>
                   <label className="block text-gray-300 text-sm mb-2">
@@ -147,13 +223,24 @@ const UserLogin: React.FC = () => {
                   </label>
                   <motion.input
                     type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="admin@demo.com"
-                    className="w-full px-4 py-2.5 sm:py-3 bg-[#0a1342]/50 border border-gray-700/50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-[#2D55FB] focus:ring-2 focus:ring-[#2D55FB]/50 transition-all text-sm sm:text-base"
+                    placeholder="user@demo.com"
+                    className={`w-full px-4 py-2.5 sm:py-3 bg-[#0a1342]/50 border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-[#2D55FB] focus:ring-2 focus:ring-[#2D55FB]/50 transition-all text-sm sm:text-base ${
+                      errors.email ? "border-red-500" : "border-gray-700/50"
+                    }`}
                     whileFocus={{ scale: 1.01 }}
-                    required
+                    {...register("email", {
+                      required: "Email is required",
+                      pattern: {
+                        value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
+                        message: "Invalid email address",
+                      },
+                    })}
                   />
+                  {errors.email && (
+                    <p className="text-xs text-red-400 mt-1">
+                      {errors.email.message}
+                    </p>
+                  )}
                 </div>
 
                 {/* Password Field */}
@@ -164,12 +251,20 @@ const UserLogin: React.FC = () => {
                   <div className="relative">
                     <motion.input
                       type={showPassword ? "text" : "password"}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
                       placeholder="Enter your password"
-                      className="w-full px-4 py-2.5 sm:py-3 bg-[#0a1342]/50 border border-gray-700/50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-[#2D55FB] focus:ring-2 focus:ring-[#2D55FB]/50 transition-all pr-12 text-sm sm:text-base"
+                      className={`w-full px-4 py-2.5 sm:py-3 bg-[#0a1342]/50 border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-[#2D55FB] focus:ring-2 focus:ring-[#2D55FB]/50 transition-all pr-12 text-sm sm:text-base ${
+                        errors.password
+                          ? "border-red-500"
+                          : "border-gray-700/50"
+                      }`}
                       whileFocus={{ scale: 1.01 }}
-                      required
+                      {...register("password", {
+                        required: "Password is required",
+                        minLength: {
+                          value: 6,
+                          message: "Password must be at least 6 characters",
+                        },
+                      })}
                     />
                     <motion.button
                       type="button"
@@ -185,15 +280,26 @@ const UserLogin: React.FC = () => {
                       )}
                     </motion.button>
                   </div>
+                  {errors.password && (
+                    <p className="text-xs text-red-400 mt-1">
+                      {errors.password.message}
+                    </p>
+                  )}
                 </div>
 
                 {/* Submit Button */}
                 <motion.button
                   type="submit"
-                  className="w-full py-2.5 sm:py-3 bg-[#2D55FB] text-white font-medium rounded-lg transition-all duration-300 shadow-lg text-sm sm:text-base"
-                  whileTap={{ scale: 0.98 }}
+                  disabled={isLoading}
+                  className={`w-full py-2.5 sm:py-3 bg-[#2D55FB] text-white font-medium rounded-lg transition-all duration-300 shadow-lg text-sm sm:text-base ${
+                    isLoading
+                      ? "opacity-50 cursor-not-allowed"
+                      : "hover:bg-[#1e3fd4]"
+                  }`}
+                  whileHover={!isLoading ? { scale: 1.02 } : {}}
+                  whileTap={!isLoading ? { scale: 0.98 } : {}}
                 >
-                  Access Interview Portal
+                  {isLoading ? "Logging in..." : "Access Interview Portal"}
                 </motion.button>
 
                 {/* Support Link */}

@@ -93,6 +93,10 @@ const interviewSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    examType:{
+      type:String,
+      default:"MCQ"
+    }
   },
   {
     timestamps: true, // Automatically adds createdAt and updatedAt

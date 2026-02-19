@@ -18,12 +18,17 @@ class AdminService {
   createAssessmentTemplate(data: any) {
     return adminApi.createAssessmentTemplate(data);
   }
-
-  //get all assesments
-  getAssesments() {
-    return adminApi.getAssesments();
+  updateAssessmentTemplate(id:string,data: any) {
+    return adminApi.updateAssessmentTemplate(id,data);
+  }
+  updateAITemplate(id:string,data: any) {
+    return adminApi.updateAITemplate(id,data);
   }
 
+  //get all assesments
+ getAssesments(id?: string) {
+  return adminApi.getAssesments(id);
+}
   //get all candidates
   getAllCandidate() {
     return adminApi.getAllCandidate();
@@ -50,8 +55,8 @@ class AdminService {
   sendInvitations(data: any) {
     return adminApi.sendInvitations(data);
   }
-  getDraft() {
-    return adminApi.getDraft();
+  getDraft(id?:string) {
+    return adminApi.getDraft(id);
   }
    getMe(){
     return adminApi.getMe();

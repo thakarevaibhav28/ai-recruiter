@@ -17,35 +17,35 @@ function App() {
       <ToastProvider />
       <Routes>
         {/* User Routes */}
-        <Route path="/user/login" element={<UserLogin />} />
+        <Route path="/user/login/:id" element={<UserLogin />} />
 
         {/* <Route element={<ProtectedRoute redirectTo="/user/login" />}> */}
           <Route
-            path="/user/system-check"
+            path="/user/:id/system-check"
             element={<SystemCompatibilityCheck />}
           />
           <Route
-            path="/user/Identity-verification"
+            path="/user/:id/Identity-verification"
             element={<IdentityVerification />}
           />
           <Route
-            path="/user/selfie-verification"
+            path="/user/:id/selfie-verification"
             element={<SelfieVerification />}
           />
           <Route
-            path="/user/interview-instruction"
+            path="/user/:id/interview-instruction"
             element={<InterviewInstructions />}
           />
-          <Route path="/user/mcq-assessment" element={<MCQAssessment />} />
+          <Route path="/user/:id/mcq-assessment" element={<MCQAssessment />} />
           <Route
-            path="/user/video-interview"
+            path="/user/:id/video-interview"
             element={<VideoInterview />}
           />{" "}
           <Route
-            path="/user/assessment-complete"
+            path="/user/:id/assessment-complete"
             element={<AssessmentCompleted />}
           />{" "}
-          <Route path="/user/session-end" element={<SessionEnded />} />
+          <Route path="/user/:id/session-end" element={<SessionEnded />} />
         {/* </Route> */}
         {/* 404 Route */}
         <Route path="*" element={<PageNotFound />} />

@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import AdminLayout from "../../common/AdminLayout";
-import AddCandidateModal from "../../components/admin/Candidates/AddCandidate";
-import ViewCandidateModal from "../../components/admin/Candidates/ViewCandidate";
+import AddCandidateModal from "../../components/Candidates/AddCandidate";
+import ViewCandidateModal from "../../components/Candidates/ViewCandidate";
 import { Plus, Filter, MoreVertical } from "lucide-react";
-import BulkUpload from "../../components/admin/Candidates/BulkUpload";
+import BulkUpload from "../../components/Candidates/BulkUpload";
 import toast from "react-hot-toast";
 import { socket } from "../../utils/socket";
 import { adminService } from "../../services/service/adminService";
