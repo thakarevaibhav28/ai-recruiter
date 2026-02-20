@@ -6,7 +6,7 @@ class UserApi {
     CANDIDATE_LOGIN: "/candidate/login", // add id of candidate in URL
     ADHAR_VEFIFICATION: "/candidate",
     SELFIE_VERIFICATION: "/candidate",
-    INTERVIEW_INSTRUCTION: "/admin/assessment/template",
+    INTERVIEW_INSTRUCTION: "/candidate/assessment/template",
     GET_ALL_MCQS: "/candidate/interview/",
     SINGLE_SUBMIT: "/candidate/interview",
     FINAL_SUBMIT: "/candidate/interview",

@@ -3,7 +3,7 @@ import { ArrowLeft, User, Briefcase, LayoutGrid, Monitor, BookOpen, AlertTriangl
 import { motion } from "framer-motion";
 import { useNavigate, useParams } from "react-router-dom";
 import { userService } from "../../services/service/userService";
-
+import { useAuth } from "../../context/context";
 const fadeUp = (delay = 0) => ({
   initial: { opacity: 0, y: 18 },
   animate: { opacity: 1, y: 0 },
@@ -14,14 +14,14 @@ const InterviewInstructions: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const [interview, setInterview] = useState<any>(null);
-
+  const {setInterviewInfo} = useAuth();
   useEffect(() => {
     const fetchInterviewInstruction = async (id:string) => {
       try {
         const response = await userService.getInterviewInstruction(id!);
         // console.log(response);
         setInterview(response?.interview);
-
+setInterviewInfo(response?.interview);
       } catch (error) {
         console.error(error);
       }
@@ -29,6 +29,7 @@ const InterviewInstructions: React.FC = () => {
     fetchInterviewInstruction(id!);
   }, []);
 const handleStartAssessment = () => {
+  console.log("Starting assessment for interview:", interview);
   if (interview?.examType === "MCQ") {
     navigate(`/user/${id}/mcq-assessment`, {
       state: {
@@ -37,6 +38,7 @@ const handleStartAssessment = () => {
       },
     });
   } else {
+    console.log("Navigating to video interview for interview:", interview);
     navigate(`/user/${id}/video-interview`, {
       state: {
         title: interview?.title,
@@ -84,7 +86,8 @@ const handleStartAssessment = () => {
                 </div>
                 <div>
                   <h2 className="text-white font-semibold text-sm sm:text-base">
-                    {interview?.test_title ?? ""}
+                   {interview?.test_title ?? interview?.position ?? ""}
+
                   </h2>
                   <p className="text-gray-500 text-xs">Vitric Business Solutions</p>
                 </div>

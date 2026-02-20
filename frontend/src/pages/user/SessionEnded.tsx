@@ -10,6 +10,25 @@ const SessionEnded: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
 
+  // ── Prevent Browser Back/Forward Navigation ──
+    useEffect(() => {
+     
+  
+      // Push a state to prevent back navigation
+      window.history.pushState(null, "", window.location.href);
+  
+      const handlePopState = () => {
+        // Push state again to prevent actual navigation
+        window.history.pushState(null, "", window.location.href);
+      };
+  
+      window.addEventListener("popstate", handlePopState);
+  
+      return () => {
+        window.removeEventListener("popstate", handlePopState);
+      };
+    }, []);
+
   return (
     <div className="min-h-screen bg-[#050A24] bg-[radial-gradient(circle_at_70%_20%,rgba(45,85,251,0.25),transparent_50%),radial-gradient(circle_at_20%_80%,rgba(45,85,251,0.15),transparent_50%)] flex flex-col items-center justify-center px-4 relative overflow-hidden">
       <motion.div className="absolute -top-20 -right-20 w-[200px] h-[200px] bg-[#2D55FB] rounded-full mix-blend-multiply filter blur-3xl opacity-20"

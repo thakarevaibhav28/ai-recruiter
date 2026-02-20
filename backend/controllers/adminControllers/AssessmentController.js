@@ -646,13 +646,26 @@ export const updateMCQInterview = async (req, res) => {
 export const getMCQInterviewById = async (req, res) => {
   try {
     const { id } = req.params;
-    const interview = await MCQ_Interview.findById(id)
+
+    // 1️⃣ Try MCQ_Interview
+    let interview = await MCQ_Interview.findById(id)
       .select("-candidates -__v")
       .lean();
+
+    // 2️⃣ If not found → Try AI_Interview
+    if (!interview) {
+      interview = await AI_Interview.findById(id)
+        .select("-candidates -__v")
+        .lean();
+    }
+
+    // 3️⃣ If still not found
     if (!interview) {
       return res.status(404).json({ message: "Interview not found" });
     }
+
     res.json({ interview });
+
   } catch (error) {
     console.log(error);
     res.status(500).json({ message: "Server error" });
