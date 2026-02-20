@@ -17,7 +17,8 @@ class AdminApi {
     SEND_AI_INVITES: "/admin/interview/send-invites",
     GET_AI: "/admin/interviews/list",
     DELETE_CANDIDATE:"/admin/candidate",
-    GET_ME: "/admin/me"
+    GET_ME: "/admin/me",
+    UPLOAD_JD:"/admin/analyze"
   };
 
  
@@ -97,6 +98,9 @@ class AdminApi {
  getMe(){
     return api._get(this._url.GET_ME);
   };
+  analyzeJD(data:any){
+    return api._postFormData(this._url.UPLOAD_JD,data)
+  }
 }
 
 export const adminApi = new AdminApi();

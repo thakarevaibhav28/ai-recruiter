@@ -6,6 +6,7 @@ import fs from "fs";
 
 import Candidate from "../models/Candidate.js";
 import Interview from "../models/MCQ_Interview.js";
+import AI_Interview from "../models/AI_Interview.js";
 import Admin from "../models/Admin.js";
 import Question from "../models/Question.js";
 import Score from "../models/Score.js";
@@ -23,13 +24,22 @@ router.post("/login/:id", async (req, res) => {
   const { id } = req.params;
 
   try {
-    const interview = await Interview.findById(id)
+    // 1️⃣ Try finding in Interview
+    let interview = await Interview.findById(id)
       .populate("candidates.candidateId", "email");
 
+    // 2️⃣ If not found → Try AI_Interview
+    if (!interview) {
+      interview = await AI_Interview.findById(id)
+        .populate("candidates.candidateId", "email");
+    }
+
+    // 3️⃣ If still not found
     if (!interview) {
       return res.status(404).json({ message: "Interview not found" });
     }
 
+    // 4️⃣ Find candidate
     const candidateEntry = interview.candidates.find(
       (c) =>
         c.candidateId &&
@@ -41,7 +51,7 @@ router.post("/login/:id", async (req, res) => {
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
-    // ✅ REAL-TIME DATE CHECK
+    // 5️⃣ Date Check
     const now = new Date();
     const startDate = new Date(candidateEntry.start_Date);
     const endDate = new Date(candidateEntry.end_Date);
@@ -53,25 +63,21 @@ router.post("/login/:id", async (req, res) => {
     }
 
     if (now > endDate) {
+      candidateEntry.status = "expired";
+      await interview.save();
+
       return res.status(403).json({
         message: "Interview has expired",
       });
     }
 
-    // Optional: prevent login if already completed
     if (candidateEntry.status === "completed") {
       return res.status(403).json({
         message: "Interview already completed",
       });
     }
 
-    // Optional: auto mark expired
-    if (now > endDate) {
-      candidateEntry.status = "expired";
-      await interview.save();
-    }
-
-    // Generate token
+    // 6️⃣ Generate Token
     const token = jwt.sign(
       { id: candidateEntry.candidateId._id, role: "candidate" },
       process.env.JWT_SECRET,
@@ -327,5 +333,7 @@ router.post('/interview/:id/submit', auth('candidate'), async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
+
+
 
 export default router;

@@ -1,16 +1,40 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { CheckCircle, LogOut } from "lucide-react";
 import { motion } from "framer-motion";
+import { useNavigate, useParams } from "react-router-dom";
 
-const AssessmentCompleted: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
+const AssessmentCompleted: React.FC = () => {
+  const navigate = useNavigate();
+  const { id } = useParams(); // get id from URL params
+
+  const handleLogout = () => {
+    if (id) {
+      navigate(`/user/${id}/session-end`);
+    }
+  };
+// ── Prevent Browser Back/Forward Navigation ──
+  useEffect(() => {
+   
+
+    // Push a state to prevent back navigation
+    window.history.pushState(null, "", window.location.href);
+
+    const handlePopState = () => {
+      // Push state again to prevent actual navigation
+      window.history.pushState(null, "", window.location.href);
+    };
+
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, []);
   return (
-    <div className="min-h-screen bg-[#050A24] bg-[radial-gradient(circle_at_70%_20%,rgba(45,85,251,0.3),transparent_50%),radial-gradient(circle_at_20%_80%,rgba(45,85,251,0.2),transparent_50%)] flex items-center justify-center relative overflow-hidden">
-      <motion.div className="absolute -top-20 -right-20 w-[200px] h-[200px] bg-[#2D55FB] rounded-full mix-blend-multiply filter blur-3xl opacity-20"
-        animate={{ x: [0,30,-20,0], y: [0,-50,20,0] }} transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }} />
-      <motion.div className="absolute -bottom-20 -left-20 w-[200px] h-[200px] bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20"
-        animate={{ x: [0,-40,30,0], y: [0,40,-30,0] }} transition={{ duration: 10, repeat: Infinity, ease: "easeInOut", delay: 2 }} />
-
+    <div className="min-h-screen bg-[#050A24] flex items-center justify-center relative overflow-hidden">
+      
       <div className="relative z-10 flex flex-col items-center text-center px-6">
+        
         <motion.div
           initial={{ scale: 0, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
@@ -39,7 +63,7 @@ const AssessmentCompleted: React.FC<{ onLogout?: () => void }> = ({ onLogout }) 
         </motion.p>
 
         <motion.button
-          onClick={onLogout}
+          onClick={handleLogout}
           className="flex items-center gap-2 px-6 py-2.5 bg-[#2D55FB] hover:bg-[#1e3fd4] text-white font-medium rounded-lg transition-colors"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}

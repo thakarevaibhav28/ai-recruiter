@@ -61,6 +61,9 @@ class AdminService {
    getMe(){
     return adminApi.getMe();
   };
+  analyzeJD(data:any){
+    return adminApi.analyzeJD(data);
+  }
 }
 
 export const adminService = new AdminService();

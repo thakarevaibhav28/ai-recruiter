@@ -1,5 +1,9 @@
-import { createContext, useContext, useEffect, useState } from "react";
-import { adminService } from "../services/service/adminService";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
 import { socket } from "../utils/socket";
 
 /* ================= TYPES ================= */
@@ -13,48 +17,84 @@ type User = {
   location: string;
 };
 
+type InterviewInfo = {
+  interviewId: string;
+  title?: string;
+  type?: "MCQ" | "AI";
+} | null;
+
 type AuthContextType = {
   user: User | null;
   setUser: React.Dispatch<React.SetStateAction<User | null>>;
   loading: boolean;
-  logout: () => Promise<void>;
+  logout: () => void;
+
+  interviewInfo: InterviewInfo;
+  setInterviewInfo: React.Dispatch<
+    React.SetStateAction<InterviewInfo>
+  >;
 };
 
 /* ================= CONTEXT ================= */
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AuthContext = createContext<AuthContextType | undefined>(
+  undefined
+);
 
 /* ================= PROVIDER ================= */
 
-export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+export const AuthProvider = ({
+  children,
+}: {
+  children: React.ReactNode;
+}) => {
   const [user, setUser] = useState<User | null>(null);
+  const [interviewInfo, setInterviewInfo] =
+    useState<InterviewInfo>(null);
   const [loading, setLoading] = useState(true);
-  console.log(user);
 
-  // useEffect(() => {
-  //   const token =
-  //     sessionStorage.getItem("accessToken") ||
-  //     localStorage.getItem("accessToken");
+  /* ================= INIT FROM STORAGE ================= */
 
-  //   if (!token) {
-  //     setLoading(false);
-  //     return;
-  //   }
+  useEffect(() => {
+    const storedUser = localStorage.getItem("user");
+    const storedInterview = localStorage.getItem("interviewInfo");
+    const token =
+      sessionStorage.getItem("accessToken") ||
+      localStorage.getItem("accessToken");
 
-  //   const fetchMe = async () => {
-  //     try {
-  //       const res = await adminService.getMe();
-  //       setUser(res.user);
-  //     } catch (error) {
-  //       setUser(null);
-  //       localStorage.removeItem("accessToken");
-  //     } finally {
-  //       setLoading(false);
-  //     }
-  //   };
+    if (storedUser && token) {
+      try {
+        setUser(JSON.parse(storedUser));
+      } catch (err) {
+        console.error("Failed to parse stored user:", err);
+      }
+    }
 
-  //   fetchMe();
-  // }, []);
+    if (storedInterview) {
+      try {
+        setInterviewInfo(JSON.parse(storedInterview));
+      } catch (err) {
+        console.error("Failed to parse interview info:", err);
+      }
+    }
+
+    setLoading(false);
+  }, []);
+
+  /* ================= PERSIST INTERVIEW ================= */
+
+  useEffect(() => {
+    if (interviewInfo) {
+      localStorage.setItem(
+        "interviewInfo",
+        JSON.stringify(interviewInfo)
+      );
+    } else {
+      localStorage.removeItem("interviewInfo");
+    }
+  }, [interviewInfo]);
+
+  /* ================= SOCKET CONNECTION ================= */
 
   useEffect(() => {
     if (!user) return;
@@ -71,23 +111,37 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
   }, [user]);
 
-  const logout = async () => {
-    try {
-      localStorage.removeItem("accessToken");
-      localStorage.removeItem("refreshToken");
-      sessionStorage.removeItem("accessToken");
-      sessionStorage.removeItem("refreshToken");
-      localStorage.removeItem("user");
-      socket.disconnect();
-      window.location.href = "/admin/login";
+  /* ================= LOGOUT ================= */
 
-      setUser(null);
-    } catch (error) {
-      console.error("Logout failed:", error);
-    }
+  const logout = () => {
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("refreshToken");
+    sessionStorage.removeItem("accessToken");
+    sessionStorage.removeItem("refreshToken");
+    localStorage.removeItem("user");
+    localStorage.removeItem("interviewInfo");
+
+    socket.disconnect();
+
+    setUser(null);
+    setInterviewInfo(null);
+
+    window.location.replace("/admin/login");
   };
+
+  /* ================= PROVIDER VALUE ================= */
+
   return (
-    <AuthContext.Provider value={{ user, setUser, loading, logout }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        setUser,
+        loading,
+        logout,
+        interviewInfo,
+        setInterviewInfo,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
@@ -96,7 +150,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 /* ================= HOOK ================= */
 
 export const useAuth = () => {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
-  return ctx;
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error(
+      "useAuth must be used within AuthProvider"
+    );
+  }
+  return context;
 };

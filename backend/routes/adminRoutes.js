@@ -1,6 +1,10 @@
 import express from "express";
 import multer from "multer";
 import auth from "../middleware/auth.js";
+import fs from "fs";
+
+import mammoth from "mammoth";
+import OpenAI from "openai";
 import MCQ_Interview from "../models/MCQ_Interview.js";
 import AI_Interview from "../models/AI_Interview.js";
 import Candidate from "../models/Candidate.js";
@@ -366,4 +370,125 @@ router.post(
 // );
 // Get all interviews created by the admin
 
+
+
+
+
+
+
+
+// ── Multer: memory storage for JD uploads ─────────────────
+const uploadJD = multer({
+  storage: multer.memoryStorage(), // ✅ explicit memoryStorage
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: (req, file, cb) => {
+    const allowed = [
+      "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ];
+    if (allowed.includes(file.mimetype)) cb(null, true);
+    else cb(new Error("Only PDF and DOC/DOCX files are allowed"), false);
+  },
+});
+
+// ── Helper: extract raw text from buffer ───────────────────
+async function extractTextFromFile(buffer, mimetype) {
+  if (mimetype === "application/pdf") {
+    const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    
+    const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(buffer) });
+    const pdf = await loadingTask.promise;
+    
+    let fullText = "";
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      const pageText = content.items.map((item) => item.str).join(" ");
+      fullText += pageText + "\n";
+    }
+    return fullText;
+  }
+
+  // DOC / DOCX
+  const result = await mammoth.extractRawText({ buffer });
+  return result.value;
+}
+
+// ── Helper: analyze JD text with AI ────────────────────────
+async function analyzeJDWithAI(rawText) {
+  const client = new OpenAI({
+    baseURL: "https://openrouter.ai/api/v1",
+    apiKey: process.env.OPENROUTER_API_KEY, // ✅ use env var, not hardcoded key
+  });
+
+  const prompt = `
+You are an expert HR analyst. Analyze the following Job Description and extract structured information.
+
+Return a valid JSON object with exactly these fields:
+{
+  "jobTitle": "string",
+  "jobSummary": "2-3 sentence summary of the role",
+  "primarySkill": "most important technical skill (single skill)",
+  "secondarySkill": "second most important skill (single skill, or empty string)",
+  "requiredSkills": ["array", "of", "required", "technical", "skills"],
+  "niceToHaveSkills": ["array", "of", "optional", "skills"],
+  "experienceLevel": "Entry / Junior / Mid / Senior / Lead",
+  "experienceYears": "e.g. 3-5 years (or empty string if not specified)",
+  "responsibilities": ["key", "responsibilities", "as", "short", "bullets"],
+  "qualifications": ["required", "qualifications"],
+  "jobType": "Full-time / Part-time / Contract / Remote (or empty string)",
+  "industry": "industry domain e.g. FinTech, Healthcare, E-commerce",
+  "fullJobDescription": "cleaned full job description text, preserving all details"
+}
+
+Job Description:
+${rawText}
+
+Return ONLY the JSON object. No markdown, no explanation.
+`;
+
+  const response = await client.chat.completions.create({
+    model: "openai/gpt-3.5-turbo",
+    messages: [{ role: "user", content: prompt }],
+    temperature: 0.3,
+  });
+
+  const content = response.choices[0]?.message?.content?.trim();
+  const cleaned = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+  return JSON.parse(cleaned);
+}
+
+// POST /api/jd/analyze
+router.post("/analyze", auth("admin"), uploadJD.single("jobDescription"), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ message: "No file uploaded" });
+  }
+
+  try {
+    // ✅ Use req.file.buffer directly — no file path needed
+    const rawText = await extractTextFromFile(req.file.buffer, req.file.mimetype);
+
+    if (!rawText || rawText.trim().length < 50) {
+      return res.status(422).json({
+        message: "Could not extract meaningful text from the document. Please check the file.",
+      });
+    }
+
+    const analysis = await analyzeJDWithAI(rawText);
+
+    res.json({
+      success: true,
+      fileName: req.file.originalname,
+      analysis,
+    });
+
+  } catch (err) {
+    console.error("JD Analysis error:", err);
+    res.status(500).json({
+      message: err.message || "Failed to analyze job description",
+    });
+  }
+  // ✅ No cleanup needed — memory storage, nothing written to disk
+});
 export default router;
