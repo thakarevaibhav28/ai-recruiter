@@ -1,20 +1,15 @@
 import express from "express";
 import multer from "multer";
 import auth from "../middleware/auth.js";
-import fs from "fs";
 
 import mammoth from "mammoth";
 import OpenAI from "openai";
-import MCQ_Interview from "../models/MCQ_Interview.js";
-import AI_Interview from "../models/AI_Interview.js";
-import Candidate from "../models/Candidate.js";
-import Question from "../models/Question.js";
-import Score from "../models/Score.js";
 
 import {
   RegisterUser,
   LoginUser,
   getMe,
+  GetTopPerformance
 } from "../controllers/adminControllers/AuthorizationController.js";
 
 import {
@@ -31,14 +26,14 @@ import {
   AIInterviewInvitation,
   GetAllAIInterview,
   ScheduleAiInterview,
-  UpdateAIInterview,
+  UpdateAIInterview
 } from "../controllers/adminControllers/InterviewController.js";
 
 import {
   CreateCandidate,
   GetCandidate,
   UpdateCandidate,
-  GetAllSchedule,
+GetAllSchedule,
   BulkAddCandidates,
 } from "../controllers/candidateControllers/AuthorizationController.js";
 
@@ -60,6 +55,8 @@ const upload = multer({ storage });
 router.post("/register", RegisterUser);
 router.post("/login", LoginUser);
 router.get("/me", auth("admin"), getMe);
+
+router.get("/top-performance", auth("admin"), GetTopPerformance);
 
 // POST Create MCQ Assessment Template
 router.post(
@@ -94,6 +91,8 @@ router.put(
   updateMCQInterview,
 );
 
+// router.post("/assessment/:id/generate-questions", auth("candidate"), GenerateMCQQuestions);
+
 //Create AI interview
 router.post(
   "/interview/template",
@@ -121,8 +120,11 @@ router.get("/candidates", auth("admin"), GetCandidate);
 
 router.patch("/candidate/:id", auth("admin"), UpdateCandidate);
 
-// Get all Schedule data
+// Get all Assessment Schedule data
 router.get("/total-schedule", auth("admin"), GetAllSchedule);
+
+// Get all AI Interview Schedule data
+// router.get("/total-schedule", auth("admin"), GetAllAiInterviewSchedule);
 router.post(
   "/candidates/bulk",
   auth("admin"),

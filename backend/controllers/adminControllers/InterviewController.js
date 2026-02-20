@@ -90,7 +90,6 @@ export const CreateAITemplate = async (req, res) => {
   }
 };
 
-
 export const GetAllAIInterview = async (req, res) => {
   try {
     const adminId = req.user.id;
@@ -128,13 +127,8 @@ export const GetAllAIInterview = async (req, res) => {
     /* ================= GET ALL DRAFT INTERVIEWS ================= */
 
     const drafts = await AI_Interview.find({
-      createdBy: adminId,
-      status: "draft",
+      createdBy: adminId
     })
-      .sort({ createdAt: -1 })
-      .select(
-        "_id position difficulty duration skills passingScore numberOfQuestions description status createdAt"
-      );
 
     const formattedDrafts = drafts.map((item) => ({
       jobId: item._id,
@@ -165,8 +159,6 @@ export const GetAllAIInterview = async (req, res) => {
     });
   }
 };
-
-
 export const AIInterviewInvitation = async (req, res) => {
   try {
     const { jobId, candidateIds, messageBody, startDate, endDate, testTitle } =
@@ -204,7 +196,7 @@ export const AIInterviewInvitation = async (req, res) => {
     interview.candidates = [];
 
     for (const candidate of candidates) {
-      const interviewLink = `https://your-app.com/interview/${randomUUID()}`;
+      const interviewLink = `${process.env.FRONTEND_URL || "http://localhost:5173"}/user/login/${interview._id}`;
       const username = `user_${Math.random().toString(36).substring(2, 10)}`;
       const password = randomUUID().slice(0, 8);
 
@@ -349,7 +341,7 @@ export const ScheduleAiInterview = async (req, res) => {
           .status(404)
           .json({ message: `Candidate ID ${candId} not found` });
 
-      const interviewLink = `http://localhost:5173/candidate/interview/ai/${interviewId}`;
+      const interviewLink = `${process.env.FRONTEND_URL || "http://localhost:5173"}/candidate/login/${interviewId}`;
       const password = Math.random().toString(36).slice(-8);
 
       const personalizedBody = messageBody
@@ -394,3 +386,22 @@ export const ScheduleAiInterview = async (req, res) => {
     res.status(500).json({ message: "Server error", details: err.message });
   }
 };
+export const GetAllAiInterviewSchedule=async (req, res) => {
+  try {
+    const [{ total } = { total: 0 }] = await AI_Interview.aggregate([
+      { $unwind: "$candidates" },
+      {
+        $match: {
+          "candidates.interviewLink": { $type: "string", $ne: null },
+          "candidates.password": { $type: "string", $ne: null },
+        },
+      },
+      { $count: "total" },
+    ]);
+
+    return res.json({ totalSchedules: total });
+  } catch (err) {
+    console.error("Error counting schedules:", err.message);
+    res.status(500).json({ message: "Server error" });
+  }
+}

@@ -264,8 +264,8 @@ export const sendMCQInterviewLink = async (
             <h3>🔐 Your Login Credentials</h3>
             <p style="color: #856404; margin: 10px 0;">Please keep these safe and do not share with anyone</p>
             <div class="credential-item">
-              <strong>Username:</strong>
-              <span>${username}</span>
+              <strong>User Email:</strong>
+              <span>${candidateEmail}</span>
             </div>
             <div class="credential-item">
               <strong>Password:</strong>
@@ -347,7 +347,6 @@ export const sendMCQInterviewLink = async (
 export const sendAIInterviewLink = async (
   candidateEmail,
   interviewLink,
-  username,
   password,
   subjectLine,
   passingScore,
@@ -355,6 +354,14 @@ export const sendAIInterviewLink = async (
   scheduledEndDate,
   scheduledStartDate
 ) => {
+  console.log("candidateEmail:", candidateEmail);
+  console.log("interviewLink:", interviewLink);
+  console.log("password:", password);
+  console.log("subjectLine:", subjectLine);
+  console.log("passingScore:", passingScore);
+  console.log("messageBody:", messageBody);
+  console.log("scheduledEndDate:", scheduledEndDate);
+  console.log("scheduledStartDate:", scheduledStartDate);
   const emailHTML = `
     <!DOCTYPE html>
     <html>
@@ -400,6 +407,7 @@ export const sendAIInterviewLink = async (
         .credential-item {
           margin: 15px 0;
           font-size: 16px;
+          underline: none;
         }
         .credential-item strong {
           display: inline-block;
@@ -463,8 +471,8 @@ export const sendAIInterviewLink = async (
             <h3>🔐 Your Login Credentials</h3>
             <p style="color: #856404; margin: 10px 0;">Please keep these safe and do not share with anyone</p>
             <div class="credential-item">
-              <strong>Username:</strong>
-              <span>${username}</span>
+              <strong>User Email:</strong>
+              <span>${candidateEmail}</span>
             </div>
             <div class="credential-item">
               <strong>Password:</strong>

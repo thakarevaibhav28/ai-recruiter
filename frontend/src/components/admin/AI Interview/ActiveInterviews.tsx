@@ -1,12 +1,11 @@
 import { Button } from "../../../ui/button";
 import { useEffect, useState } from "react";
-import File from "../../../assets/admin/TestTemplates/file-edit.png";
 import Comment from "../../../assets/admin/report/message.png";
 import Calender from "../../../assets/admin/report/calendar.png";
 import RightArrow from "../../../assets/admin/TestTemplates/arrow-right.png";
 import FileEdit from "../../../assets/admin/TestTemplates/file-edit1.png";
 import { adminService } from "../../../services/service/adminService";
-
+import { FileText} from "lucide-react";
 interface ActiveInterviewsProps {
   onNavigateToInterviewSetup: (assessment: any) => void;
   onEditInterview: (assessment: any) => void;
@@ -20,11 +19,13 @@ const ActiveInterviews: React.FC<ActiveInterviewsProps> = ({
   const [isReminderOpen, setIsReminderOpen] = useState(false);
   const [assessments, setAssessments] = useState<any[]>([]);
   console.log("Assessments:", assessments);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
 
     const loadAssessments = async () => {
+      setTemplatesLoading(true);
       try {
         const res: any = await adminService.getDraft();
         console.log("API Response:", res);
@@ -33,6 +34,8 @@ const ActiveInterviews: React.FC<ActiveInterviewsProps> = ({
         }
       } catch (error) {
         console.error("Error fetching assessments:", error);
+      } finally {
+        setTemplatesLoading(false);
       }
     };
 
@@ -71,63 +74,72 @@ const ActiveInterviews: React.FC<ActiveInterviewsProps> = ({
     <div className=" flex  ">
       <div className="w-full">
         <div className="flex flex-wrap items-start justify-start gap-3   mt-0 pt-12">
-          {assessments.map((assessment, index) => (
-            <div
-              key={index}
-              className="bg-white rounded-lg shadow-md p-4 border border-gray-200 w-[290px]"
-            >
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    {assessment.position}
-                  </h3>
-                  <span className="border border-[#C2410C] text-[#C2410C] text-xs font-medium px-2 py-1 rounded-xl">
-                    {assessment.difficulty}
+          {templatesLoading ? (
+            <div className="flex items-center justify-center py-20 text-gray-400 text-sm">Loading templates...</div>
+          ) :assessments.length === 0 ? (
+             <div className="flex flex-col items-center justify-center py-20 text-center w-full">
+                          <FileText className="h-10 w-10 text-gray-300 mb-3" />
+                          <p className="text-gray-500 font-medium">No templates yet</p>
+                          <p className="text-gray-400 text-sm mt-1">Create an assessment and save it as a template</p>
+                        </div>
+          ):(
+            assessments.map((assessment, index) => (
+              <div
+                key={index}
+                className="bg-white rounded-lg shadow-md p-4 border border-gray-200 w-[290px]"
+              >
+                <div className="flex items-center  justify-between mb-4">
+                  <div className="flex items-center justify-between w-full">
+                    <h3 className="text-lg font-semibold text-gray-900">
+                      {assessment.position}
+                    </h3>
+                    <span className="border border-[#C2410C] text-[#C2410C] text-xs font-medium px-2 py-1 rounded-xl">
+                      {assessment.difficulty}
+                    </span>
+                  </div>
+                </div>
+                <div className="text-sm text-gray-500 mb-4">
+                  {assessment.skills.map((skill: string, i: number) => (
+                    <span
+                      key={i}
+                      className="inline-block bg-gray-200 text-gray-800 text-xs px-2 py-1 rounded-full mr-2 mb-2"
+                    >
+                      {skill}
+                    </span>
+                  ))}
+                </div>
+                <div className="flex items-center text-sm text-gray-500 mb-4">
+                  <span className="flex items-center mr-4">
+                    <img src={Comment} alt="" className="w-4 h-4 mr-3" />
+                    {assessment.numberOfQuestions} questions
+                  </span>
+                  <span className="flex items-center">
+                    <img src={Calender} alt="" className="w-4 h-4 mr-3" />
+                    {assessment.createdDate}
                   </span>
                 </div>
-                <img src={File} alt="" className="w-5 -mt-3" />
-              </div>
-              <div className="text-sm text-gray-500 mb-4">
-                {assessment.skills.map((skill: string, i: number) => (
-                  <span
-                    key={i}
-                    className="inline-block bg-gray-200 text-gray-800 text-xs px-2 py-1 rounded-full mr-2 mb-2"
+                <p className="text-sm text-gray-500 mb-6">
+                  {" "}
+                  Last Use: {getTimeAgo(assessment.createdAt)}
+                </p>
+                <div className="flex space-x-3">
+                  <button
+                    onClick={() => onNavigateToInterviewSetup(assessment)}
+                    className="flex-1 bg-blue-600 text-white px-5 py-2 rounded-lg flex items-center justify-center hover:bg-blue-700"
                   >
-                    {skill}
-                  </span>
-                ))}
+                    <img src={RightArrow} className="w-4 h-4 mr-2" />
+                    Use
+                  </button>
+                  <button
+                    onClick={() => onEditInterview(assessment)}
+                    className="border border-[#4318FF99] px-4 py-2 rounded-lg"
+                  >
+                    <img src={FileEdit} className="w-6 h-6" />
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center text-sm text-gray-500 mb-4">
-                <span className="flex items-center mr-4">
-                  <img src={Comment} alt="" className="w-4 h-4 mr-3" />
-                  {assessment.numberOfQuestions} questions
-                </span>
-                <span className="flex items-center">
-                  <img src={Calender} alt="" className="w-4 h-4 mr-3" />
-                  {assessment.createdDate}
-                </span>
-              </div>
-              <p className="text-sm text-gray-500 mb-6">
-                {" "}
-                Last Use: {getTimeAgo(assessment.createdAt)}
-              </p>
-              <div className="flex space-x-3">
-                <button
-                  onClick={() => onNavigateToInterviewSetup(assessment)}
-                  className="flex-1 bg-blue-600 text-white px-5 py-2 rounded-lg flex items-center justify-center hover:bg-blue-700"
-                >
-                  <img src={RightArrow} className="w-4 h-4 mr-2" />
-                  Use
-                </button>
-                <button
-                  onClick={() => onEditInterview(assessment)}
-                  className="border border-[#4318FF99] px-4 py-2 rounded-lg"
-                >
-                  <img src={FileEdit} className="w-6 h-6" />
-                </button>
-              </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </div>
 

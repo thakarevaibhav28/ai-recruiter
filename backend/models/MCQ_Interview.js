@@ -12,44 +12,26 @@ const interviewSchema = new mongoose.Schema(
     },
     candidates: [
       {
-        candidateId: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "Candidate",
-          required: true,
-        },
-        interviewLink: {
-          type: String,
-          required: true,
-        },
-        username: {
-          type: String,
-          required: true,
-        },
-        password: {
-          type: String,
-          required: true,
-        },
-        start_Date: {
-          type: Date,
-          required: true,
-        },
-        end_Date: {
-          type: Date,
-          required: true,
-        },
+        candidateId: { type: mongoose.Schema.Types.ObjectId, ref: "Candidate" },
+        interviewLink: String,
+        username: String,
+        password: String,
+        start_Date: Date,
+        end_Date: Date,
         status: {
           type: String,
           enum: ["pending", "in_progress", "completed", "expired"],
           default: "pending",
         },
-        score: {
-          type: Number,
-          default: null,
-        },
-        submittedAt: {
-          type: Date,
-          default: null,
-        },
+        score: Number,
+        submittedAt: Date,
+
+        assignedQuestions: [
+          {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Question",
+          },
+        ],
       },
     ],
     duration: {
@@ -93,14 +75,14 @@ const interviewSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-    examType:{
-      type:String,
-      default:"MCQ"
-    }
+    examType: {
+      type: String,
+      default: "MCQ",
+    },
   },
   {
     timestamps: true, // Automatically adds createdAt and updatedAt
-  }
+  },
 );
 
 // Index for faster queries
@@ -110,9 +92,7 @@ interviewSchema.index({ "candidates.candidateId": 1 });
 // Virtual for checking if interview is active
 interviewSchema.virtual("isActive").get(function () {
   const now = new Date();
-  return this.candidates.some(
-    (c) => now >= c.start_Date && now <= c.end_Date
-  );
+  return this.candidates.some((c) => now >= c.start_Date && now <= c.end_Date);
 });
 
 export default mongoose.model("MCQ_Interview", interviewSchema);

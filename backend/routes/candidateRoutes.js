@@ -7,6 +7,7 @@ import fs from "fs";
 import Candidate from "../models/Candidate.js";
 import Interview from "../models/MCQ_Interview.js";
 import AI_Interview from "../models/AI_Interview.js";
+import MCQ_Interview from "../models/MCQ_Interview.js";
 import Admin from "../models/Admin.js";
 import Question from "../models/Question.js";
 import Score from "../models/Score.js";
@@ -96,9 +97,6 @@ router.post("/login/:id", async (req, res) => {
   }
 });
 
-
-
-
 // Configure multer for multiple file uploads for candidate documents
 const documentsStorage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -186,18 +184,61 @@ router.put('/:id/upload-photo', auth('candidate'), documentsUpload.fields([
 // Get MCQ interview template for candidate
 router.get("/assessment/template/:id", auth("candidate"), getMCQInterviewById);
 
-
-// Get interview details for candidate examination
-router.get('/interview/:id', auth('candidate'), async (req, res) => {
-  const { id } = req.params;
+router.get("/interview/:id", auth("candidate"), async (req, res) => {
   try {
-    const interview = await Interview.findById(id);
-    if (!interview) return res.status(404).json({ message: 'Interview not found' });
+    const { id } = req.params;
+    const candidateId = req.user.id;
 
-    const questions = await Question.find({ interviewId: id }).select("-correctAnswer -answers");
+    const interview = await MCQ_Interview.findById(id);
+    if (!interview)
+      return res.status(404).json({ message: "Interview not found" });
+
+    const candidateEntry = interview.candidates.find(
+      (c) => c.candidateId.toString() === candidateId
+    );
+
+    if (!candidateEntry)
+      return res.status(403).json({ message: "Not authorized" });
+
+    const now = new Date();
+    if (now < candidateEntry.start_Date || now > candidateEntry.end_Date) {
+      return res.status(403).json({ message: "Interview not active" });
+    }
+
+    const questionLimit = interview.no_of_questions;
+
+    let questions;
+
+    // ✅ If already assigned → return same
+    if (candidateEntry.assignedQuestions.length > 0) {
+      questions = await Question.find({
+        _id: { $in: candidateEntry.assignedQuestions },
+      }).select("-correctAnswer -answers");
+    } else {
+      // ✅ Randomly assign only once
+      const randomQuestions = await Question.aggregate([
+        {
+          $match: {
+            interviewId: interview._id,
+            examType: "MCQ",
+          },
+        },
+        { $sample: { size: questionLimit } },
+        { $project: { correctAnswer: 0, answers: 0 } },
+      ]);
+
+      candidateEntry.assignedQuestions = randomQuestions.map((q) => q._id);
+      candidateEntry.status = "in_progress";
+
+      await interview.save();
+
+      questions = randomQuestions;
+    }
+
     res.json({ interview, questions });
-  } catch (error) {
-    res.status(500).json({ message: 'Server error' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
   }
 });
 
@@ -207,6 +248,7 @@ router.get('/interview/:id/questions', auth('candidate'), async (req, res) => {
   const { id } = req.params;
   try {
     const questions = await Question.find({ interviewId: id });
+    console.log("Questions fetched for interview",questions);
     res.json({ questions });
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
@@ -268,66 +310,112 @@ router.post('/interview/:id/answer', auth('candidate'), async (req, res) => {
   }
 });
 
-router.post('/interview/:id/submit', auth('candidate'), async (req, res) => {
-  const { id } = req.params;
-
+router.post("/interview/:id/submit", auth("candidate"), async (req, res) => {
   try {
-    const questions = await Question.find({ interviewId: id });
+    const { id } = req.params;
+    const candidateId = req.user.id;
+    console.log("Submit called for interview", id, "by candidate", candidateId);
 
-    const candidateAnswers = [];
+    // 🔥 1️⃣ Get interview
+    const interview = await MCQ_Interview.findById(id);
+    if (!interview)
+      return res.status(404).json({ message: "Interview not found" });
 
-    questions.forEach(q => {
-      q.answers.forEach(a => {
-        if (a.candidateId.toString() === req.user.id) {
-          candidateAnswers.push({
-            questionId: q._id,
-            answerText: a.answerText,
-            score: a.score || 0,
-            feedback: a.feedback || '',
-          });
-        }
+    // 🔥 2️⃣ Find candidate entry
+    const candidateEntry = interview.candidates.find(
+      (c) => c.candidateId.toString() === candidateId
+    );
+
+    if (!candidateEntry)
+      return res.status(403).json({ message: "Not authorized" });
+
+    // 🔥 3️⃣ Prevent double submission
+    if (candidateEntry.status === "completed") {
+      return res.status(400).json({
+        message: "Interview already submitted",
+      });
+    }
+
+    // 🔥 4️⃣ Use ONLY assigned questions
+    const assignedQuestions = candidateEntry.assignedQuestions;
+
+    if (!assignedQuestions || assignedQuestions.length === 0) {
+      return res.status(400).json({
+        message: "No assigned questions found",
+      });
+    }
+
+    const questions = await Question.find({
+      _id: { $in: assignedQuestions },
+    });
+
+    let totalScore = 0;
+    const scores = [];
+
+    questions.forEach((q) => {
+      const answer = q.answers.find(
+        (a) => a.candidateId.toString() === candidateId
+      );
+
+      const score = answer?.score || 0;
+      totalScore += score;
+
+      scores.push({
+        questionId: q._id,
+        answerText: answer?.answerText || "",
+        score,
+        feedback: answer?.feedback || "",
       });
     });
 
-    const scores = candidateAnswers.map(a => ({
-      questionId: a.questionId,
-      score: a.score,
-      feedback: a.feedback,
-      no_of_questions: questions.length
-    }));
+    const totalQuestions = assignedQuestions.length;
+    const maxScore = totalQuestions * 10;
+    const percentage = (totalScore / maxScore) * 100;
 
-    const totalScore = scores.reduce((sum, s) => sum + (s.score || 0), 0);
-
+    // 🔥 5️⃣ Generate summary
     const summary = await generateSummary(scores);
 
+    // 🔥 6️⃣ Save score document
     const scoreDoc = new Score({
       interviewId: id,
-      candidateId: req.user.id,
+      examType: interview.examType,
+      candidateId,
       scores,
       totalScore,
       summary,
     });
+ 
 
-    const candidate = await Candidate.findById(req.user.id);
+    // 🔥 7️⃣ Generate PDF
+    const candidate = await Candidate.findById(candidateId);
 
-  const pdfPath = `uploads/scorecards/${candidate.email}-${id}-${Date.now()}.pdf`;
+    const pdfPath = `uploads/scorecards/${candidate.email}-${id}-${Date.now()}.pdf`;
 
-
-    // ✅ Generate PDF only once
-    await generateScorecardPDF(candidate, scores, totalScore, summary, pdfPath);
+    await generateScorecardPDF(
+      candidate,
+      scores,
+      totalScore,
+      summary,
+      pdfPath
+    );
 
     scoreDoc.pdfPath = pdfPath;
     await scoreDoc.save();
 
-    const interview = await Interview.findById(id);
-    const admin = await Admin.findById(interview.createdBy);
+    // 🔥 8️⃣ Update candidate status inside interview
+    candidateEntry.status = "completed";
+    candidateEntry.score = totalScore;
+    candidateEntry.submittedAt = new Date();
 
-    // ✅ Send emails properly (NOT generate PDF again)
-    // await sendScorecardEmail(candidate.email, pdfPath);
-    // await sendScorecardEmail(admin.email, pdfPath);
+    await interview.save();
 
-    res.json({ message: 'Interview submitted, scorecard sent' });
-
+    res.json({
+      message: "Interview submitted successfully",
+      totalScore,
+      totalQuestions,
+      percentage: Math.round(percentage),
+      pdfPath,
+    });
   } catch (error) {
     console.error("Submit error:", error);
     res.status(500).json({ message: error.message });
