@@ -1312,8 +1312,6 @@
 // };
 
 // export default VideoInterview;
-
-
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Vapi from "@vapi-ai/web";
@@ -1325,7 +1323,7 @@ import { useAuth } from "../../context/context";
 type Screen = "lobby" | "spotlight" | "grid";
 
 /* ══════════════════════════════════════════════════════════════════════════
-   INLINE BEHAVIOR DETECTION (replaces external behaviorDetection import)
+   INLINE BEHAVIOR DETECTION
 ══════════════════════════════════════════════════════════════════════════ */
 function detectSuspiciousBehavior(videoElement: HTMLVideoElement) {
   try {
@@ -1418,7 +1416,7 @@ const CtrlBtn = ({
   </motion.button>
 );
 
-/* ── AI Avatar (from StartInterview, adapted for dark UI) ─────────────────── */
+/* ── AI Avatar ─────────────────────────────────────────────────────────────── */
 function AIAvatarTile({ isSpeaking, isCallActive }: { isSpeaking: boolean; isCallActive: boolean }) {
   const [mouthOpening, setMouthOpening] = useState(0);
   useEffect(() => {
@@ -1467,6 +1465,35 @@ function AIAvatarTile({ isSpeaking, isCallActive }: { isSpeaking: boolean; isCal
   );
 }
 
+/* ── Stable UserVideo component defined OUTSIDE main component to prevent remount ── */
+interface UserVideoProps {
+  streamRef: React.RefObject<MediaStream | null>;
+  camOn: boolean;
+  streamReady: boolean;
+  username: string;
+  onVideoMount: (el: HTMLVideoElement | null) => void;
+}
+
+const UserVideo = React.memo(({ streamRef, camOn, streamReady, username, onVideoMount }: UserVideoProps) => (
+  <>
+    <video
+      ref={onVideoMount}
+      muted
+      playsInline
+      className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${camOn && streamReady ? "opacity-100" : "opacity-0"}`}
+      style={{ transform: "scaleX(-1)" }}
+    />
+    {(!camOn || !streamReady) && (
+      <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-[#1a2a5e] to-[#060c25]">
+        <div className="w-16 h-16 rounded-full bg-[#2D55FB]/20 border border-[#2D55FB]/30 flex items-center justify-center mb-2">
+          {streamReady ? <VideoOff className="h-8 w-8 text-[#2D55FB]/60" /> : <User className="h-8 w-8 text-[#2D55FB]/50" />}
+        </div>
+        <span className="text-white/30 text-xs">{streamReady ? "Camera Off" : username}</span>
+      </div>
+    )}
+  </>
+));
+
 /* ═══════════════════════════════════════════════════════════════════════════
    MAIN COMPONENT
 ═══════════════════════════════════════════════════════════════════════════ */
@@ -1499,17 +1526,53 @@ const VideoInterview: React.FC = () => {
   const [isResumeInterview, setIsResumeInterview] = useState(false);
   const [noFaceWarning, setNoFaceWarning] = useState(false);
 
+  // ── Alert system state ────────────────────────────────────────────────────
+  const [alertCount, setAlertCount] = useState(0);
+
   // ── Refs ──────────────────────────────────────────────────────────────────
   const streamRef = useRef<MediaStream | null>(null);
   const lobbyVidRef = useRef<HTMLVideoElement>(null);
-  const spotlightPipRef = useRef<HTMLVideoElement>(null);
-  const gridUserRef = useRef<HTMLVideoElement>(null);
+  const spotlightVidElRef = useRef<HTMLVideoElement | null>(null); // holds the actual DOM element
+  const gridUserVidElRef = useRef<HTMLVideoElement | null>(null);  // holds the actual DOM element
   const behaviorVidRef = useRef<HTMLVideoElement>(null);
   const conversationRef = useRef<any[]>([]);
   const aiTranscriptBufferRef = useRef("");
   const userTranscriptBufferRef = useRef("");
   const detectionIntervalRef = useRef<any>(null);
   const behaviorTrackerRef = useRef(new BehaviorTracker());
+
+  // ── Alert tracking refs (avoids stale closures) ───────────────────────────
+  const alertCountRef = useRef(0);
+  const vapiRef = useRef<any>(null);
+  const isCallActiveRef = useRef(false);
+  const isSpeakingRef = useRef(false);
+  const lastUserSpeakRef = useRef<number>(Date.now());
+  const silenceNotifiedRef = useRef(false); // prevent spamming silence prompts
+  const camOnRef = useRef(true);
+  const camAlertIssuedRef = useRef(false); // only alert once per cam-off event
+
+  // Keep refs in sync with state
+  useEffect(() => { vapiRef.current = vapi; }, [vapi]);
+  useEffect(() => { isCallActiveRef.current = isCallActive; }, [isCallActive]);
+  useEffect(() => { isSpeakingRef.current = isSpeaking; }, [isSpeaking]);
+  useEffect(() => { camOnRef.current = camOn; }, [camOn]);
+
+  /* ── Callback refs for spotlight / grid videos (fixes remount issue) ──── */
+  const onSpotlightVideoMount = useCallback((el: HTMLVideoElement | null) => {
+    spotlightVidElRef.current = el;
+    if (el && streamRef.current) {
+      el.srcObject = streamRef.current;
+      el.play().catch(() => {});
+    }
+  }, []);
+
+  const onGridUserVideoMount = useCallback((el: HTMLVideoElement | null) => {
+    gridUserVidElRef.current = el;
+    if (el && streamRef.current) {
+      el.srcObject = streamRef.current;
+      el.play().catch(() => {});
+    }
+  }, []);
 
   /* ── Camera setup ─────────────────────────────────────────────────────── */
   const attachStream = useCallback((ref: React.RefObject<HTMLVideoElement>) => {
@@ -1518,6 +1581,19 @@ const VideoInterview: React.FC = () => {
       ref.current.play().catch(() => {});
     }
   }, []);
+
+  // Re-attach to callback-ref elements when stream becomes ready
+  useEffect(() => {
+    if (!streamRef.current) return;
+    if (spotlightVidElRef.current) {
+      spotlightVidElRef.current.srcObject = streamRef.current;
+      spotlightVidElRef.current.play().catch(() => {});
+    }
+    if (gridUserVidElRef.current) {
+      gridUserVidElRef.current.srcObject = streamRef.current;
+      gridUserVidElRef.current.play().catch(() => {});
+    }
+  }, [streamReady]);
 
   useEffect(() => {
     (async () => {
@@ -1541,9 +1617,107 @@ const VideoInterview: React.FC = () => {
   useEffect(() => {
     if (!streamRef.current) return;
     if (screen === "lobby") attachStream(lobbyVidRef);
-    if (screen === "spotlight") attachStream(spotlightPipRef);
-    if (screen === "grid") attachStream(gridUserRef);
   }, [screen, attachStream]);
+
+  /* ── Alert system ─────────────────────────────────────────────────────── */
+  const triggerAlert = useCallback((reason: string) => {
+    if (!isCallActiveRef.current) return;
+
+    alertCountRef.current += 1;
+    const count = alertCountRef.current;
+    setAlertCount(count);
+
+    const remaining = 3 - count;
+
+    if (count < 3) {
+      toast.warning(`⚠️ Warning ${count}/3: ${reason}. ${remaining} warning(s) left before interview ends.`);
+    } else {
+      // 3rd alert — inform AI, then end after a short delay
+      toast.error(`🚫 Interview ending: ${reason}. Maximum warnings reached.`);
+
+      const v = vapiRef.current;
+      if (v) {
+        try {
+          v.send({
+            type: "add-message",
+            message: {
+              role: "system",
+              content:
+                "IMPORTANT: The candidate has received 3 integrity warnings and the interview must be terminated immediately. In one brief sentence, inform the candidate that the interview is being ended due to multiple violations, then stop.",
+            },
+          });
+        } catch (e) { /* ignore */ }
+        // Give AI ~4 s to speak the farewell, then hard-stop
+        setTimeout(() => {
+          try { v.stop(); } catch (e) {}
+          setIsCallActive(false);
+          setIsSpeaking(false);
+        }, 4000);
+      } else {
+        setIsCallActive(false);
+        setIsSpeaking(false);
+      }
+    }
+  }, []);
+
+  /* ── Tab switch detection ─────────────────────────────────────────────── */
+  useEffect(() => {
+    if (!isCallActive) return;
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        triggerAlert("Tab switching / window minimized detected");
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [isCallActive, triggerAlert]);
+
+  /* ── Camera-off alert (only fires once per off-event) ─────────────────── */
+  useEffect(() => {
+    if (!isCallActive) return;
+
+    if (!camOn && !camAlertIssuedRef.current) {
+      camAlertIssuedRef.current = true;
+      triggerAlert("Camera turned off");
+    }
+
+    if (camOn) {
+      camAlertIssuedRef.current = false; // reset so turning off again triggers again
+    }
+  }, [camOn, isCallActive, triggerAlert]);
+
+  /* ── Silence detection — prompt AI if candidate silent > 20 s ─────────── */
+  useEffect(() => {
+    if (!isCallActive) return;
+
+    const interval = setInterval(() => {
+      if (isSpeakingRef.current) return; // AI is talking, don't interrupt
+      const silenceMs = Date.now() - lastUserSpeakRef.current;
+
+      if (silenceMs > 20_000 && !silenceNotifiedRef.current) {
+        silenceNotifiedRef.current = true; // throttle
+        const v = vapiRef.current;
+        if (v) {
+          try {
+            v.send({
+              type: "add-message",
+              message: {
+                role: "system",
+                content:
+                  "The candidate has been silent for over 20 seconds. Politely ask if they need more time, are having trouble understanding the question, or are ready to proceed.",
+              },
+            });
+          } catch (e) { /* ignore */ }
+        }
+        // Re-enable prompt after another 25 s to avoid spam
+        setTimeout(() => { silenceNotifiedRef.current = false; }, 25_000);
+      }
+    }, 5_000);
+
+    return () => clearInterval(interval);
+  }, [isCallActive]);
 
   /* ── Interview info setup ─────────────────────────────────────────────── */
   useEffect(() => {
@@ -1553,12 +1727,10 @@ const VideoInterview: React.FC = () => {
       return;
     }
 
-    // ── FIX: parse duration safely — strip any non-numeric text e.g. "15 minutes" → 15
     const rawDuration = interviewInfo?.duration || "5";
     const mins = parseInt(String(rawDuration), 10) || 5;
     setTimeLeft(mins * 60);
 
-    // ── FIX: check type OR examType for resume-based detection
     const type = interviewInfo?.type || interviewInfo?.examType || "";
     setIsResumeInterview(type === "resume-based");
 
@@ -1598,27 +1770,45 @@ const VideoInterview: React.FC = () => {
   /* ── Behavior detection ───────────────────────────────────────────────── */
   useEffect(() => {
     if (!isCallActive) { clearInterval(detectionIntervalRef.current); return; }
+
+    // Track consecutive no-face detections to avoid false positives
+    let consecutiveNoFace = 0;
+
     detectionIntervalRef.current = setInterval(() => {
       const vid = behaviorVidRef.current;
       if (vid && vid.readyState === vid.HAVE_ENOUGH_DATA) {
         const detected = detectSuspiciousBehavior(vid);
         if (detected) {
           behaviorTrackerRef.current.addEvent(detected);
-          if (detected.noFaceDetected) setNoFaceWarning(true);
-          else setNoFaceWarning(false);
-          if (behaviorTrackerRef.current.events.length >= 10) {
-            toast.error("⛔ Interview stopped: Maximum alerts exceeded");
-            stopInterview();
+
+          if (detected.noFaceDetected) {
+            consecutiveNoFace++;
+            setNoFaceWarning(true);
+            // Only trigger alert after 3 consecutive no-face detections (3 s) to avoid flickers
+            if (consecutiveNoFace === 3) {
+              triggerAlert("No face detected — please stay in front of the camera");
+            }
+          } else {
+            consecutiveNoFace = 0;
+            setNoFaceWarning(false);
           }
+
+          if (detected.multipleFaces) {
+            triggerAlert("Multiple faces detected in camera");
+          }
+        } else {
+          consecutiveNoFace = 0;
+          setNoFaceWarning(false);
         }
       }
     }, 1000);
+
     return () => clearInterval(detectionIntervalRef.current);
-  }, [isCallActive]);
+  }, [isCallActive, triggerAlert]);
 
   /* ── Vapi initialization ──────────────────────────────────────────────── */
   useEffect(() => {
-    const instance = new Vapi("960479af-1202-4414-b368-4c813846634e");
+    const instance = new Vapi("e1b6fe14-f22f-4a75-af38-5136766216ec");
     setVapi(instance);
 
     instance.on("speech-start", () => { setIsSpeaking(true); });
@@ -1647,9 +1837,17 @@ const VideoInterview: React.FC = () => {
       }
     });
 
-    instance.on("user-speech-start", () => setIsListening(true));
+    instance.on("user-speech-start", () => {
+      setIsListening(true);
+      // Reset silence tracking whenever candidate starts speaking
+      lastUserSpeakRef.current = Date.now();
+      silenceNotifiedRef.current = false;
+    });
+
     instance.on("user-speech-end", () => {
       setIsListening(false);
+      // Update last-speak timestamp when candidate finishes too
+      lastUserSpeakRef.current = Date.now();
       if (userTranscriptBufferRef.current.trim()) {
         setUserSub(userTranscriptBufferRef.current.trim());
         userTranscriptBufferRef.current = "";
@@ -1663,7 +1861,12 @@ const VideoInterview: React.FC = () => {
   const startCall = useCallback(() => {
     if (!vapi || !interviewInfo) return;
 
-    // ── FIX: map actual field names from interviewInfo
+    // Reset silence + alert tracking for new call
+    lastUserSpeakRef.current = Date.now();
+    silenceNotifiedRef.current = false;
+    alertCountRef.current = 0;
+    setAlertCount(0);
+
     const jobPosition = interviewInfo?.position || interviewInfo?.jobPosition || "the role";
     const jobDescription = interviewInfo?.jobDescription || "";
     const difficulty = interviewInfo?.difficulty || "Medium";
@@ -1677,25 +1880,20 @@ const VideoInterview: React.FC = () => {
     let firstMessage = "";
 
     if (isResumeInterview) {
-      // ── Resume-based path (unchanged logic, updated field names)
       systemContent = `You are a professional AI interviewer conducting a ${difficulty} level interview.\nCANDIDATE RESUME:\n${resumeData?.resumeText}\nROLE: ${jobPosition}\nJob Description: ${jobDescription}\nAsk ${numberOfQuestions} relevant questions one by one based on their resume and the role. Wait for a complete answer before asking the next question. Be professional and conversational.`;
       firstMessage = `Hi ${candidateName}, thank you for joining. I'm your AI interviewer for the ${jobPosition} position. Ready to begin?`;
     } else {
-      // ── FIX: support both `questions` (your actual field) and legacy `questionList`
       let questionList: string[] = [];
 
       try {
-        // Try interviewInfo.questions first (your actual data shape)
         const rawQuestions = interviewInfo?.questions ?? interviewInfo?.questionList;
 
         if (Array.isArray(rawQuestions) && rawQuestions.length > 0) {
-          // Array of objects with a `question` key, or plain strings
           questionList = rawQuestions
             .map((item: any) => (typeof item === "string" ? item : item?.question))
             .filter(Boolean);
         }
 
-        // Also try parsing if it's a JSON string
         if (questionList.length === 0 && typeof rawQuestions === "string") {
           const parsed = JSON.parse(rawQuestions);
           questionList = (Array.isArray(parsed) ? parsed : [])
@@ -1706,7 +1904,6 @@ const VideoInterview: React.FC = () => {
         console.error("Failed to parse questions:", e);
       }
 
-      // ── FIX: if questions array is empty, generate questions dynamically via system prompt
       const sharedRules = `
 STRICT RULES YOU MUST FOLLOW:
 - NEVER repeat or paraphrase the candidate's answer back to them. Do not say things like "Great, you mentioned X..." or "So you're saying Y...". Acknowledge briefly (e.g. "Got it.", "Thank you.") and move on.
@@ -1736,7 +1933,6 @@ ${sharedRules}`;
 
         firstMessage = `Hi ${candidateName}, thanks for joining today. I'm your interviewer for the ${jobPosition} position. We'll go through a few questions — take your time with each answer. Shall we begin?`;
       } else {
-        // ── Pre-defined questions available
         systemContent = `You are a professional AI interviewer at a reputed tech company.
 
 INTERVIEW QUESTIONS (ask one by one in order):
@@ -1880,25 +2076,6 @@ ${sharedRules}`;
     </div>
   );
 
-  /* ── Shared User video tile ──────────────────────────────────────────── */
-  const UserVideo = ({ vidRef }: { vidRef: React.RefObject<HTMLVideoElement> }) => (
-    <>
-      <video
-        ref={vidRef} muted playsInline
-        className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${camOn && streamReady ? "opacity-100" : "opacity-0"}`}
-        style={{ transform: "scaleX(-1)" }}
-      />
-      {(!camOn || !streamReady) && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-[#1a2a5e] to-[#060c25]">
-          <div className="w-16 h-16 rounded-full bg-[#2D55FB]/20 border border-[#2D55FB]/30 flex items-center justify-center mb-2">
-            {streamReady ? <VideoOff className="h-8 w-8 text-[#2D55FB]/60" /> : <User className="h-8 w-8 text-[#2D55FB]/50" />}
-          </div>
-          <span className="text-white/30 text-xs">{streamReady ? "Camera Off" : interviewInfo?.username || "You"}</span>
-        </div>
-      )}
-    </>
-  );
-
   /* ── Shared bottom controls ──────────────────────────────────────────── */
   const BottomBar = () => (
     <div className="shrink-0 bg-[#070e2b] border-t border-white/5 px-5 sm:px-8 py-3.5 flex items-center justify-between">
@@ -1929,9 +2106,14 @@ ${sharedRules}`;
         {noFaceWarning && (
           <span className="text-red-400 text-xs font-bold animate-pulse">⚠ No face detected</span>
         )}
+        {!noFaceWarning && alertCount > 0 && (
+          <span className="text-orange-400 text-xs font-bold">{alertCount}/3 warnings</span>
+        )}
       </div>
     </div>
   );
+
+  const username = interviewInfo?.username || "You";
 
   /* ══════════════════════════════════════════════════════════════════════════
      SCREEN 1 — LOBBY
@@ -1994,7 +2176,7 @@ ${sharedRules}`;
               <User className="h-6 w-6 text-white/80" />
             </div>
           </div>
-          <p className="text-white/50 text-sm -mt-2">{interviewInfo?.username || "You"} and AI Recruiter</p>
+          <p className="text-white/50 text-sm -mt-2">{username} and AI Recruiter</p>
           <motion.button
             onClick={handleJoin}
             className="px-10 py-3 bg-[#2D55FB] hover:bg-[#1e3fd4] text-white font-semibold rounded-xl transition-colors shadow-lg shadow-[#2D55FB]/30"
@@ -2034,11 +2216,18 @@ ${sharedRules}`;
 
       <div className="flex flex-1 min-h-0 gap-2.5 px-2.5 pb-2 pt-1">
         <div className="w-44 sm:w-52 shrink-0 flex flex-col gap-2">
+          {/* ── User PiP tile — uses stable callback ref ── */}
           <div className="relative rounded-xl overflow-hidden bg-[#0d1535] border border-white/5 shrink-0" style={{ aspectRatio: "4/3" }}>
-            <UserVideo vidRef={spotlightPipRef} />
+            <UserVideo
+              streamRef={streamRef}
+              camOn={camOn}
+              streamReady={streamReady}
+              username={username}
+              onVideoMount={onSpotlightVideoMount}
+            />
             <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent pointer-events-none" />
             <div className="absolute bottom-2 left-2.5 z-10">
-              <span className="text-white text-xs font-semibold drop-shadow">{interviewInfo?.username || "You"}</span>
+              <span className="text-white text-xs font-semibold drop-shadow">{username}</span>
             </div>
             <div className="absolute bottom-2 right-2.5 z-10"><MicCircle muted={!micOn} /></div>
           </div>
@@ -2110,9 +2299,12 @@ ${sharedRules}`;
       <div className="flex-1 min-h-0 flex flex-col px-4 sm:px-6 pt-2 pb-1 gap-0">
         <div className="flex gap-4 sm:gap-5" style={{ flex: "0 0 auto", height: "clamp(200px, 58vh, 420px)" }}>
 
+          {/* ── User tile — uses stable callback ref ── */}
           <div className="flex-1 relative rounded-2xl overflow-hidden bg-[#0d1535] border border-white/5">
             <video
-              ref={gridUserRef} muted playsInline
+              ref={onGridUserVideoMount}
+              muted
+              playsInline
               className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${camOn && streamReady ? "opacity-100" : "opacity-0"}`}
               style={{ transform: "scaleX(-1)" }}
             />
@@ -2126,7 +2318,7 @@ ${sharedRules}`;
             <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-transparent pointer-events-none" />
             <div className="absolute bottom-12 right-3 z-10"><MicCircle muted={!micOn} /></div>
             <div className="absolute bottom-4 left-4 z-10">
-              <span className="text-white font-semibold text-base drop-shadow">{interviewInfo?.username || "You"}</span>
+              <span className="text-white font-semibold text-base drop-shadow">{username}</span>
             </div>
             {isListening && (
               <div className="absolute top-4 left-4 z-10">
