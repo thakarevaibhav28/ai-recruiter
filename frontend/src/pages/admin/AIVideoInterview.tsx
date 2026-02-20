@@ -3,8 +3,7 @@ import {
   type DragEvent,
   type ChangeEvent,
   useEffect,
-  useRef,
-  use,
+  useRef
 } from "react";
 import toast from "react-hot-toast";
 import { CheckCircle2, X } from "lucide-react";
@@ -14,13 +13,11 @@ import Mail from "../../assets/admin/Mail_Icon.png";
 import Upload from "../../assets/admin/Upload.png";
 import Send_Invite from "../../assets/admin/send_Invite.png";
 import SendEmail from "../../assets/admin/send.png";
-import Preview from "../../assets/admin/eye1.png";
 import Calender from "../../assets/admin/calender.png";
 import Bookmark from "../../assets/admin/assessment/bookmark.png";
 import Edit from "../../assets/admin/assessment/edit1.png";
 import ActiveInterviews from "../../components/admin/AI Interview/ActiveInterviews";
 import { adminService } from "../../services/service/adminService";
-import { set } from "react-hook-form";
 
 export default function InterviewSetup() {
   const [fileName, setFileName] = useState<string | null>(null);
@@ -38,7 +35,7 @@ export default function InterviewSetup() {
   const [loading, setLoading] = useState(false);
   const [subject, setSubject] = useState("");
   const [messageBody, setMessageBody] = useState("");
-  const [interviewLink] = useState("ai.interview.can00D0@gmail.com");
+  const [interviewLink, setInterviewLink] = useState("");
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [isGenerated, setIsGenerated] = useState(false);
@@ -58,23 +55,80 @@ export default function InterviewSetup() {
   const [editMode, setEditMode] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  const handleFileDrop = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    const file = e.dataTransfer.files[0];
-    if (file && /\.(pdf|docx?|txt)$/i.test(file.name)) {
-      setFileName(file.name);
-    }
-  };
+ const handleFileDrop = async (e: DragEvent<HTMLDivElement>) => {
+  e.preventDefault();
+  const droppedFile = e.dataTransfer.files[0];
 
+  if (!droppedFile || !/\.(pdf|docx?|txt)$/i.test(droppedFile.name)) {
+    toast.error("Invalid file type");
+    return;
+  }
+
+  // Simulate input change
+  const fakeEvent = {
+    target: { files: [droppedFile] },
+  } as any;
+
+  await handleFileChange(fakeEvent);
+};
   const handleDragOver = (e: DragEvent<HTMLDivElement>) => e.preventDefault();
 
-  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (selectedFile && /\.(pdf|docx?|txt)$/i.test(selectedFile.name)) {
-      setFileName(selectedFile.name);
-      setFile(selectedFile); // important
+ const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
+  const selectedFile = e.target.files?.[0];
+  if (!selectedFile || !/\.(pdf|docx?|txt)$/i.test(selectedFile.name)) {
+    toast.error("Invalid file type");
+    return;
+  }
+
+  setFileName(selectedFile.name);
+  setFile(selectedFile);
+
+  try {
+    const fd = new FormData();
+    fd.append("jobDescription", selectedFile);
+
+    const res = await adminService.analyzeJD(fd);
+    const analysis = res.analysis;
+
+    if (!analysis) return;
+
+    // 🔥 Map difficulty
+    const difficultyLevel =
+      mapExperienceToDifficulty(
+        analysis?.experienceLevel,
+        analysis?.experienceYears
+      ) || "";
+
+    const autoQuestions = getDefaultQuestions(difficultyLevel);
+    const autoDuration = getDefaultDuration(difficultyLevel);
+
+    // 🔥 Auto-fill without overwriting user values
+    setPosition((prev) => prev || analysis?.jobTitle || "");
+    setDescription((prev) => prev || analysis?.jobSummary || analysis?.fullJobDescription || "");
+    setDifficulty((prev) => prev || difficultyLevel);
+    setNumberOfQuestions((prev) => prev || autoQuestions);
+    setDuration((prev) => prev || autoDuration);
+    setPassingScore((prev) => prev || "70");
+
+    // 🔥 Merge skills (requiredSkills + niceToHaveSkills)
+    const combinedSkills = [
+      ...(analysis?.requiredSkills || []),
+      ...(analysis?.niceToHaveSkills || []),
+    ];
+
+    if (combinedSkills.length > 0) {
+      setSkills((prev) => {
+        const unique = new Set([...prev, ...combinedSkills]);
+        return Array.from(unique);
+      });
     }
-  };
+
+    toast.success("JD analyzed & fields auto-filled ✅");
+  } catch (error: any) {
+    console.error(error);
+    toast.error("Failed to analyze JD");
+  }
+};
 
   const handleGenerateAndSendInvites = async () => {
     try {
@@ -82,11 +136,11 @@ export default function InterviewSetup() {
         toast.error("Please upload job description file");
         return;
       }
-
+      
       setLoading(true);
-
+      
       const formData = new FormData();
-
+      
       formData.append("jobDescription", file);
       formData.append("position", position);
       formData.append("description", description);
@@ -95,15 +149,17 @@ export default function InterviewSetup() {
       formData.append("passingScore", passingScore);
       formData.append("secondaryJobDescription", secondaryJobDescription);
       formData.append("numberOfQuestions", numberOfQuestions);
+      
       skills.forEach((skill) => {
         formData.append("skills", skill);
       });
-
+      
       const response = await adminService.generateAIInterview(formData);
       console.log("Interview Created:", response);
       setCreatedJobId(response.jobId);
-
+      
       setIsGenerated(true);
+      setInterviewLink(`${import.meta.env.FRONTEND_URL || "http://localhost:5173"}/user/login/${response.jobId}`);
 
       setSubject("Invitations to Complete Your AI Video Interview");
 
@@ -166,7 +222,10 @@ export default function InterviewSetup() {
   // };
 
   const onNavigateToInterviewSetup = async (assessment: any) => {
+    console.log("Navigating to Interview Setup with assessment:", assessment);
     setActiveTab("setup");
+   
+    setInterviewLink(`${import.meta.env.FRONTEND_URL || "http://localhost:5173"}/user/login/${assessment.jobId}`);
 
     try {
       const res = await adminService.getDraft(assessment._id);
@@ -255,7 +314,9 @@ export default function InterviewSetup() {
   // ================= SEND INVITATIONS =================
 
   const handleSendInvitations = async () => {
+
     try {
+      setLoading(true);
       if (!createdJobId) return toast.error("Create interview first");
       if (!selectedCandidates.length) return toast.error("Select candidates");
       if (!startDate || !endDate) return toast.error("Select dates");
@@ -274,6 +335,8 @@ export default function InterviewSetup() {
       toast.success("Invitations Sent Successfully");
     } catch (error: any) {
       toast.error(error.response?.data?.message || "Failed to send invitations");
+    }finally {
+      setLoading(false);
     }
   };
   const candidateDropdownRef = useRef(null);
@@ -389,6 +452,52 @@ export default function InterviewSetup() {
     }
   };
 
+  // ================= AI AUTO FILL HELPERS =================
+
+const mapExperienceToDifficulty = (level?: string, years?: string) => {
+  if (!level && !years) return "";
+
+  const lvl = level?.toLowerCase();
+
+  if (lvl?.includes("entry") || lvl?.includes("junior")) return "Easy";
+  if (lvl?.includes("mid")) return "Medium";
+  if (lvl?.includes("senior") || lvl?.includes("lead")) return "Hard";
+
+  const y = Number(years);
+  if (!isNaN(y)) {
+    if (y <= 1) return "Easy";
+    if (y <= 4) return "Medium";
+    return "Hard";
+  }
+
+  return "";
+};
+
+const getDefaultQuestions = (difficulty: string) => {
+  switch (difficulty) {
+    case "Easy":
+      return "10";
+    case "Medium":
+      return "15";
+    case "Hard":
+      return "20";
+    default:
+      return "";
+  }
+};
+
+const getDefaultDuration = (difficulty: string) => {
+  switch (difficulty) {
+    case "Easy":
+      return "15 minutes";
+    case "Medium":
+      return "30 minutes";
+    case "Hard":
+      return "60 minutes";
+    default:
+      return "";
+  }
+};
   return (
     <>
       <AdminLayout
@@ -998,10 +1107,12 @@ export default function InterviewSetup() {
                       <div className="w-full mt-6 flex justify-end gap-2 flex-wrap">
                         <button
                           onClick={handleSendInvitations}
+                           disabled={loading}
                           className="flex items-center gap-2 px-4 py-2 bg-[#4318FF] text-white rounded-md text-xs sm:text-sm"
                         >
                           <img src={SendEmail} alt="send" className="w-4 h-4" />
-                          <span>Send Invitations</span>
+                          {/* <span>Send Invitations</span> */}
+                          {loading ? "Sending..." : "Send Invitations"}
                         </button>
                       </div>
                     </div>

@@ -9,6 +9,13 @@ export const generateScorecardPDF = (
   summary,
   pdfPath,
 ) => {
+  console.log("Generating PDF with data:", {
+    candidate,
+    scores,
+    totalScore,
+    summary,
+    pdfPath,
+  });
   return new Promise((resolve, reject) => {
     try {
       const dir = path.dirname(pdfPath);
