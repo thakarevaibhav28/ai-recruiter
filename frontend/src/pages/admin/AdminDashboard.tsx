@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import AdminLayout from "../../common/AdminLayout";
+import { adminService } from "../../services/service/adminService";
 import {
   FaUsers,
   FaClipboardList,
@@ -7,6 +8,7 @@ import {
   FaClock,
 } from "react-icons/fa";
 import { Plus, UserPlus, Calendar, TrendingUp } from "lucide-react";
+import { Navigate, useNavigate } from "react-router-dom";
 
 // Stat Card Component
 const StatCard = ({
@@ -35,7 +37,11 @@ const StatCard = ({
 };
 
 // Quick Actions Component
-const QuickActions = ({ onNavigate }: { onNavigate: (page: string) => void }) => {
+const QuickActions = ({
+  onNavigate,
+}: {
+  onNavigate: (page: string) => void;
+}) => {
   const actions = [
     {
       title: "Create New Assessment",
@@ -44,18 +50,18 @@ const QuickActions = ({ onNavigate }: { onNavigate: (page: string) => void }) =>
       textColor: "text-indigo-600",
       navigateTo: "Tests & Assessments",
     },
-    { 
-      title: "Bulk Add Candidates", 
+    {
+      title: "Bulk Add Candidates",
       icon: UserPlus,
       navigateTo: "Candidates",
     },
-    { 
-      title: "Schedule Interviews", 
+    {
+      title: "Schedule Interviews",
       icon: Calendar,
       navigateTo: "AI Video Interview",
     },
-    { 
-      title: "View Analytics", 
+    {
+      title: "View Analytics",
       icon: TrendingUp,
       navigateTo: "Reports & Insights",
     },
@@ -250,30 +256,33 @@ const AttendanceOverview = () => {
 };
 
 // Upcoming Interviews Component
-const UpcomingInterviews = () => {
-  const interviews = [
-    {
-      name: "Yash Sharma",
-      role: "Frontend Developer",
-      time: "9:00 AM",
-      date: "June 24, 2025",
-      status: "Upcoming",
-    },
-    {
-      name: "Yash Sharma",
-      role: "Frontend Developer",
-      time: "9:00 AM",
-      date: "June 24, 2025",
-      status: "",
-    },
-    {
-      name: "Yash Sharma",
-      role: "Frontend Developer",
-      time: "9:00 AM",
-      date: "June 24, 2025",
-      status: "",
-    },
-  ];
+const UpcomingInterviews = ({ interviews }: { interviews: any[] }) => {
+  const getInitials = (name: string) => {
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .substring(0, 2);
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  };
+
+  const formatTime = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+  };
 
   return (
     <div className="bg-white rounded-lg p-5 border border-gray-200">
@@ -287,41 +296,51 @@ const UpcomingInterviews = () => {
       </div>
 
       <div className="space-y-3">
-        {interviews.map((interview, i) => (
-          <div
-            key={i}
-            className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0"
-          >
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-gradient-to-br from-indigo-400 to-indigo-600 flex items-center justify-center text-white text-sm font-medium">
-                YS
+        {interviews.length > 0 ? (
+          interviews.slice(0, 3).map((interview, i) => (
+            <div
+              key={i}
+              className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0"
+            >
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-linear-to-br from-indigo-400 to-indigo-600 flex items-center justify-center text-white text-sm font-medium">
+                  {getInitials(interview.candidate.name  || "UK")}
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-900">
+                    {interview.candidate.name || "Unknown Candidate"}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {interview.title || "No Title"}
+                  </p>
+                  <p className="text-xs text-gray-900 font-medium mt-0.5">
+                    {formatTime(interview.startDate)}
+                  </p>
+                </div>
+                  <span className="ml-2 px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full font-medium">
+                    Upcoming
+                  </span>
               </div>
-              <div>
-                <p className="text-sm font-medium text-gray-900">
-                  {interview.name}
-                </p>
-                <p className="text-xs text-gray-500">{interview.role}</p>
-                <p className="text-xs text-gray-900 font-medium mt-0.5">
-                  {interview.time}
-                </p>
-              </div>
-              {interview.status && (
-                <span className="ml-2 px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full font-medium">
-                  {interview.status}
+              <div className="flex items-center gap-2">
+                <button className="px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-200 rounded hover:bg-gray-50 transition-colors">
+                  Reschedule
+                </button>
+                <button className="px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-200 rounded hover:bg-gray-50 transition-colors">
+                  Cancel Interview
+                </button>
+                <span className="text-xs text-gray-500">
+                  {formatDate(interview.startDate)}
                 </span>
-              )}
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <button className="px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-200 rounded hover:bg-gray-50 transition-colors">
-                Reschedule
-              </button>
-              <button className="px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-200 rounded hover:bg-gray-50 transition-colors">
-                Cancel Interview
-              </button>
-              <span className="text-xs text-gray-500">{interview.date}</span>
-            </div>
+          ))
+        ) : (
+          <div className="py-8 text-center">
+            <p className="text-sm text-gray-500">
+              No upcoming interviews scheduled
+            </p>
           </div>
-        ))}
+        )}
       </div>
     </div>
   );
@@ -329,13 +348,105 @@ const UpcomingInterviews = () => {
 
 // Main Dashboard Component
 const Dashboard = () => {
-  const [activeMenuItem, setActiveMenuItem] = useState("Dashboard");
+  const [totalCandidates, setTotalCandidates] = useState("0");
+  const [totalScheduledTests, setTotalScheduledTests] = useState("0");
+  const [upcomingInterviews, setUpcomingInterviews] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch dashboard data on mount
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        setLoading(true);
+
+        // Fetch total candidates first
+        const candidatesResponse = await adminService.getAllCandidate();
+        console.log("Total Candidates Response:", candidatesResponse);
+
+        // Store candidates list for later use
+        let candidatesList: any[] = [];
+
+        // Handle candidates count from response with validation
+        if (candidatesResponse && candidatesResponse.status === 200) {
+          if (candidatesResponse.count) {
+            setTotalCandidates(candidatesResponse.count.toString());
+            candidatesList = candidatesResponse.data || [];
+          } else {
+            setTotalCandidates("0");
+          }
+        } else {
+          setTotalCandidates("0");
+        }
+
+        // Fetch upcoming interviews
+        const schedulesResponse = await adminService.getTotalSchedule();
+        console.log("Upcoming Interviews Response:", schedulesResponse);
+
+        // Handle scheduled tests count and upcoming interviews with validation
+        if (schedulesResponse && schedulesResponse.status === 200) {
+          // Set total scheduled tests count
+          if (schedulesResponse.totalScheduledTests !== undefined) {
+            setTotalScheduledTests(
+              schedulesResponse.totalScheduledTests.toString(),
+            );
+          } else if (schedulesResponse?.totalScheduledTests !== undefined) {
+            setTotalScheduledTests(
+              schedulesResponse.totalScheduledTests.toString(),
+            );
+          }
+
+          // Handle upcoming interviews
+          const upcomingData =
+            schedulesResponse.upcoming || schedulesResponse?.upcoming;
+
+          if (Array.isArray(upcomingData) && upcomingData.length > 0) {
+            console.log("Number of upcoming interviews:", upcomingData.length);
+
+            // Map interviews with candidate data
+            const interviewsWithCandidates = upcomingData.map(
+              (interview: any) => {
+                const candidate = candidatesList.find(
+                  (c: any) => c._id === interview.candidateId,
+                );
+
+                return {
+                  ...interview,
+                  candidateName: candidate?.username || "Unknown Candidate",
+                  candidateRole: candidate?.role || interview.title || "",
+                };
+              },
+            );
+
+            console.log(
+              "Mapped interviews with candidates:",
+              interviewsWithCandidates,
+            );
+            setUpcomingInterviews(interviewsWithCandidates);
+          } else {
+            setUpcomingInterviews([]);
+          }
+        } else {
+          setTotalScheduledTests("0");
+          setUpcomingInterviews([]);
+        }
+      } catch (error) {
+        console.error("Error fetching dashboard data:", error);
+        setTotalCandidates("0");
+        setTotalScheduledTests("0");
+        setUpcomingInterviews([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, []);
 
   const stats = [
     {
       icon: FaUsers,
       title: "Total Candidates",
-      value: "156",
+      value: loading ? "..." : totalCandidates,
       change: "+12% from Last Month",
       changeColor: "text-green-600",
       bgColor: "bg-purple-100",
@@ -344,7 +455,7 @@ const Dashboard = () => {
     {
       icon: FaClipboardList,
       title: "Tests Scheduled",
-      value: "23",
+      value: loading ? "..." : totalScheduledTests,
       change: "+5% from Last Month",
       changeColor: "text-green-600",
       bgColor: "bg-green-100",
@@ -370,17 +481,26 @@ const Dashboard = () => {
     },
   ];
 
+  const navigate = useNavigate();
+
   // Handle navigation from Quick Actions
-  const handleQuickActionNavigate = (page: string) => {
-    setActiveMenuItem(page);
+const handleQuickActionNavigate = (page: string) => {
+  const routeMap: Record<string, string> = {
+    "Dashboard": "/admin/dashboard",
+    "Candidates": "/admin/candidates",
+    "Tests & Assessments": "/admin/tests",
+    "AI Video Interview": "/admin/video",
+    "Reports & Insights": "/admin/reports",
+    "Settings": "/admin/settings",
   };
+
+  navigate(routeMap[page]);
+};
 
   return (
     <AdminLayout
       heading="Hi, Himanshu"
       showSearch={true}
-      activeMenuItem={activeMenuItem}
-      onMenuItemClick={setActiveMenuItem}
     >
       {/* Stat Cards */}
       <div className="grid grid-cols-4 gap-4">
@@ -405,7 +525,7 @@ const Dashboard = () => {
           <AttendanceOverview />
         </div>
         <div className="col-span-3">
-          <UpcomingInterviews />
+          <UpcomingInterviews interviews={upcomingInterviews} />
         </div>
       </div>
     </AdminLayout>
