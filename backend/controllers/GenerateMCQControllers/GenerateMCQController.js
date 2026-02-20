@@ -1,18 +1,20 @@
 import dotenv from "dotenv";
+import Question from "../../models/Question.js";
 dotenv.config();
 
 export const generateMCQs = async (req, res) => {
   try {
     const { topic, difficulty, count } = req.body;
-
-    if (!topic || !difficulty || !count) {
+    const {id} = req.params;
+    const interviewId = id;
+    if (!topic || !difficulty || !count || !interviewId) {
       return res.status(400).json({
         success: false,
-        message: "topic, difficulty and count are required",
+        message: "topic, difficulty, count and interviewId are required",
       });
     }
 
-    const BATCH_SIZE = 5; // generate 5 at a time
+    const BATCH_SIZE = 5;
     const totalBatches = Math.ceil(count / BATCH_SIZE);
     let allQuestions = [];
 
@@ -86,17 +88,28 @@ Format exactly like this:
 
       const batchQuestions = JSON.parse(jsonMatch[0]);
 
+      // ✅ Save batch immediately in DB
+      const questionDocs = batchQuestions.map((q) => ({
+        interviewId: interviewId,
+        questionText: q.question,
+        options: q.options,
+        correctAnswer: q.correctAnswer,
+      }));
+
+      await Question.insertMany(questionDocs);
+
+      // Add to final response array
       allQuestions = [...allQuestions, ...batchQuestions];
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       questions: allQuestions.slice(0, count),
     });
 
   } catch (error) {
     console.error("MCQ Generation Error:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Failed to generate MCQs",
       error: error.message,

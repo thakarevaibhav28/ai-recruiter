@@ -62,6 +62,6 @@ app.use("/scorecards", express.static("scorecards"));
 // Routes
 app.use("/api/admin", adminRoutes);
 app.use("/api/candidate", candidateRoutes);
-app.use("/api/generate-mcq", MCQRoutes);
+app.use("/api/admin/generate-mcq", MCQRoutes);
 
 export default app;

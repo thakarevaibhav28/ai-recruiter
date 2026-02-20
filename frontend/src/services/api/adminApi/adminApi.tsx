@@ -18,7 +18,9 @@ class AdminApi {
     GET_AI: "/admin/interviews/list",
     DELETE_CANDIDATE:"/admin/candidate",
     GET_ME: "/admin/me",
-    UPLOAD_JD:"/admin/analyze"
+    UPLOAD_JD:"/admin/analyze",
+    GENERATE_MCQ:"/admin/generate-mcq",
+    TOTAL_SCHEDULE: "/admin/total-schedule",
   };
 
  
@@ -100,6 +102,13 @@ class AdminApi {
   };
   analyzeJD(data:any){
     return api._postFormData(this._url.UPLOAD_JD,data)
+  }
+  generateMCQ(data:any,id?:string){
+    return api._post(`${this._url.GENERATE_MCQ}/${id}`,data)
+  }
+  //get total schedule
+  getTotalSchedule() {
+    return api._get(this._url.TOTAL_SCHEDULE);
   }
 }
 
