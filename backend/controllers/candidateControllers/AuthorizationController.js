@@ -1,8 +1,9 @@
 import Candidate from "../../models/Candidate.js";
-import Interview from "../../models/MCQ_Interview.js";
 import csv from "csv-parser";
 import fs from "fs";
 import {getIO} from "../../socket.js"
+import AI_Interview from "../../models/AI_Interview.js";
+import MCQ_Interview from "../../models/MCQ_Interview.js";
 
 
 
@@ -162,26 +163,6 @@ export const UpdateCandidate= async (req, res) => {
   }
 }
 
-export const GetAllSchedule=async (req, res) => {
-  try {
-    const [{ total } = { total: 0 }] = await Interview.aggregate([
-      { $unwind: "$candidates" },
-      {
-        $match: {
-          "candidates.interviewLink": { $type: "string", $ne: null },
-          "candidates.password": { $type: "string", $ne: null },
-        },
-      },
-      { $count: "total" },
-    ]);
-
-    return res.json({ totalSchedules: total });
-  } catch (err) {
-    console.error("Error counting schedules:", err.message);
-    res.status(500).json({ message: "Server error" });
-  }
-}
-
  export const BulkAddCandidates = async (req, res) => {
     const results = [];
 
@@ -262,3 +243,147 @@ export const GetAllSchedule=async (req, res) => {
       res.status(500).json({ message: "Server error" });
     }
 }
+export const GetAllSchedule = async (req, res) => {
+  try {
+    const now = new Date();
+
+    /* =====================================================
+       1️⃣ MCQ INTERVIEWS
+    ===================================================== */
+
+    const mcqData = await MCQ_Interview.aggregate([
+      { $unwind: "$candidates" },
+
+      {
+        $lookup: {
+          from: "candidates",
+          localField: "candidates.candidateId",
+          foreignField: "_id",
+          as: "candidateDetails",
+        },
+      },
+      { $unwind: { path: "$candidateDetails", preserveNullAndEmptyArrays: true } },
+
+      {
+        $project: {
+          _id: 1,
+          type: { $literal: "MCQ" },
+          title: "$test_title",
+          examType: 1,
+          difficulty: 1,
+
+          candidate: {
+            _id: "$candidateDetails._id",
+            name: "$candidateDetails.name",
+            email: "$candidateDetails.email",
+            mobile: "$candidateDetails.mobile",
+            role: "$candidateDetails.role",
+            year_of_experience: "$candidateDetails.year_of_experience",
+            status: "$candidateDetails.status",
+            candidate_status: "$candidateDetails.candidate_status",
+          },
+
+          startDate: "$candidates.start_Date",
+          endDate: "$candidates.end_Date",
+          interviewStatus: "$candidates.status",
+          interviewLink: "$candidates.interviewLink",
+          password: "$candidates.password", // for filtering only
+        },
+      },
+    ]);
+
+    /* =====================================================
+       2️⃣ AI INTERVIEWS
+    ===================================================== */
+
+    const aiData = await AI_Interview.aggregate([
+      { $unwind: "$candidates" },
+
+      {
+        $lookup: {
+          from: "candidates",
+          localField: "candidates.candidateId",
+          foreignField: "_id",
+          as: "candidateDetails",
+        },
+      },
+      { $unwind: { path: "$candidateDetails", preserveNullAndEmptyArrays: true } },
+
+      {
+        $project: {
+          _id: 1,
+          type: { $literal: "AI" },
+          title: "$position",
+          examType: 1,
+          difficulty: 1,
+
+          candidate: {
+            _id: "$candidateDetails._id",
+            name: "$candidateDetails.name",
+            email: "$candidateDetails.email",
+            mobile: "$candidateDetails.mobile",
+            role: "$candidateDetails.role",
+            year_of_experience: "$candidateDetails.year_of_experience",
+            status: "$candidateDetails.status",
+            candidate_status: "$candidateDetails.candidate_status",
+          },
+
+          startDate: "$candidates.scheduledStartDate",
+          endDate: "$candidates.scheduledEndDate",
+          interviewStatus: "$status",
+          interviewLink: "$candidates.interviewLink",
+          password: "$candidates.password",
+        },
+      },
+    ]);
+
+    /* =====================================================
+       3️⃣ MERGE + FILTER (Remove Password)
+    ===================================================== */
+
+    const allInterviews = [...mcqData, ...aiData]
+      .filter((item) => item.interviewLink && item.password)
+      .map(({ password, ...rest }) => rest);
+
+    /* =====================================================
+       4️⃣ CATEGORIZE
+    ===================================================== */
+
+    const upcoming = [];
+    const ongoing = [];
+    const past = [];
+
+    allInterviews.forEach((item) => {
+      if (!item.startDate || !item.endDate) return;
+
+      if (now < new Date(item.startDate)) {
+        upcoming.push(item);
+      } else if (
+        now >= new Date(item.startDate) &&
+        now <= new Date(item.endDate)
+      ) {
+        ongoing.push(item);
+      } else {
+        past.push(item);
+      }
+    });
+
+    /* =====================================================
+       5️⃣ RESPONSE
+    ===================================================== */
+
+    res.status(200).json({
+      totalScheduledTests: allInterviews.length,
+      upcomingCount: upcoming.length,
+      ongoingCount: ongoing.length,
+      pastCount: past.length,
+      upcoming,
+      ongoing,
+      past,
+    });
+
+  } catch (error) {
+    console.error("GetAllSchedule Error:", error);
+    res.status(500).json({ message: "Server Error" });
+  }
+};

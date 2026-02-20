@@ -3,7 +3,7 @@ import Candidate from "../../models/Candidate.js";
 import Question from "../../models/Question.js";
 import Score from "../../models/Score.js";
 import AI_Interview from "../../models/AI_Interview.js";
-import { generateQuestions } from "../../services/aiService.js";
+import { generateMCQs } from "../../controllers/GenerateMCQControllers/GenerateMCQController.js";
 import { sendMCQInterviewLink } from "../../services/emailService.js";
 import mongoose from "mongoose";
 
@@ -95,15 +95,15 @@ export const CreateMCQTemplate = async (req, res) => {
     const jobDescription = req.file ? req.file.path.replace(/\\/g, "/") : "";
     console.log("Job description path:", jobDescription);
 
-    // Generate questions using AI
-    const questions = await generateQuestions(
-      jobDescription,
-      test_title,
-      difficulty,
-      "MCQ",
-      parseInt(no_of_questions),
-    );
-    console.log("Generated questions for template:", questions);
+    // // Generate questions using AI
+    // const questions = await generateQuestions(
+    //   jobDescription,
+    //   test_title,
+    //   difficulty,
+    //   "MCQ",
+    //   parseInt(no_of_questions),
+    // );
+    // console.log("Generated questions for template:", questions);
 
     // Create interview template
     const interview = await MCQ_Interview.create({
@@ -119,21 +119,21 @@ export const CreateMCQTemplate = async (req, res) => {
       isTemplate: true, // Mark as template
     });
 
-    // Save questions
-    const questionDocs = questions.map((q) => ({
-      interviewId: interview._id,
-      questionText: q.question,
-      options: q.options,
-      correctAnswer: q.correctAnswer,
-    }));
-    await Question.insertMany(questionDocs);
+    // // Save questions
+    // const questionDocs = questions.map((q) => ({
+    //   interviewId: interview._id,
+    //   questionText: q.question,
+    //   options: q.options,
+    //   correctAnswer: q.correctAnswer,
+    // }));
+    // await Question.insertMany(questionDocs);
 
     res.status(201).json({
       success: true,
       message: "Assessment template created successfully",
       data: {
         interview,
-        questionCount: questions.length,
+        // questionCount: questions.length,
       },
     });
   } catch (error) {
@@ -208,14 +208,14 @@ export const AssessmentInvitation = async (req, res) => {
     // Get job description file path
     const jobDescription = req.file ? req.file.path.replace(/\\/g, "/") : "";
 
-    // Generate questions using AI
-    const questions = await generateQuestions(
-      jobDescription,
-      test_title,
-      difficulty,
-      "MCQ",
-      parseInt(no_of_questions),
-    );
+    // // Generate questions using AI
+    // const questions = await generateQuestions(
+    //   jobDescription,
+    //   test_title,
+    //   difficulty,
+    //   "MCQ",
+    //   parseInt(no_of_questions),
+    // );
 
     // Create interview
     const interview = await MCQ_Interview.create({
@@ -232,13 +232,13 @@ export const AssessmentInvitation = async (req, res) => {
     });
 
     // Save questions
-    const questionDocs = questions.map((q) => ({
-      interviewId: interview._id,
-      questionText: q.question,
-      options: q.options,
-      correctAnswer: q.correctAnswer,
-    }));
-    await Question.insertMany(questionDocs);
+    // const questionDocs = questions.map((q) => ({
+    //   interviewId: interview._id,
+    //   questionText: q.question,
+    //   options: q.options,
+    //   correctAnswer: q.correctAnswer,
+    // }));
+    // await Question.insertMany(questionDocs);
 
     // Schedule candidates and send emails
     const scheduledCandidates = [];
@@ -254,7 +254,7 @@ export const AssessmentInvitation = async (req, res) => {
       // Generate credentials
       const username = `user_${Math.random().toString(36).substring(2, 10)}`;
       const password = Math.random().toString(36).slice(-8);
-      const interviewLink = `${process.env.FRONTEND_URL || "http://localhost:5173"}/candidate/interview/${interview._id}`;
+      const interviewLink = `${process.env.FRONTEND_URL || "http://localhost:5173"}/user/login/${interview._id}`;
 
       const entry = {
         candidateId: candidate._id,
@@ -318,7 +318,7 @@ export const AssessmentInvitation = async (req, res) => {
       message: `Assessment created and invitations sent to ${successfulEmails} candidate(s)`,
       data: {
         interview,
-        questionCount: questions.length,
+        // questionCount: questions.length,
         scheduledCandidates,
         emailStats: {
           total: emailResults.length,
@@ -343,7 +343,6 @@ export const AssessmentInvitationByID = async (req, res) => {
     const { assessmentId } = req.params;
     const { candidateIds, start_date, end_date } = req.body;
 
-    // ── Validate fields ──────────────────────────────────────
     if (!candidateIds || !start_date || !end_date) {
       return res.status(400).json({
         success: false,
@@ -351,15 +350,15 @@ export const AssessmentInvitationByID = async (req, res) => {
       });
     }
 
-    // ── Parse candidateIds ───────────────────────────────────
     let candidateArray;
     try {
       candidateArray =
         typeof candidateIds === "string"
           ? JSON.parse(candidateIds)
           : candidateIds;
+
       if (!Array.isArray(candidateArray) || candidateArray.length === 0) {
-        throw new Error("Invalid candidateIds array");
+        throw new Error("Invalid array");
       }
     } catch (err) {
       return res.status(400).json({
@@ -368,7 +367,6 @@ export const AssessmentInvitationByID = async (req, res) => {
       });
     }
 
-    // ── Validate dates ───────────────────────────────────────
     const startDate = new Date(start_date);
     const endDate = new Date(end_date);
 
@@ -379,8 +377,8 @@ export const AssessmentInvitationByID = async (req, res) => {
       });
     }
 
-    // ── Find the existing assessment ─────────────────────────
     const interview = await MCQ_Interview.findById(assessmentId);
+
     if (!interview) {
       return res.status(404).json({
         success: false,
@@ -388,21 +386,32 @@ export const AssessmentInvitationByID = async (req, res) => {
       });
     }
 
-    // ── Loop candidates — same logic as your existing route ──
     const scheduledCandidates = [];
+    const skippedCandidates = [];
     const emailResults = [];
 
     for (const candId of candidateArray) {
       const candidate = await Candidate.findById(candId);
-      if (!candidate) {
-        console.warn(`Candidate ${candId} not found, skipping...`);
-        continue;
+      if (!candidate) continue;
+
+      // 🔥 STRICT CHECK: already invited?
+      const alreadyInvited = interview.candidates.find(
+        (c) => c.candidateId.toString() === candId.toString(),
+      );
+
+      if (alreadyInvited) {
+        skippedCandidates.push({
+          candidate: candidate.email,
+          reason: "Already invited",
+        });
+        continue; // ❌ skip sending again
       }
 
-      // Generate credentials (same as your existing route)
       const username = `user_${Math.random().toString(36).substring(2, 10)}`;
       const password = Math.random().toString(36).slice(-8);
-      const interviewLink = `${process.env.FRONTEND_URL || "http://localhost:5173"}/candidate/interview/${interview._id}`;
+      const interviewLink = `${
+        process.env.FRONTEND_URL || "http://localhost:5173"
+      }/user/login/${interview._id}`;
 
       const entry = {
         candidateId: candidate._id,
@@ -411,17 +420,18 @@ export const AssessmentInvitationByID = async (req, res) => {
         password,
         start_Date: startDate,
         end_Date: endDate,
+        status: "pending",
+        assignedQuestions: [],
       };
 
-      // Push to assessment candidates array
       interview.candidates.push(entry);
+
       scheduledCandidates.push({
         ...entry,
         name: candidate.name,
         email: candidate.email,
       });
 
-      // Send email — exact same call as your existing route
       try {
         await sendMCQInterviewLink(
           candidate.email,
@@ -439,12 +449,9 @@ export const AssessmentInvitationByID = async (req, res) => {
           startDate,
           endDate,
         );
+
         emailResults.push({ candidate: candidate.email, status: "sent" });
       } catch (emailError) {
-        console.error(
-          `Failed to send email to ${candidate.email}:`,
-          emailError,
-        );
         emailResults.push({
           candidate: candidate.email,
           status: "failed",
@@ -453,27 +460,14 @@ export const AssessmentInvitationByID = async (req, res) => {
       }
     }
 
-    // ── Save updated assessment ──────────────────────────────
     await interview.save();
-
-    const successfulEmails = emailResults.filter(
-      (r) => r.status === "sent",
-    ).length;
-    const failedEmails = emailResults.filter(
-      (r) => r.status === "failed",
-    ).length;
 
     return res.status(200).json({
       success: true,
-      message: `Invitations sent to ${successfulEmails} candidate(s)`,
+      message: "Invitation process completed",
       data: {
-        assessmentId: interview._id,
         scheduledCandidates,
-        emailStats: {
-          total: emailResults.length,
-          successful: successfulEmails,
-          failed: failedEmails,
-        },
+        skippedCandidates,
         emailResults,
       },
     });
@@ -595,17 +589,11 @@ export const updateMCQInterview = async (req, res) => {
     /* ================= FILE UPDATE ================= */
 
     if (req.file) {
-      // Delete old file safely
-      if (interview.jobDescription) {
-        const oldPath = path.resolve(interview.jobDescription);
-
-        if (fs.existsSync(oldPath)) {
-          try {
-            fs.unlinkSync(oldPath);
-          } catch (err) {
-            console.error("Failed to delete old job description:", err);
-          }
-        }
+      if (
+        interview.jobDescription &&
+        fs.existsSync(path.resolve(interview.jobDescription))
+      ) {
+        fs.unlinkSync(path.resolve(interview.jobDescription));
       }
 
       interview.jobDescription = req.file.path.replace(/\\/g, "/");
@@ -625,12 +613,10 @@ export const updateMCQInterview = async (req, res) => {
     ];
 
     allowedFields.forEach((field) => {
-      if (req.body[field] !== undefined && req.body[field] !== "") {
+      if (req.body[field] !== undefined) {
         interview[field] = req.body[field];
       }
     });
-
-    /* ================= SAVE ================= */
 
     await interview.save();
 
@@ -665,9 +651,53 @@ export const getMCQInterviewById = async (req, res) => {
     }
 
     res.json({ interview });
-
   } catch (error) {
     console.log(error);
     res.status(500).json({ message: "Server error" });
   }
 };
+
+export const GetAllAssessmentSchedule = async (req, res) => {
+  try {
+    const [{ total } = { total: 0 }] = await MCQ_Interview.aggregate([
+      { $unwind: "$candidates" },
+      {
+        $match: {
+          "candidates.interviewLink": { $type: "string", $ne: null },
+          "candidates.password": { $type: "string", $ne: null },
+        },
+      },
+      { $count: "total" },
+    ]);
+
+    return res.json({ totalSchedules: total });
+  } catch (err) {
+    console.error("Error counting schedules:", err.message);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// export const GenerateMCQQuestions = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+
+//     const interview = await MCQ_Interview.findById(id);
+//     if (!interview) {
+//       return res.status(404).json({ message: "Interview not found" });
+//     }
+
+//     const jobDescription = interview.jobDescription || "";
+//     const questions = await generateMCQs(
+//       jobDescription,
+//       interview.test_title,
+//       interview.difficulty,
+//       "MCQ",
+//       interview.no_of_questions,
+//     );
+
+//     res.json({ questions });
+//   } catch (error) {
+//     console.error("Error generating questions:", error);
+//     res.status(500).json({ message: "Server error" });
+//   }
+// };

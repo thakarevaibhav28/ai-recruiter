@@ -806,67 +806,136 @@ const TestsAssessments = () => {
   };
 
   // 🆕 Helper: map AI experience level → your exam level options
-  const mapExperienceToLevel = (level: string) => {
-    const map: Record<string, string> = {
-      Entry: "Easy", Junior: "Easy",
-      Mid: "Intermediate",
-      Senior: "Advanced", Lead: "Advanced",
-    };
-    return map[level] || "";
-  };
+const mapExperienceToLevel = (level?: string, years?: string) => {
+  if (!level && !years) return "";
 
+  const lvl = level?.toLowerCase();
+
+  if (lvl?.includes("entry") || lvl?.includes("junior")) return "Easy";
+  if (lvl?.includes("mid")) return "Intermediate";
+  if (lvl?.includes("senior") || lvl?.includes("lead")) return "Advanced";
+
+  // fallback using years if provided
+  const y = Number(years);
+  if (!isNaN(y)) {
+    if (y <= 1) return "Easy";
+    if (y <= 4) return "Intermediate";
+    return "Advanced";
+  }
+
+  return "";
+};
+// 🔹 Decide default questions based on difficulty
+const getDefaultQuestionsByLevel = (level: string) => {
+  switch (level) {
+    case "Easy":
+      return "20";
+    case "Intermediate":
+      return "30";
+    case "Advanced":
+      return "40";
+    default:
+      return "";
+  }
+};
+// 🔹 Decide duration based on number of questions
+const getDefaultDuration = (questions: string) => {
+  const q = Number(questions);
+  if (!q) return "";
+
+  if (q <= 20) return "30 min";
+  if (q <= 30) return "60 min";
+  if (q <= 40) return "90 min";
+  return "120 min";
+};
   // 🔄 UPDATED: handleFileUpload now calls AI to analyze JD and auto-fills form
-  const handleFileUpload = async (e:any) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const validTypes = ["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
-    if (!validTypes.includes(file.type)) {
-      setErrors((prev) => ({ ...prev, jobDescription: "Please upload a PDF or DOC file" }));
-      return;
+const handleFileUpload = async (e: any) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const validTypes = [
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ];
+
+  if (!validTypes.includes(file.type)) {
+    setErrors((prev) => ({
+      ...prev,
+      jobDescription: "Please upload a PDF or DOC file",
+    }));
+    return;
+  }
+
+  // Store file immediately
+  handleInputChange("jobDescription", file);
+
+  setJdAnalysis(null);
+  setJdError(null);
+  setJdLoading(true);
+
+  try {
+    const fd = new FormData();
+    fd.append("jobDescription", file);
+
+    const response = await adminService.analyzeJD(fd);
+    console.log("JD analysis response:", response);
+    const analysis = response.analysis;
+
+    if (analysis) {
+      setJdAnalysis(analysis);
+
+      // 🔥 Determine difficulty
+      const difficulty =
+        mapExperienceToLevel(
+          analysis?.experienceLevel,
+          analysis?.experienceYears
+        ) || "";
+
+      // 🔥 Auto-set questions based on difficulty
+      const defaultQuestions = getDefaultQuestionsByLevel(difficulty);
+
+      // 🔥 Auto-set duration based on questions
+      const defaultDuration = getDefaultDuration(defaultQuestions);
+
+      setFormData((prev) => ({
+        ...prev,
+
+        jobDescription: file,
+        jobDescriptionText: analysis?.fullJobDescription || "",
+
+        // 🔹 Auto-fill only if user hasn't typed
+        testTitle: prev.testTitle || analysis?.jobTitle || "",
+        primarySkill: prev.primarySkill || analysis?.primarySkill || "",
+        secondarySkill: prev.secondarySkill || analysis?.secondarySkill || "",
+        examLevel: prev.examLevel || difficulty,
+
+        noOfQuestions: prev.noOfQuestions || defaultQuestions,
+        duration: prev.duration || defaultDuration,
+
+        // Smart default passing score
+        passingScore: prev.passingScore || "70",
+      }));
     }
-
-    // Store the file immediately
-    handleInputChange("jobDescription", file);
-    setJdAnalysis(null);
-    setJdError(null);
-    setJdLoading(true);
-
-    try {
-      const fd = new FormData();
-      fd.append("jobDescription", file);
-      const response = await adminService.analyzeJD(fd);
-      const analysis = response.data?.analysis;
-
-      if (analysis) {
-        setJdAnalysis(analysis);
-        // Auto-fill only empty fields — never overwrite what user already typed
-        setFormData((prev) => ({
-          ...prev,
-          jobDescription: file,
-          jobDescriptionText: analysis?.fullJobDescription,
-          testTitle: prev.testTitle || analysis?.jobTitle,
-          primarySkill: prev.primarySkill || analysis?.primarySkill,
-          secondarySkill: prev.secondarySkill || analysis?.secondarySkill,
-          examLevel: prev.examLevel || mapExperienceToLevel(analysis?.experienceLevel),
-        }));
-      }
-    } catch (err: any) {
-      setJdError(err.response?.data?.message || "Failed to analyze JD. You can still proceed manually.");
-    } finally {
-      setJdLoading(false);
-    }
-  };
-
+  } catch (err: any) {
+    setJdError(
+      err?.response?.data?.message ||
+        "Failed to analyze JD. You can proceed manually."
+    );
+  } finally {
+    setJdLoading(false);
+  }
+};
   // 🔄 UPDATED: removeFile also clears JD analysis state
-  const removeFile = () => {
-    handleInputChange("jobDescription", null);
-    handleInputChange("jobDescriptionText", "");
-    setJdAnalysis(null);
-    setJdError(null);
-    const el = document.getElementById("jd-upload");
-    if (el) el.value = "";
-  };
+const removeFile = () => {
+  handleInputChange("jobDescription", null);
+  handleInputChange("jobDescriptionText", "");
+  setJdAnalysis(null);
+  setJdError(null);
 
+  const el = document.getElementById("jd-upload") as HTMLInputElement;
+  if (el) el.value = "";
+};
   const toggleCandidateSelection = (candidate:any) => {
     const isSelected = formData.candidates.some((c:any) => c._id === candidate._id);
     handleInputChange("candidates", isSelected
@@ -1041,7 +1110,7 @@ const TestsAssessments = () => {
     }
     setLoading(true);
     try {
-      await adminService.sendInvites(activeAssessmentId, {
+      await adminService.sendInvites(id, {
         candidateIds: formData.candidates.map((c) => c._id),
         start_date: formData.startDate,
         end_date: formData.endDate,
