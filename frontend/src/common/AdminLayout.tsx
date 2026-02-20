@@ -20,15 +20,10 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
   showSearch = true,
   userName = "John",
   userInitial = "H",
-  activeMenuItem = "Dashboard",
-  onMenuItemClick
 }) => {
   return (
     <div className="flex min-h-screen w-full bg-[#F4F7FE] ">
-      <Sidebar 
-        activeItem={activeMenuItem}
-        onItemClick={onMenuItemClick}
-      />
+      <Sidebar       />
       
       <div className="flex flex-1 flex-col ml-60 pt-14">
         <Header 
