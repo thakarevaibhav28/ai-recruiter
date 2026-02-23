@@ -1,3 +1,4 @@
+// -----------------------new code -----------------------
 import express from "express";
 import auth from "../middleware/auth.js";
 import { uploadCSV, upload, uploadMemory } from "../middleware/upload.js";
@@ -382,119 +383,112 @@ router.get("/student-scores",auth("admin"), getStudentScores);
 // Get all interviews created by the admin
 
 // ── Helper: extract raw text from buffer ───────────────────
+
 async function extractTextFromFile(buffer, mimetype) {
   if (mimetype === "application/pdf") {
-    return new Promise((resolve, reject) => {
-      const pdfParser = new PDFParser();
+    const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
 
-      pdfParser.on("pdfParser_dataError", (err) =>
-        reject(err.parserError)
-      );
-
-      pdfParser.on("pdfParser_dataReady", (pdfData) => {
-        let text = "";
-
-        pdfData.Pages.forEach((page) => {
-          page.Texts.forEach((item) => {
-            if (!item.R || !item.R[0] || !item.R[0].T) return;
-
-            try {
-              text += decodeURIComponent(item.R[0].T) + " ";
-            } catch (e) {
-              text += item.R[0].T + " ";
-            }
-          });
-        });
-
-        resolve(text);
-      });
-
-      pdfParser.parseBuffer(buffer);
+    const loadingTask = pdfjsLib.getDocument({
+      data: new Uint8Array(buffer),
     });
+
+    const pdf = await loadingTask.promise;
+
+    let fullText = "";
+
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+
+      const pageText = content.items
+        .map((item) => item.str)
+        .join(" ");
+
+      fullText += pageText + "\n";
+    }
+
+    return fullText;
   }
 
-  if (
-    mimetype === "application/msword" ||
-    mimetype ===
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-  ) {
-    const result = await mammoth.extractRawText({ buffer });
-    return result.value;
-  }
-
-  throw new Error("Unsupported file type");
+  // DOC / DOCX
+  const result = await mammoth.extractRawText({ buffer });
+  return result.value;
 }
-/* ─────────────────────────────────────────────
-   Analyze JD With AI
-───────────────────────────────────────────── */
-async function analyzeJDWithAI(rawText) {
-  const client = new OpenAI({
-    baseURL: "https://openrouter.ai/api/v1",
-    apiKey: process.env.OPENROUTER_API_KEY,
-  });
+/* ──────────────────────────────────────────────
+   Helper: Analyze using Hugging Face
+   SAME JSON STRUCTURE AS BEFORE
+────────────────────────────────────────────── */
+import Groq from "groq-sdk";
 
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY,
+});
+
+async function analyzeJDWithAI(rawText) {
   const prompt = `
 You are an expert HR analyst. Analyze the following Job Description and extract structured information.
 
-Return a valid JSON object with exactly these fields:
-
+Return ONLY valid JSON with exactly this structure:
 {
-  "jobTitle": "string",
-  "jobSummary": "2-3 sentence summary of the role",
-  "primarySkill": "most important technical skill (single skill)",
-  "secondarySkill": "second most important skill (single skill, or empty string)",
+  "jobTitle": "",
+  "jobSummary": "",
+  "primarySkill": "",
+  "secondarySkill": "",
   "requiredSkills": [],
   "niceToHaveSkills": [],
-  "experienceLevel": "Entry / Junior / Mid / Senior / Lead",
-  "experienceYears": "e.g. 3-5 years (or empty string if not specified)",
+  "experienceLevel": "",
+  "experienceYears": "",
   "responsibilities": [],
   "qualifications": [],
-  "jobType": "Full-time / Part-time / Contract / Remote (or empty string)",
-  "industry": "industry domain",
-  "fullJobDescription": "cleaned full job description text"
+  "jobType": "",
+  "industry": "",
+  "fullJobDescription": ""
 }
 
 Job Description:
 ${rawText}
-
-Return ONLY JSON. No markdown.
 `;
 
-  const response = await client.chat.completions.create({
-    model: "openai/gpt-3.5-turbo",
-    messages: [{ role: "user", content: prompt }],
-    temperature: 0.2,
+  const response = await groq.chat.completions.create({
+    model: "llama-3.3-70b-versatile", // 🔥 Very powerful model
+    messages: [
+      {
+        role: "user",
+        content: prompt,
+      },
+    ],
+    temperature: 0.3,
   });
 
-  let content = response.choices[0]?.message?.content?.trim();
+  const content = response.choices[0]?.message?.content?.trim();
 
-  // 🔥 Clean markdown if model returns it
-  content = content
-    .replace(/```json/gi, "")
-    .replace(/```/g, "")
-    .trim();
-
-  try {
-    return JSON.parse(content);
-  } catch (err) {
-    console.error("AI JSON Parse Error:", content);
-    throw new Error("AI returned invalid JSON format");
+  if (!content) {
+    throw new Error("Invalid response from Groq");
   }
+
+  // Safe JSON extraction
+  const jsonStart = content.indexOf("{");
+  const jsonEnd = content.lastIndexOf("}");
+
+  if (jsonStart === -1 || jsonEnd === -1) {
+    throw new Error("AI did not return valid JSON");
+  }
+
+  const finalJson = content.substring(jsonStart, jsonEnd + 1);
+
+  return JSON.parse(finalJson);
 }
 
-/* ─────────────────────────────────────────────
-   POST /api/admin/analyze
-───────────────────────────────────────────── */
+/* ──────────────────────────────────────────────
+   POST /api/analyze
+   SAME RESPONSE FORMAT
+────────────────────────────────────────────── */
 router.post(
   "/analyze",
   auth("admin"),
   uploadMemory.single("jobDescription"),
   async (req, res) => {
     try {
-      if (!req.file) {
-        return res.status(400).json({ message: "No file uploaded" });
-      }
-
       const rawText = await extractTextFromFile(
         req.file.buffer,
         req.file.mimetype
@@ -509,18 +503,21 @@ router.post(
 
       const analysis = await analyzeJDWithAI(rawText);
 
-      return res.json({
+      // ✅ SAME RESPONSE AS BEFORE
+      res.json({
         success: true,
         fileName: req.file.originalname,
         analysis,
       });
     } catch (err) {
-      console.error("JD Analysis error:", err);
-      return res.status(500).json({
+      console.error("JD Analysis error:", err.message);
+
+      res.status(500).json({
         message: err.message || "Failed to analyze job description",
       });
     }
   }
 );
+
 
 export default router;
