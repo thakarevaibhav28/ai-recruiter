@@ -240,6 +240,7 @@ function generatePDF(data) {
 // ─── Route ────────────────────────────────────────────────────────────────────
 import fs from "fs";
 import path from "path";
+import Candidate from "../models/Candidate.js";
 router.post("/feedback", async (req, res) => {
   try {
     const {
@@ -259,6 +260,8 @@ router.post("/feedback", async (req, res) => {
       });
     }
 
+    const candidateData = await Candidate.findOne({ email: userEmail }).lean();
+    console.log("Candidate data for feedback:", candidateData);
     let savedFilePath = null;
 
     // ===============================

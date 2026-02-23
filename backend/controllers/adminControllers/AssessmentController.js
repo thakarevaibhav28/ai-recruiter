@@ -634,6 +634,16 @@ export const updateMCQInterview = async (req, res) => {
 export const getMCQInterviewById = async (req, res) => {
   try {
     const { id } = req.params;
+    const userId = req.user.id;
+
+    if(!userId){
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const candidate = await Candidate.findById(userId);
+    if (!candidate) {
+      return res.status(404).json({ message: "Candidate not found" });
+    }
 
     // 1️⃣ Try MCQ_Interview
     let interview = await MCQ_Interview.findById(id)
@@ -652,7 +662,7 @@ export const getMCQInterviewById = async (req, res) => {
       return res.status(404).json({ message: "Interview not found" });
     }
 
-    res.json({ interview });
+    res.json({ interview:interview,user:candidate._doc });
   } catch (error) {
     console.log(error);
     res.status(500).json({ message: "Server error" });
