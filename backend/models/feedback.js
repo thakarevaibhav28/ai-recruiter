@@ -11,7 +11,7 @@ const InsightSchema = new mongoose.Schema({
 const InterviewFeedbackSchema = new mongoose.Schema(
   {
     interview_id: { type: String, required: true, index: true },
-
+  pdfPath: String,
     userName:  String,
     userEmail: String,
     completedAt: { type: Date, default: Date.now },
