@@ -3055,7 +3055,7 @@ SCORING GUIDELINES:
 - complexityScore: 1-2 = very basic vocabulary and concepts. 3 = professional average. 4-5 = sophisticated domain expertise clearly demonstrated.
 - verdictReason must reference specific evidence from the transcript, not generic statements.`;
 
-      const result = await fetch("/api/ai-feedback", {
+      const result = await fetch("http://localhost:3000/api/ai-feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: feedbackPrompt, conversation }),
