@@ -10,6 +10,9 @@ class UserApi {
     GET_ALL_MCQS: "/candidate/interview/",
     SINGLE_SUBMIT: "/candidate/interview",
     FINAL_SUBMIT: "/candidate/interview",
+    GENERATE_MCQ:"/admin/generate-mcq",
+    FEEDBACK:"/candidate/feedback"
+
   };
 
   // CANDIATE LOGIN
@@ -51,6 +54,13 @@ class UserApi {
   // final submit mcq answer
   FinalSubmit(id: string, data: any) {
     return api._post(`${this._url.FINAL_SUBMIT}/${id}/submit`, data);
+  }
+
+   generateMCQ(data:any,id?:string){
+    return api._post(`${this._url.GENERATE_MCQ}/${id}`,data)
+  }
+  generateFeedback(data:any){
+    return api._post(`${this._url.FEEDBACK}`,data)
   }
 }
 export const userApi = new UserApi();

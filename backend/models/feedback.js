@@ -1,0 +1,68 @@
+const mongoose = require("mongoose");
+
+// ─── Sub Schema ─────────────────────────────
+const InsightSchema = new mongoose.Schema({
+  title:       { type: String, required: true },
+  description: { type: String, required: true },
+  status:      { type: String, enum: ["good", "warning", "bad"], required: true },
+});
+
+// ─── Main Schema ────────────────────────────
+const InterviewFeedbackSchema = new mongoose.Schema(
+  {
+    interview_id: { type: String, required: true, index: true },
+
+    userName:  String,
+    userEmail: String,
+    completedAt: { type: Date, default: Date.now },
+
+    feedback: {
+      candidateName: String,
+      role: String,
+
+      confidenceScore: { type: Number, min: 0, max: 100 },
+      confidenceLabel: {
+        type: String,
+        enum: ["High Confidence", "Moderate Confidence", "Low Confidence"],
+      },
+
+      behavioralInsights:  [InsightSchema],
+      technicalCompetency: [InsightSchema],
+
+      speechPatterns: {
+        clarityScore:    { type: Number, min: 0, max: 100 },
+        avgResponseTime: String,
+        confidenceLevel: { type: Number, min: 0, max: 100 },
+        complexityScore: { type: Number, min: 1, max: 5 },
+      },
+
+      recommendations: [String],
+      overallVerdict:  { type: String, enum: ["hire", "consider", "reject"] },
+      verdictReason:   String,
+    },
+
+    transcript: [
+      {
+        role: { type: String, enum: ["Interviewer", "Candidate"] },
+        text: String,
+      },
+    ],
+
+    behaviorReport: {
+      totalEvents:        Number,
+      noFaceCount:        Number,
+      multipleFacesCount: Number,
+      events: [
+        {
+          type: String,
+          timestamp: Number,
+        },
+      ],
+    },
+  },
+  { timestamps: true }
+);
+
+module.exports =
+  mongoose.models.InterviewFeedback ||
+  mongoose.model("InterviewFeedback", InterviewFeedbackSchema);
