@@ -45,8 +45,8 @@ export const GetAllMCQInterviews = async (req, res) => {
       createdBy: adminId,
     })
       .sort({ createdAt: -1 })
-      .populate("createdBy", "email");
-
+      .populate("createdBy", "email").populate("candidates.candidateId")
+ console.log("interviews",interviews)
     return res.status(200).json({
       success: true,
       count: interviews.length,
@@ -72,6 +72,7 @@ export const CreateMCQTemplate = async (req, res) => {
       primary_skill,
       secondary_skill,
       passing_score,
+      secondry_jobDescription
     } = req.body;
 
     // Validate required fields
@@ -113,6 +114,7 @@ export const CreateMCQTemplate = async (req, res) => {
       secondary_skill: secondary_skill || "",
       passing_score,
       jobDescription,
+      secondry_jobDescription,
       createdBy: req.user.id,
       isTemplate: true, // Mark as template
     });
@@ -154,6 +156,7 @@ export const AssessmentInvitation = async (req, res) => {
       primary_skill,
       secondary_skill,
       passing_score,
+      secondry_jobDescription,
       start_date,
       end_date,
       candidates,
@@ -224,6 +227,7 @@ export const AssessmentInvitation = async (req, res) => {
       primary_skill,
       secondary_skill: secondary_skill || "",
       passing_score,
+      secondry_jobDescription,
       jobDescription,
       createdBy: req.user.id,
       isTemplate: false,
