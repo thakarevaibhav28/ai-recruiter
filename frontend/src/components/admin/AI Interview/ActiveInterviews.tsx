@@ -75,8 +75,13 @@ const ActiveInterviews: React.FC<ActiveInterviewsProps> = ({
       <div className="w-full">
         <div className="flex flex-wrap items-start justify-start gap-3   mt-0 pt-12">
           {templatesLoading ? (
-            <div className="flex items-center justify-center py-20 text-gray-400 text-sm">Loading templates...</div>
-          ) :assessments.length === 0 ? (
+  <div className="flex items-center justify-center py-20 w-full">
+    <div className="flex flex-col items-center gap-3">
+      <div className="w-10 h-10 border-4 border-indigo-200 border-t-[#4318FF] rounded-full animate-spin" />
+      <p className="text-sm text-gray-400">Loading templates...</p>
+    </div>
+  </div>
+) : assessments.length === 0 ? (
              <div className="flex flex-col items-center justify-center py-20 text-center w-full">
                           <FileText className="h-10 w-10 text-gray-300 mb-3" />
                           <p className="text-gray-500 font-medium">No templates yet</p>
