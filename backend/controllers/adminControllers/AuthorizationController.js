@@ -257,17 +257,183 @@ console.log("Interview exists?", testInterview);
 };
 
 
+// export const GetAllSchedule = async (req, res) => {
+//   try {
+//     const now = new Date();
+
+//     /* =====================================================
+//        1️⃣ MCQ INTERVIEWS
+//     ===================================================== */
+
+//     const mcqData = await MCQ_Interview.aggregate([
+//       { $unwind: "$candidates" },
+
+//       {
+//         $lookup: {
+//           from: "candidates",
+//           localField: "candidates.candidateId",
+//           foreignField: "_id",
+//           as: "candidateDetails",
+//         },
+//       },
+//       {
+//         $unwind: {
+//           path: "$candidateDetails",
+//           preserveNullAndEmptyArrays: true,
+//         },
+//       },
+
+//       {
+//         $project: {
+//           _id: 1,
+//           type: { $literal: "MCQ" },
+//           title: "$test_title",
+//           examType: 1,
+//           difficulty: 1,
+
+//           candidate: {
+//             _id: "$candidateDetails._id",
+//             name: "$candidateDetails.name",
+//             email: "$candidateDetails.email",
+//             mobile: "$candidateDetails.mobile",
+//             role: "$candidateDetails.role",
+//             year_of_experience:
+//               "$candidateDetails.year_of_experience",
+//             status: "$candidateDetails.status",
+//             candidate_status:
+//               "$candidateDetails.candidate_status",
+//           },
+
+//           startDate: "$candidates.start_Date",
+//           endDate: "$candidates.end_Date",
+//           interviewStatus: "$candidates.status",
+//           interviewLink: "$candidates.interviewLink",
+//           password: "$candidates.password",
+//         },
+//       },
+//     ]);
+
+//     /* =====================================================
+//        2️⃣ AI INTERVIEWS
+//     ===================================================== */
+
+//     const aiData = await AI_Interview.aggregate([
+//       { $unwind: "$candidates" },
+
+//       {
+//         $lookup: {
+//           from: "candidates",
+//           localField: "candidates.candidateId",
+//           foreignField: "_id",
+//           as: "candidateDetails",
+//         },
+//       },
+//       {
+//         $unwind: {
+//           path: "$candidateDetails",
+//           preserveNullAndEmptyArrays: true,
+//         },
+//       },
+
+//       {
+//         $project: {
+//           _id: 1,
+//           type: { $literal: "AI" },
+//           title: "$position",
+//           examType: 1,
+//           difficulty: 1,
+
+//           candidate: {
+//             _id: "$candidateDetails._id",
+//             name: "$candidateDetails.name",
+//             email: "$candidateDetails.email",
+//             mobile: "$candidateDetails.mobile",
+//             role: "$candidateDetails.role",
+//             year_of_experience:
+//               "$candidateDetails.year_of_experience",
+//             status: "$candidateDetails.status",
+//             candidate_status:
+//               "$candidateDetails.candidate_status",
+//           },
+
+//           startDate: "$candidates.scheduledStartDate",
+//           endDate: "$candidates.scheduledEndDate",
+//           interviewStatus: "$candidates.status",
+//           interviewLink: "$candidates.interviewLink",
+//           password: "$candidates.password",
+//         },
+//       },
+//     ]);
+
+//     /* =====================================================
+//        3️⃣ MERGE + FILTER
+//        Remove:
+//        - No interview link
+//        - No password
+//        - Cancelled interviews
+//     ===================================================== */
+
+//     const allInterviews = [...mcqData, ...aiData]
+//       .filter(
+//         (item) =>
+//           item.interviewLink &&
+//           item.password &&
+//           item.interviewStatus !== "cancelled" // 🔥 Exclude cancelled
+//       )
+//       .map(({ password, ...rest }) => rest); // Remove password
+
+//     /* =====================================================
+//        4️⃣ CATEGORIZE
+//     ===================================================== */
+
+//     const upcoming = [];
+//     const ongoing = [];
+//     const past = [];
+
+//     allInterviews.forEach((item) => {
+//       if (!item.startDate || !item.endDate) return;
+
+//       const start = new Date(item.startDate);
+//       const end = new Date(item.endDate);
+
+//       if (now < start) {
+//         upcoming.push(item);
+//       } else if (now >= start && now <= end) {
+//         ongoing.push(item);
+//       } else {
+//         past.push(item);
+//       }
+//     });
+
+//     /* =====================================================
+//        5️⃣ RESPONSE
+//     ===================================================== */
+
+//     return res.status(200).json({
+//       totalScheduledTests: allInterviews.length,
+//       upcomingCount: upcoming.length,
+//       ongoingCount: ongoing.length,
+//       pastCount: past.length,
+//       upcoming,
+//       ongoing,
+//       past,
+//     });
+//   } catch (error) {
+//     console.error("GetAllSchedule Error:", error);
+//     return res.status(500).json({ message: "Server Error" });
+//   }
+// };
+
+
+
 export const GetAllSchedule = async (req, res) => {
   try {
     const now = new Date();
 
-    /* =====================================================
-       1️⃣ MCQ INTERVIEWS
-    ===================================================== */
+    //  MCQ INTERVIEWS
 
     const mcqData = await MCQ_Interview.aggregate([
       { $unwind: "$candidates" },
-
       {
         $lookup: {
           from: "candidates",
@@ -282,7 +448,6 @@ export const GetAllSchedule = async (req, res) => {
           preserveNullAndEmptyArrays: true,
         },
       },
-
       {
         $project: {
           _id: 1,
@@ -290,7 +455,6 @@ export const GetAllSchedule = async (req, res) => {
           title: "$test_title",
           examType: 1,
           difficulty: 1,
-
           candidate: {
             _id: "$candidateDetails._id",
             name: "$candidateDetails.name",
@@ -303,7 +467,6 @@ export const GetAllSchedule = async (req, res) => {
             candidate_status:
               "$candidateDetails.candidate_status",
           },
-
           startDate: "$candidates.start_Date",
           endDate: "$candidates.end_Date",
           interviewStatus: "$candidates.status",
@@ -313,13 +476,10 @@ export const GetAllSchedule = async (req, res) => {
       },
     ]);
 
-    /* =====================================================
-       2️⃣ AI INTERVIEWS
-    ===================================================== */
+    //  AI INTERVIEWS
 
     const aiData = await AI_Interview.aggregate([
       { $unwind: "$candidates" },
-
       {
         $lookup: {
           from: "candidates",
@@ -334,7 +494,6 @@ export const GetAllSchedule = async (req, res) => {
           preserveNullAndEmptyArrays: true,
         },
       },
-
       {
         $project: {
           _id: 1,
@@ -342,7 +501,6 @@ export const GetAllSchedule = async (req, res) => {
           title: "$position",
           examType: 1,
           difficulty: 1,
-
           candidate: {
             _id: "$candidateDetails._id",
             name: "$candidateDetails.name",
@@ -355,7 +513,6 @@ export const GetAllSchedule = async (req, res) => {
             candidate_status:
               "$candidateDetails.candidate_status",
           },
-
           startDate: "$candidates.scheduledStartDate",
           endDate: "$candidates.scheduledEndDate",
           interviewStatus: "$candidates.status",
@@ -365,27 +522,35 @@ export const GetAllSchedule = async (req, res) => {
       },
     ]);
 
-    /* =====================================================
-       3️⃣ MERGE + FILTER
-       Remove:
-       - No interview link
-       - No password
-       - Cancelled interviews
-    ===================================================== */
+      //  🔥 NEW: COUNT MCQ & AI SCHEDULED
+
+    const sheduled_mcq_interview = mcqData.filter(
+      (item) =>
+        item.interviewLink &&
+        item.password &&
+        item.interviewStatus !== "cancelled"
+    ).length;
+
+    const sheduled_ai_interview = aiData.filter(
+      (item) =>
+        item.interviewLink &&
+        item.password &&
+        item.interviewStatus !== "cancelled"
+    ).length;
+
+      //  MERGE + FILTER
 
     const allInterviews = [...mcqData, ...aiData]
       .filter(
         (item) =>
           item.interviewLink &&
           item.password &&
-          item.interviewStatus !== "cancelled" // 🔥 Exclude cancelled
+          item.interviewStatus !== "cancelled"
       )
-      .map(({ password, ...rest }) => rest); // Remove password
+      .map(({ password, ...rest }) => rest);
 
-    /* =====================================================
-       4️⃣ CATEGORIZE
-    ===================================================== */
-
+    // CATEGORIZE
+  
     const upcoming = [];
     const ongoing = [];
     const past = [];
@@ -405,15 +570,19 @@ export const GetAllSchedule = async (req, res) => {
       }
     });
 
-    /* =====================================================
-       5️⃣ RESPONSE
-    ===================================================== */
+// response with counts and categorized interviews
 
     return res.status(200).json({
       totalScheduledTests: allInterviews.length,
+
+      // 🔥 Newly Added Counts
+      sheduled_mcq_interview,
+      sheduled_ai_interview,
+
       upcomingCount: upcoming.length,
       ongoingCount: ongoing.length,
       pastCount: past.length,
+
       upcoming,
       ongoing,
       past,
@@ -423,6 +592,7 @@ export const GetAllSchedule = async (req, res) => {
     return res.status(500).json({ message: "Server Error" });
   }
 };
+
 
 export const rescheduleInterview = async (req, res) => {
   try {

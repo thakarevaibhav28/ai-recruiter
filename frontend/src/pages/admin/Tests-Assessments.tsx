@@ -1290,146 +1290,81 @@ const TestsAssessments = () => {
       )}
 
       {/* Candidate Details Modal */}
-      {showCandidateModal && selectedAssessment && (
-        <div
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-          onClick={closeCandidateModal}
-        >
-          <div
-            className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
+     {showCandidateModal && selectedAssessment && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={closeCandidateModal}>
+          <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
               <div>
-                <h3 className="text-xl font-semibold text-gray-900">
-                  {selectedAssessment.test_title}
-                </h3>
+                <h3 className="text-xl font-semibold text-gray-900">{selectedAssessment.test_title}</h3>
                 <p className="text-sm text-gray-500 mt-1">Candidate Details</p>
               </div>
-              <button
-                onClick={closeCandidateModal}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
-              >
+              <button onClick={closeCandidateModal} className="text-gray-400 hover:text-gray-600 transition-colors">
                 <X className="h-6 w-6" />
               </button>
             </div>
 
             <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
-              {selectedAssessment.candidates &&
-              selectedAssessment.candidates.length > 0 ? (
+              {selectedAssessment.candidates && selectedAssessment.candidates.length > 0 ? (
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-gray-200 bg-gray-50">
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
-                          S.No
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
-                          Username
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
-                          Password
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
-                          Start Date
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
-                          End Date
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
-                          Status
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
-                          Interview Link
-                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">S.No</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">UserName</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Email</th>
+                        {/* <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Password</th> */}
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Start Date</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">End Date</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Status</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Interview Link</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {selectedAssessment.candidates.map(
-                        (candidate: any, index: number) => (
-                          <tr
-                            key={candidate._id || index}
-                            className="hover:bg-gray-50"
-                          >
-                            <td className="px-4 py-3 text-sm text-gray-900">
-                              {index + 1}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-gray-900 font-medium">
-                              {candidate.username}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-gray-900 font-mono">
-                              {candidate.password}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-gray-600">
-                              {new Date(
-                                candidate.start_Date,
-                              ).toLocaleDateString("en-US", {
-                                month: "short",
-                                day: "numeric",
-                                year: "numeric",
-                              })}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-gray-600">
-                              {new Date(candidate.end_Date).toLocaleDateString(
-                                "en-US",
-                                {
-                                  month: "short",
-                                  day: "numeric",
-                                  year: "numeric",
-                                },
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-sm">
-                              <span
-                                className={`px-2 py-1 text-xs font-medium rounded-full ${
-                                  candidate.status === "completed"
-                                    ? "bg-green-100 text-green-700"
-                                    : candidate.status === "in_progress"
-                                      ? "bg-blue-100 text-blue-700"
-                                      : "bg-yellow-100 text-yellow-700"
-                                }`}
-                              >
-                                {candidate.status.charAt(0).toUpperCase() +
-                                  candidate.status.slice(1)}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 text-sm">
-                              <a
-                                href={candidate.interviewLink}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-indigo-600 hover:text-indigo-800 underline"
-                              >
-                                Open Link
-                              </a>
-                            </td>
-                          </tr>
-                        ),
-                      )}
+                      {selectedAssessment.candidates.map((candidate: any, index: number) => (
+                        <tr key={candidate._id || index} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 text-sm text-gray-900">{index + 1}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600 font-medium">{candidate.candidateId.name}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600 font-medium">{candidate.candidateId.email}</td>
+                          {/* <td className="px-4 py-3 text-sm text-gray-900 font-mono">{candidate.password}</td> */}
+                          <td className="px-4 py-3 text-sm text-gray-600">
+                            {new Date(candidate.start_Date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600">
+                            {new Date(candidate.end_Date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </td>
+                          <td className="px-4 py-3 text-sm">
+                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                              candidate.status === "completed" ? "bg-green-100 text-green-700" :
+                              candidate.status === "in_progress" ? "bg-blue-100 text-blue-700" :
+                              "bg-yellow-100 text-yellow-700"
+                            }`}>
+                              {candidate.status.charAt(0).toUpperCase() + candidate.status.slice(1)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-sm">
+                            <a href={candidate.interviewLink} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:text-indigo-800 underline">
+                              Open Link
+                            </a>
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                   <Users className="h-12 w-12 text-gray-300 mb-3" />
-                  <p className="text-gray-500 font-medium">
-                    No candidates assigned
-                  </p>
-                  <p className="text-gray-400 text-sm mt-1">
-                    Candidates will appear here once they are invited
-                  </p>
+                  <p className="text-gray-500 font-medium">No candidates assigned</p>
+                  <p className="text-gray-400 text-sm mt-1">Candidates will appear here once they are invited</p>
                 </div>
               )}
             </div>
 
-            <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
-              <button
-                onClick={closeCandidateModal}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              >
+            {/* <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
+              <button onClick={closeCandidateModal} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
                 Close
               </button>
-            </div>
+            </div> */}
           </div>
         </div>
       )}
