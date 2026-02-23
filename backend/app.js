@@ -5,6 +5,7 @@ import cors from "cors";
 import connectDB from "./config/db.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import candidateRoutes from "./routes/candidateRoutes.js";
+import feedbackRoutes from "./routes/feedbackRoutes.js";
 import MCQRoutes from "./routes/MCQRoutes.js";
 
 const app = express();
@@ -63,6 +64,7 @@ app.use("/scorecards", express.static("scorecards"));
 app.use("/api/admin", adminRoutes);
 app.use("/api/candidate", candidateRoutes);
 app.use("/api/admin/generate-mcq", MCQRoutes);
+app.use("/api", feedbackRoutes);
   
 
 // Global error handler

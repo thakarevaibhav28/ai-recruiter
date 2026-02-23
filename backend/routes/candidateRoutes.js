@@ -159,7 +159,7 @@ router.put(
         aadharCard: candidate.aadharCard,
       });
     } catch (error) {
-      res.status(500).json({ message: "Server error" });
+      res.status(500).json(error);
     }
   },
 );
