@@ -117,7 +117,7 @@ const TopPerformance = () => {
             rank: index + 1,
             name: item.candidate?.name,
             email: item.candidate?.email,
-            score: `${item.percentage}%`,
+            score: `${item.totalScore}%`,
             examType: item.interview?.examType,
             testTitle: item.interview?.test_title,
           }));

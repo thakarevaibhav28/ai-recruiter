@@ -66,6 +66,9 @@ const interviewSchema = new mongoose.Schema(
       type: String, // Store file path or URL
       default: null,
     },
+    secondry_jobDescription:{
+      type:String
+    },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Admin",
