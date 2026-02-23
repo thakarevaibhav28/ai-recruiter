@@ -3,6 +3,8 @@ import jwt from "jsonwebtoken";
 import Score from "../../models/Score.js";
 import mongoose from "mongoose";
 import MCQ_Interview from "../../models/MCQ_Interview.js";
+import AI_Interview from "../../models/AI_Interview.js";
+import Candidate from "../../models/Candidate.js";
 
 export const RegisterUser = async (req, res) => {
   const { email, password } = req.body;
@@ -136,114 +138,6 @@ export const getMe = async (req, res) => {
 };
 
 
-// export const GetTopPerformance = async (req, res) => {
-//   const { examType } = req.query;
-
-//   if (!examType || !["MCQ", "AI"].includes(examType)) {
-//     return res.status(400).json({
-//       success: false,
-//       message: "examType must be MCQ or AI",
-//     });
-//   }
-
-//   try {
-//     let InterviewModel;
-
-//     if (examType === "MCQ") {
-//       InterviewModel = MCQ_Interview;
-//     } else {
-//       InterviewModel = AI_Interview;
-//     }
-
-//     const topPerformers = await Score.aggregate([
-//       // Join Interview
-//       {
-//         $lookup: {
-//           from: examType === "MCQ" ? "mcq_interviews" : "ai_interviews",
-//           localField: "interviewId",
-//           foreignField: "_id",
-//           as: "interview",
-//         },
-//       },
-//       { $unwind: "$interview" },
-
-//       // Calculate total questions dynamically
-//       {
-//         $addFields: {
-//           totalQuestions: {
-//             $cond: {
-//               if: { $isArray: "$scores" },
-//               then: { $size: "$scores" },
-//               else: 0,
-//             },
-//           },
-//         },
-//       },
-
-//       // Calculate percentage
-//       {
-//         $addFields: {
-//           percentage: {
-//             $cond: [
-//               { $eq: ["$totalQuestions", 0] },
-//               0,
-//               {
-//                 $multiply: [
-//                   { $divide: ["$totalScore", "$totalQuestions"] },
-//                   100,
-//                 ],
-//               },
-//             ],
-//           },
-//         },
-//       },
-
-//       // Join Candidate Info
-//       {
-//         $lookup: {
-//           from: "candidates",
-//           localField: "candidateId",
-//           foreignField: "_id",
-//           as: "candidate",
-//         },
-//       },
-//       { $unwind: "$candidate" },
-
-//       // Sort by percentage
-//       { $sort: { percentage: -1 } },
-
-//       // Limit Top 10
-//       { $limit: 10 },
-
-//       // Clean Output
-//       {
-//         $project: {
-//           _id: 0,
-//           candidateId: "$candidate._id",
-//           name: "$candidate.name",
-//           email: "$candidate.email",
-//           totalScore: 1,
-//           totalQuestions: 1,
-//           percentage: { $round: ["$percentage", 2] },
-//           interviewId: 1,
-//         },
-//       },
-//     ]);
-
-//     res.status(200).json({
-//       success: true,
-//       data: topPerformers,
-//     });
-//   } catch (error) {
-//     console.error(error);
-//     res.status(500).json({
-//       success: false,
-//       message: "Server error",
-//     });
-//   }
-// };
-
-
 export const GetTopPerformance = async (req, res) => {
   const { examType } = req.query;
 
@@ -358,6 +252,383 @@ console.log("Interview exists?", testInterview);
     res.status(500).json({
       success: false,
       message: "Server error",
+    });
+  }
+};
+
+
+export const GetAllSchedule = async (req, res) => {
+  try {
+    const now = new Date();
+
+    /* =====================================================
+       1️⃣ MCQ INTERVIEWS
+    ===================================================== */
+
+    const mcqData = await MCQ_Interview.aggregate([
+      { $unwind: "$candidates" },
+
+      {
+        $lookup: {
+          from: "candidates",
+          localField: "candidates.candidateId",
+          foreignField: "_id",
+          as: "candidateDetails",
+        },
+      },
+      {
+        $unwind: {
+          path: "$candidateDetails",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+
+      {
+        $project: {
+          _id: 1,
+          type: { $literal: "MCQ" },
+          title: "$test_title",
+          examType: 1,
+          difficulty: 1,
+
+          candidate: {
+            _id: "$candidateDetails._id",
+            name: "$candidateDetails.name",
+            email: "$candidateDetails.email",
+            mobile: "$candidateDetails.mobile",
+            role: "$candidateDetails.role",
+            year_of_experience:
+              "$candidateDetails.year_of_experience",
+            status: "$candidateDetails.status",
+            candidate_status:
+              "$candidateDetails.candidate_status",
+          },
+
+          startDate: "$candidates.start_Date",
+          endDate: "$candidates.end_Date",
+          interviewStatus: "$candidates.status",
+          interviewLink: "$candidates.interviewLink",
+          password: "$candidates.password",
+        },
+      },
+    ]);
+
+    /* =====================================================
+       2️⃣ AI INTERVIEWS
+    ===================================================== */
+
+    const aiData = await AI_Interview.aggregate([
+      { $unwind: "$candidates" },
+
+      {
+        $lookup: {
+          from: "candidates",
+          localField: "candidates.candidateId",
+          foreignField: "_id",
+          as: "candidateDetails",
+        },
+      },
+      {
+        $unwind: {
+          path: "$candidateDetails",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+
+      {
+        $project: {
+          _id: 1,
+          type: { $literal: "AI" },
+          title: "$position",
+          examType: 1,
+          difficulty: 1,
+
+          candidate: {
+            _id: "$candidateDetails._id",
+            name: "$candidateDetails.name",
+            email: "$candidateDetails.email",
+            mobile: "$candidateDetails.mobile",
+            role: "$candidateDetails.role",
+            year_of_experience:
+              "$candidateDetails.year_of_experience",
+            status: "$candidateDetails.status",
+            candidate_status:
+              "$candidateDetails.candidate_status",
+          },
+
+          startDate: "$candidates.scheduledStartDate",
+          endDate: "$candidates.scheduledEndDate",
+          interviewStatus: "$candidates.status",
+          interviewLink: "$candidates.interviewLink",
+          password: "$candidates.password",
+        },
+      },
+    ]);
+
+    /* =====================================================
+       3️⃣ MERGE + FILTER
+       Remove:
+       - No interview link
+       - No password
+       - Cancelled interviews
+    ===================================================== */
+
+    const allInterviews = [...mcqData, ...aiData]
+      .filter(
+        (item) =>
+          item.interviewLink &&
+          item.password &&
+          item.interviewStatus !== "cancelled" // 🔥 Exclude cancelled
+      )
+      .map(({ password, ...rest }) => rest); // Remove password
+
+    /* =====================================================
+       4️⃣ CATEGORIZE
+    ===================================================== */
+
+    const upcoming = [];
+    const ongoing = [];
+    const past = [];
+
+    allInterviews.forEach((item) => {
+      if (!item.startDate || !item.endDate) return;
+
+      const start = new Date(item.startDate);
+      const end = new Date(item.endDate);
+
+      if (now < start) {
+        upcoming.push(item);
+      } else if (now >= start && now <= end) {
+        ongoing.push(item);
+      } else {
+        past.push(item);
+      }
+    });
+
+    /* =====================================================
+       5️⃣ RESPONSE
+    ===================================================== */
+
+    return res.status(200).json({
+      totalScheduledTests: allInterviews.length,
+      upcomingCount: upcoming.length,
+      ongoingCount: ongoing.length,
+      pastCount: past.length,
+      upcoming,
+      ongoing,
+      past,
+    });
+  } catch (error) {
+    console.error("GetAllSchedule Error:", error);
+    return res.status(500).json({ message: "Server Error" });
+  }
+};
+
+export const rescheduleInterview = async (req, res) => {
+  try {
+    const { type, interviewId } = req.params;
+    const { candidateId, newStartDate, newEndDate } = req.body;
+
+    if (!candidateId || !newStartDate || !newEndDate) {
+      return res.status(400).json({
+        message: "candidateId, newStartDate, newEndDate required",
+      });
+    }
+
+    let interview;
+
+    if (type === "MCQ") {
+      interview = await MCQ_Interview.findById(interviewId);
+    } else if (type === "AI") {
+      interview = await AI_Interview.findById(interviewId);
+    } else {
+      return res.status(400).json({ message: "Invalid interview type" });
+    }
+
+    if (!interview)
+      return res.status(404).json({ message: "Interview not found" });
+
+    const candidateEntry = interview.candidates.find(
+      (c) => c.candidateId.toString() === candidateId
+    );
+
+    if (!candidateEntry)
+      return res.status(404).json({ message: "Candidate not found" });
+
+    // ❌ Don't reschedule completed or cancelled
+    if (
+      candidateEntry.status === "completed" ||
+      candidateEntry.status === "cancelled"
+    ) {
+      return res.status(400).json({
+        message: "Cannot reschedule completed/cancelled interview",
+      });
+    }
+
+    if (type === "MCQ") {
+      candidateEntry.start_Date = new Date(newStartDate);
+      candidateEntry.end_Date = new Date(newEndDate);
+    } else {
+      candidateEntry.scheduledStartDate = new Date(newStartDate);
+      candidateEntry.scheduledEndDate = new Date(newEndDate);
+    }
+
+    candidateEntry.status = "scheduled";
+
+    await interview.save();
+
+    // 🔥 Update Candidate status
+    await Candidate.findByIdAndUpdate(candidateId, {
+      status: "scheduled",
+    });
+
+    res.status(200).json({
+      message: "Interview rescheduled successfully",
+    });
+  } catch (error) {
+    console.error("Reschedule Error:", error);
+    res.status(500).json({ message: "Server Error" });
+  }
+};
+
+export const cancelInterview = async (req, res) => {
+  try {
+    const { type, interviewId } = req.params;
+    const { candidateId } = req.body;
+
+    if (!candidateId) {
+      return res.status(400).json({ message: "candidateId required" });
+    }
+
+    let interview;
+
+    if (type === "MCQ") {
+      interview = await MCQ_Interview.findById(interviewId);
+    } else if (type === "AI") {
+      interview = await AI_Interview.findById(interviewId);
+    } else {
+      return res.status(400).json({ message: "Invalid interview type" });
+    }
+
+    if (!interview)
+      return res.status(404).json({ message: "Interview not found" });
+
+    const candidateEntry = interview.candidates.find(
+      (c) => c.candidateId.toString() === candidateId
+    );
+
+    if (!candidateEntry)
+      return res.status(404).json({ message: "Candidate not found" });
+
+    candidateEntry.status = "cancelled";
+
+    await interview.save();
+
+    // 🔥 Update Candidate status
+    await Candidate.findByIdAndUpdate(candidateId, {
+      status: "cancelled",
+    });
+
+    res.status(200).json({
+      message: "Interview cancelled successfully",
+    });
+  } catch (error) {
+    console.error("Cancel Error:", error);
+    res.status(500).json({ message: "Server Error" });
+  }
+};
+
+
+export const getStudentScores = async (req, res) => {
+  try {
+    const { examType } = req.query;
+
+    if (!examType || !["MCQ", "AI"].includes(examType)) {
+      return res.status(400).json({
+        success: false,
+        message: "examType must be MCQ or AI",
+      });
+    }
+  
+    // const results = await Score.aggregate([
+    //   {
+    //     $match: { examType },
+    //   },
+
+    //   {
+    //     $lookup: {
+    //       from: "candidates",
+    //       localField: "candidateId",
+    //       foreignField: "_id",
+    //       as: "candidate",
+    //     },
+    //   },
+
+    //   { $unwind: "$candidate" },
+
+    //   // 🔥 Calculate maxScore dynamically
+    //   {
+    //     $addFields: {
+    //       maxScore: { $size: "$scores" },
+    //     },
+    //   },
+
+    //   {
+    //     $addFields: {
+    //       percentage: {
+    //         $cond: [
+    //           { $gt: ["$maxScore", 0] },
+    //           {
+    //             $multiply: [
+    //               { $divide: ["$totalScore", "$maxScore"] },
+    //               100,
+    //             ],
+    //           },
+    //           0,
+    //         ],
+    //       },
+    //     },
+    //   },
+
+    //   {
+    //     $group: {
+    //       _id: "$candidate._id",
+    //       candidate: {
+    //         $first: {
+    //           _id: "$candidate._id",
+    //           name: "$candidate.name",
+    //           email: "$candidate.email",
+    //           role: "$candidate.role",
+    //           candidate_status: "$candidate.candidate_status",
+    //         },
+    //       },
+    //       scores: {
+    //         $push: {
+    //           interviewId: "$interviewId",
+    //           totalScore: "$totalScore",
+    //           maxScore: "$maxScore",
+    //           percentage: { $round: ["$percentage", 2] },
+    //           createdAt: "$createdAt",
+    //         },
+    //       },
+    //       totalAttempts: { $sum: 1 },
+    //     },
+    //   },
+
+    //   { $sort: { "scores.createdAt": -1 } },
+    // ]);
+      const scores = await Score.find({ examType }).populate("interviewId").populate("candidateId").populate("scores.questionId")
+
+    return res.status(200).json({
+      success: true,
+      totalStudents: scores.length,
+       scores,
+    });
+  } catch (error) {
+    console.error("getStudentScores Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server Error",
     });
   }
 };

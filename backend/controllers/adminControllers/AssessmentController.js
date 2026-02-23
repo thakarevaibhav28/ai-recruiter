@@ -1,9 +1,7 @@
 import MCQ_Interview from "../../models/MCQ_Interview.js";
 import Candidate from "../../models/Candidate.js";
-import Question from "../../models/Question.js";
 import Score from "../../models/Score.js";
 import AI_Interview from "../../models/AI_Interview.js";
-import { generateMCQs } from "../../controllers/GenerateMCQControllers/GenerateMCQController.js";
 import { sendMCQInterviewLink } from "../../services/emailService.js";
 import mongoose from "mongoose";
 
@@ -420,7 +418,7 @@ export const AssessmentInvitationByID = async (req, res) => {
         password,
         start_Date: startDate,
         end_Date: endDate,
-        status: "pending",
+        status: "scheduled",
         assignedQuestions: [],
       };
 

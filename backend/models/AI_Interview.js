@@ -20,9 +20,9 @@ const aiInterviewSchema = new mongoose.Schema(
       ref: "Admin",
       required: true,
     },
- examType:{
-      type:String,
-      default:"AI"
+    examType: {
+      type: String,
+      default: "AI",
     },
     status: {
       type: String,
@@ -42,10 +42,15 @@ const aiInterviewSchema = new mongoose.Schema(
         scheduledEndDate: Date,
         emailSubject: String,
         emailBody: String,
+        status: {
+      type: String,
+      enum: ["scheduled", "in_progress", "completed", "cancelled"],
+      default: "scheduled",
+    },
       },
     ],
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 export default mongoose.model("AI_Interview", aiInterviewSchema);

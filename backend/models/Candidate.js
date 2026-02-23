@@ -10,7 +10,13 @@ const candidateSchema = new mongoose.Schema({
   description: { type: String },
   status: {
     type: String,
-    enum: ["new", "inprogress", "completed"],
+     enum: [
+      "new",
+      "scheduled",
+      "in_progress",
+      "completed",
+      "cancelled",
+    ],    //Interview status
     default: "new",
   },
   candidate_status: {
@@ -20,6 +26,7 @@ const candidateSchema = new mongoose.Schema({
   },
   aadharCard: { type: String, default: null },
   photo: { type: String, default: null },
-});
+},
+{ timestamps: true });
 
 export default mongoose.model("Candidate", candidateSchema);

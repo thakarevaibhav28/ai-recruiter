@@ -3,6 +3,7 @@ import AI_Interview from "../../models/AI_Interview.js";
 import Candidate from "../../models/Candidate.js";
 import { sendAIInterviewLink } from "../../services/emailService.js";
 import mongoose from "mongoose";
+
 export const CreateAITemplate = async (req, res) => {
   try {
     const {
@@ -89,7 +90,6 @@ export const CreateAITemplate = async (req, res) => {
     });
   }
 };
-
 export const GetAllAIInterview = async (req, res) => {
   try {
     const adminId = req.user.id;
@@ -97,7 +97,6 @@ export const GetAllAIInterview = async (req, res) => {
 
     /* ================= GET SINGLE INTERVIEW ================= */
     if (id) {
-
       // Validate ObjectId
       if (!mongoose.Types.ObjectId.isValid(id)) {
         return res.status(400).json({
@@ -127,8 +126,8 @@ export const GetAllAIInterview = async (req, res) => {
     /* ================= GET ALL DRAFT INTERVIEWS ================= */
 
     const drafts = await AI_Interview.find({
-      createdBy: adminId
-    })
+      createdBy: adminId,
+    }).sort({ createdAt: -1 });
 
     const formattedDrafts = drafts.map((item) => ({
       jobId: item._id,
@@ -149,7 +148,6 @@ export const GetAllAIInterview = async (req, res) => {
       totalDrafts: formattedDrafts.length,
       drafts: formattedDrafts,
     });
-
   } catch (error) {
     console.error("Get AI Interview Error:", error);
     return res.status(500).json({
@@ -386,7 +384,7 @@ export const ScheduleAiInterview = async (req, res) => {
     res.status(500).json({ message: "Server error", details: err.message });
   }
 };
-export const GetAllAiInterviewSchedule=async (req, res) => {
+export const GetAllAiInterviewSchedule = async (req, res) => {
   try {
     const [{ total } = { total: 0 }] = await AI_Interview.aggregate([
       { $unwind: "$candidates" },
@@ -404,4 +402,52 @@ export const GetAllAiInterviewSchedule=async (req, res) => {
     console.error("Error counting schedules:", err.message);
     res.status(500).json({ message: "Server error" });
   }
-}
+};
+export const rescheduleAiInterview = async (req, res) => {
+  try {
+    const { interviewId } = req.params;
+    const { candidateId, newStartDate, newEndDate } = req.body;
+
+    if (!candidateId || !newStartDate || !newEndDate) {
+      return res.status(400).json({
+        message: "candidateId, newStartDate and newEndDate are required",
+      });
+    }
+
+    const interview = await AI_Interview.findById(interviewId);
+    if (!interview)
+      return res.status(404).json({ message: "Interview not found" });
+
+    const candidateEntry = interview.candidates.find(
+      (c) => c.candidateId.toString() === candidateId,
+    );
+
+    if (!candidateEntry)
+      return res
+        .status(404)
+        .json({ message: "Candidate not found in interview" });
+
+    // 🚫 Don't allow reschedule if already expired
+    if (new Date() > candidateEntry.scheduledEndDate) {
+      return res.status(400).json({
+        message: "Cannot reschedule expired interview",
+      });
+    }
+
+    candidateEntry.scheduledStartDate = new Date(newStartDate);
+    candidateEntry.scheduledEndDate = new Date(newEndDate);
+
+    await interview.save();
+
+    res.status(200).json({
+      message: "Interview rescheduled successfully",
+      interviewId,
+      candidateId,
+      newStartDate,
+      newEndDate,
+    });
+  } catch (error) {
+    console.error("Reschedule AI Interview Error:", error);
+    res.status(500).json({ message: "Server Error", error: error.message });
+  }
+};

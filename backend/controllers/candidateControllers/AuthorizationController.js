@@ -1,11 +1,11 @@
 import Candidate from "../../models/Candidate.js";
 import csv from "csv-parser";
 import fs from "fs";
-import {getIO} from "../../socket.js"
+import { getIO } from "../../socket.js";
 import AI_Interview from "../../models/AI_Interview.js";
 import MCQ_Interview from "../../models/MCQ_Interview.js";
-
-
+import Score from "../../models/Score.js";
+import { Readable } from "stream";
 
 export const CreateCandidate = async (req, res) => {
   const {
@@ -19,7 +19,6 @@ export const CreateCandidate = async (req, res) => {
     year_of_experience,
   } = req.body;
 
- 
   if (
     !email ||
     !name ||
@@ -66,10 +65,12 @@ export const CreateCandidate = async (req, res) => {
         return res.status(404).json({ message: "Candidate not found." });
       }
 
-
-      let io=getIO();
-      io.to("admins").emit("candidate-updated",updatedCandidate);
-      io.to(updatedCandidate._id.toString()).emit("candidate-updated",updatedCandidate);
+      let io = getIO();
+      io.to("admins").emit("candidate-updated", updatedCandidate);
+      io.to(updatedCandidate._id.toString()).emit(
+        "candidate-updated",
+        updatedCandidate,
+      );
       return res.status(200).json({
         message: "Candidate updated successfully.",
         newCandidate: updatedCandidate,
@@ -93,9 +94,9 @@ export const CreateCandidate = async (req, res) => {
       year_of_experience,
     });
 
-    let io=getIO();
-    io.to("admins").emit("candidate-added",candidate);
-    io.to(candidate._id.toString()).emit("candidate-added",candidate);
+    let io = getIO();
+    io.to("admins").emit("candidate-added", candidate);
+    io.to(candidate._id.toString()).emit("candidate-added", candidate);
     res.status(201).json({
       message: "Candidate added",
       newCandidate: candidate,
@@ -108,12 +109,30 @@ export const CreateCandidate = async (req, res) => {
 
 export const GetCandidate = async (req, res) => {
   try {
-    const candidates = await Candidate.find().sort({ createdAt: -1 });
+    // 1️⃣ Get page & limit from query params
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const status = req.query.status;
 
-    res.status(200).json({
+    const skip = (page - 1) * limit;
+
+    let query = {};
+    if (["active", "inactive"].includes(status)) {
+      query.candidate_status = status;
+    }
+
+    const total = await Candidate.countDocuments(query);
+
+    const candidates = await Candidate.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    res.json({
       success: true,
-      count: candidates.length,
       data: candidates,
+      totalPages: Math.ceil(total / limit),
+      totalRecords: total,
     });
   } catch (error) {
     console.error("Error fetching candidates:", error);
@@ -123,267 +142,262 @@ export const GetCandidate = async (req, res) => {
       error: error.message,
     });
   }
-}
+};
 
-export const UpdateCandidate= async (req, res) => {
-  const { id } = req.params;
-  const { candidate_status } = req.body;
-
-  if (!["active", "inactive"].includes(candidate_status)) {
-    return res.status(400).json({
-      message: "Invalid status value.",
-    });
-  }
-
+export const getCandidateProfile = async (req, res) => {
   try {
-    const candidate = await Candidate.findByIdAndUpdate(
-      id,
-      { candidate_status },
-      { new: true },
-    );
+    const { id } = req.params;
+
+    const candidate = await Candidate.findById(id);
+    if (!candidate) {
+      return res.status(404).json({ message: "Candidate not found" });
+    }
+
+    const mcqInterviews = await MCQ_Interview.find({
+      "candidates.candidateId": id,
+    }).lean();
+
+    const aiInterviews = await AI_Interview.find({
+      "candidates.candidateId": id,
+    }).lean();
+
+    const scores = await Score.find({ candidateId: id }).lean();
+
+    const allInterviews = [];
+
+    // ------------------ MCQ ------------------
+    mcqInterviews.forEach((interview) => {
+      const candidateData = interview.candidates.find(
+        (c) => c.candidateId.toString() === id
+      );
+
+      const scoreData = scores.find(
+        (s) =>
+          s.interviewId.toString() === interview._id.toString()
+      );
+
+      allInterviews.push({
+        interviewId: interview._id,
+        title: interview.test_title,
+        examType: "MCQ",
+        difficulty: interview.difficulty,
+        status: candidateData?.status || "pending",
+
+        score: scoreData?.totalScore ?? candidateData?.score ?? 0,
+        passingScore: Number(interview.passing_score),
+
+        submittedAt: candidateData?.submittedAt || null,
+
+        summary: scoreData?.summary || null,
+        pdfPath: scoreData?.pdfPath || null,
+        maxScore: scoreData?.maxScore || null,
+
+        questionBreakdown: scoreData?.scores || [],
+      });
+    });
+
+    // ------------------ AI ------------------
+    aiInterviews.forEach((interview) => {
+      const candidateData = interview.candidates.find(
+        (c) => c.candidateId.toString() === id
+      );
+
+      const scoreData = scores.find(
+        (s) =>
+          s.interviewId.toString() === interview._id.toString()
+      );
+
+      console.log()
+      allInterviews.push({
+        interviewId: interview._id,
+        title: interview.position,
+        examType: "AI",
+        difficulty: interview.difficulty,
+        status: "completed",
+
+        score: scoreData?.totalScore ?? 0,
+        passingScore: interview.passingScore,
+
+        submittedAt: candidateData?.submittedAt || null,
+
+        summary: scoreData?.summary || null,
+        pdfPath: scoreData?.pdfPath || null,
+        maxScore: scoreData?.maxScore || null,
+
+        questionBreakdown: scoreData?.scores || [],
+      });
+    });
+
+    // -------- Summary Stats --------
+    const totalInterviews = allInterviews.length;
+
+    const completed = allInterviews.filter(
+      (i) => i.status === "completed"
+    ).length;
+
+    const passed = allInterviews.filter(
+      (i) => i.score >= i.passingScore
+    ).length;
+
+    res.json({
+      candidate,
+      summary: {
+        totalInterviews,
+        completed,
+        passed,
+      },
+      interviews: allInterviews,
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server Error" });
+  }
+};
+
+export const UpdateCandidate = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { candidate_status } = req.body;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Candidate ID is required.",
+      });
+    }
+
+    if (!["active", "inactive"].includes(candidate_status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid status value. Allowed: active, inactive.",
+      });
+    }
+
+    const candidate = await Candidate.findById(id);
+    console.log(candidate)
 
     if (!candidate) {
       return res.status(404).json({
+        success: false,
         message: "Candidate not found.",
       });
     }
 
-    let io=getIO();
-    io.to("admins").emit("candidate-updated",candidate);
-    io.to(candidate._id.toString()).emit("candidate-updated",candidate);
-    return res.status(200).json({
-      message: `Candidate ${candidate_status} successfully.`,
-      data: candidate,
-    });
-  } catch (error) {
-    console.log(error);
-    return res.status(500).json({
-      message: "Server error",
-    });
-  }
-}
-
- export const BulkAddCandidates = async (req, res) => {
-    const results = [];
-
-    if (!req.file) {
-      return res.status(400).json({ message: "CSV file is required." });
+    // Prevent unnecessary DB write
+    if (candidate.candidate_status === candidate_status) {
+      return res.status(200).json({
+        success: true,
+        message: "Status already up to date.",
+        data: candidate,
+      });
     }
 
-    try {
-      fs.createReadStream(req.file.path)
-        .pipe(csv())
-        .on("data", (data) => results.push(data))
-        .on("end", async () => {
-          const addedCandidates = [];
-          for (const row of results) {
-            console.log(row);
-            const {
+    candidate.candidate_status = candidate_status;
+    await candidate.save();
+
+    const io = getIO();
+    io.to("admins").emit("candidate-updated", candidate);
+
+    return res.status(200).json({
+      success: true,
+      message: `Candidate marked as ${candidate_status}.`,
+      data: candidate,
+    });
+
+  } catch (error) {
+    console.error("UpdateCandidate Error:", error);
+
+    if (error.code === 11000) {
+      return res.status(500).json({
+        success: false,
+        message: "Duplicate value detected.",
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: "Server error.",
+    });
+  }
+};
+
+export const BulkAddCandidates = async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({
+      success: false,
+      message: "CSV file is required",
+    });
+  }
+
+  try {
+    const results = [];
+
+    // Convert buffer to stream
+    const stream = Readable.from(req.file.buffer.toString());
+
+    stream
+      .pipe(csv())
+      .on("data", (data) => results.push(data))
+      .on("end", async () => {
+        const addedCandidates = [];
+
+        for (const row of results) {
+          const {
+            name,
+            email,
+            mobile,
+            role,
+            year_of_experience,
+            key_Skills,
+          } = row;
+
+          if (
+            !name ||
+            !email ||
+            !mobile ||
+            !role ||
+            !year_of_experience ||
+            !key_Skills
+          )
+            continue;
+
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          const mobileRegex = /^[0-9]{10,15}$/;
+
+          if (!emailRegex.test(email) || !mobileRegex.test(mobile))
+            continue;
+
+          let candidate = await Candidate.findOne({ email });
+
+          if (!candidate) {
+            candidate = await Candidate.create({
               name,
               email,
               mobile,
               role,
               year_of_experience,
               key_Skills,
-            } = row;
-            if (
-              !name ||
-              !email ||
-              !mobile ||
-              !role ||
-              !year_of_experience ||
-              !key_Skills
-            )
-              continue;
-
-            // Email and mobile validation
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            const mobileRegex = /^[0-9]{10,15}$/;
-            if (!emailRegex.test(email) || !mobileRegex.test(mobile)) continue;
-
-            let candidate = await Candidate.findOne({ email });
-            if (!candidate) {
-              console.log(`Creating new candidate: ${name}`);
-              candidate = await Candidate.create({
-                name,
-                email,
-                mobile,
-                role,
-                year_of_experience,
-                key_Skills,
-              });
-            }
-
-            // Check if already added to this interview
-            // if (
-            //   interview.candidates.some((c) =>
-            //     c.candidateId.equals(candidate._id)
-            //   )
-            // )
-            // continue;
-
-            // interview.candidates.push({
-            //   candidateId: candidate._id,
-            //   interviewLink: null,
-            //   password: null,
-            //   scheduledDate: null,
-            // });
-            addedCandidates.push(candidate);
+            });
           }
-          // await interview.save();
-          fs.unlinkSync(req.file.path);
-          res.status(201).json({
-            message: "Bulk candidates added",
-            added: addedCandidates.length,
-          });
+
+          addedCandidates.push(candidate);
+        }
+
+        return res.status(201).json({
+          success: true,
+          message: "Bulk candidates added successfully",
+          totalProcessed: results.length,
+          added: addedCandidates.length,
         });
-    } catch (error) {
-      if (req.file && fs.existsSync(req.file.path))
-        fs.unlinkSync(req.file.path);
-      res.status(500).json({ message: "Server error" });
-    }
-}
-export const GetAllSchedule = async (req, res) => {
-  try {
-    const now = new Date();
-
-    /* =====================================================
-       1️⃣ MCQ INTERVIEWS
-    ===================================================== */
-
-    const mcqData = await MCQ_Interview.aggregate([
-      { $unwind: "$candidates" },
-
-      {
-        $lookup: {
-          from: "candidates",
-          localField: "candidates.candidateId",
-          foreignField: "_id",
-          as: "candidateDetails",
-        },
-      },
-      { $unwind: { path: "$candidateDetails", preserveNullAndEmptyArrays: true } },
-
-      {
-        $project: {
-          _id: 1,
-          type: { $literal: "MCQ" },
-          title: "$test_title",
-          examType: 1,
-          difficulty: 1,
-
-          candidate: {
-            _id: "$candidateDetails._id",
-            name: "$candidateDetails.name",
-            email: "$candidateDetails.email",
-            mobile: "$candidateDetails.mobile",
-            role: "$candidateDetails.role",
-            year_of_experience: "$candidateDetails.year_of_experience",
-            status: "$candidateDetails.status",
-            candidate_status: "$candidateDetails.candidate_status",
-          },
-
-          startDate: "$candidates.start_Date",
-          endDate: "$candidates.end_Date",
-          interviewStatus: "$candidates.status",
-          interviewLink: "$candidates.interviewLink",
-          password: "$candidates.password", // for filtering only
-        },
-      },
-    ]);
-
-    /* =====================================================
-       2️⃣ AI INTERVIEWS
-    ===================================================== */
-
-    const aiData = await AI_Interview.aggregate([
-      { $unwind: "$candidates" },
-
-      {
-        $lookup: {
-          from: "candidates",
-          localField: "candidates.candidateId",
-          foreignField: "_id",
-          as: "candidateDetails",
-        },
-      },
-      { $unwind: { path: "$candidateDetails", preserveNullAndEmptyArrays: true } },
-
-      {
-        $project: {
-          _id: 1,
-          type: { $literal: "AI" },
-          title: "$position",
-          examType: 1,
-          difficulty: 1,
-
-          candidate: {
-            _id: "$candidateDetails._id",
-            name: "$candidateDetails.name",
-            email: "$candidateDetails.email",
-            mobile: "$candidateDetails.mobile",
-            role: "$candidateDetails.role",
-            year_of_experience: "$candidateDetails.year_of_experience",
-            status: "$candidateDetails.status",
-            candidate_status: "$candidateDetails.candidate_status",
-          },
-
-          startDate: "$candidates.scheduledStartDate",
-          endDate: "$candidates.scheduledEndDate",
-          interviewStatus: "$status",
-          interviewLink: "$candidates.interviewLink",
-          password: "$candidates.password",
-        },
-      },
-    ]);
-
-    /* =====================================================
-       3️⃣ MERGE + FILTER (Remove Password)
-    ===================================================== */
-
-    const allInterviews = [...mcqData, ...aiData]
-      .filter((item) => item.interviewLink && item.password)
-      .map(({ password, ...rest }) => rest);
-
-    /* =====================================================
-       4️⃣ CATEGORIZE
-    ===================================================== */
-
-    const upcoming = [];
-    const ongoing = [];
-    const past = [];
-
-    allInterviews.forEach((item) => {
-      if (!item.startDate || !item.endDate) return;
-
-      if (now < new Date(item.startDate)) {
-        upcoming.push(item);
-      } else if (
-        now >= new Date(item.startDate) &&
-        now <= new Date(item.endDate)
-      ) {
-        ongoing.push(item);
-      } else {
-        past.push(item);
-      }
-    });
-
-    /* =====================================================
-       5️⃣ RESPONSE
-    ===================================================== */
-
-    res.status(200).json({
-      totalScheduledTests: allInterviews.length,
-      upcomingCount: upcoming.length,
-      ongoingCount: ongoing.length,
-      pastCount: past.length,
-      upcoming,
-      ongoing,
-      past,
-    });
-
+      });
   } catch (error) {
-    console.error("GetAllSchedule Error:", error);
-    res.status(500).json({ message: "Server Error" });
+    console.error("Bulk Upload Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Server error during bulk upload",
+    });
   }
 };
+
