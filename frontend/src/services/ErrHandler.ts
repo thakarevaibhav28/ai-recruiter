@@ -1,12 +1,26 @@
+import type { AxiosError } from "axios";
 
-import type { AxiosResponse } from "axios";
+export const handleErrResult = (err: AxiosError) => {
+  const status = err.response?.status;
 
+  if (status === 401 || status === 403) {
+    const userData = localStorage.getItem("user");
 
+    let role = "";
 
-export const handleErrResult = (err: AxiosResponse) => {
-  if (err.status === 401) {
-        window.location.replace("/admin/login");
-  } else if (err.status === 403) {
-    window.location.replace("/admin/login");
-}
+    if (userData) {
+      try {
+        const parsedUser = JSON.parse(userData);
+        role = parsedUser.role;
+      } catch (error) {
+        console.error("Invalid user data in localStorage");
+      }
+    }
+
+    if (role === "admin") {
+      window.location.replace("/admin/login");
+    } else {
+      window.location.replace("/user/login"); // user login route
+    }
+  }
 };

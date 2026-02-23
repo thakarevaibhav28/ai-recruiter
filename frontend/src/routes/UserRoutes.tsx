@@ -16,6 +16,7 @@ function App() {
     <>
       <ToastProvider />
       <Routes>
+        <Route path="/user/login" element={<UserLogin />} />
         {/* User Routes */}
         <Route path="/user/login/:id" element={<UserLogin />} />
 

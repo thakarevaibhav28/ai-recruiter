@@ -5,14 +5,11 @@ import toast from "react-hot-toast";
 import {
   FaUsers,
   FaClipboardList,
-  FaCheckCircle,
-  FaClock,
   FaFileAlt,
   FaRobot,
 } from "react-icons/fa";
 import { Plus, UserPlus, Calendar, TrendingUp } from "lucide-react";
-import { Navigate, useNavigate } from "react-router-dom";
-import { set } from "react-hook-form";
+import { useNavigate } from "react-router-dom";
 
 // Stat Card Component
 const StatCard = ({
