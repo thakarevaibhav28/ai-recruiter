@@ -108,8 +108,12 @@ export const GetAllAIInterview = async (req, res) => {
       const interview = await AI_Interview.findOne({
         _id: id,
         createdBy: adminId,
-      });
+      }).populate({
+  path: "candidates.candidateId",
+  select: "name email mobile",
+});
 
+      console.log("interview",interview)
       if (!interview) {
         return res.status(404).json({
           success: false,
@@ -128,6 +132,7 @@ export const GetAllAIInterview = async (req, res) => {
     const drafts = await AI_Interview.find({
       createdBy: adminId,
     }).sort({ createdAt: -1 });
+    
 
     const formattedDrafts = drafts.map((item) => ({
       jobId: item._id,

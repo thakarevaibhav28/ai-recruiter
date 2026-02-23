@@ -32,10 +32,7 @@ const aiInterviewSchema = new mongoose.Schema(
 
     candidates: [
       {
-        candidateId: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "Candidate",
-        },
+        candidateId: { type: mongoose.Schema.Types.ObjectId, ref: "Candidate" },
         interviewLink: String,
         password: String,
         scheduledStartDate: Date,
