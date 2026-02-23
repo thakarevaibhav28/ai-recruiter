@@ -989,7 +989,7 @@ const getDefaultDuration = (difficulty: string) => {
                       </div>
 
                       {/* ================= Interview Link Section ================= */}
-                      <div className="mb-5 mt-2">
+                      {/* <div className="mb-5 mt-2">
                         <label className="block text-xs sm:text-sm text-gray-600 mb-1">
                           Interview Link
                         </label>
@@ -1010,7 +1010,7 @@ const getDefaultDuration = (difficulty: string) => {
                             Copy
                           </button>
                         </div>
-                      </div>
+                      </div> */}
 
                       <div className="w-full mt-4 flex gap-4">
                         {/* Start Date */}

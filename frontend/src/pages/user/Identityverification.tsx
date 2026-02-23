@@ -1182,7 +1182,7 @@ const IdentityVerification: React.FC = () => {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  // ── Selfie / Camera ──────────────────────────────────────────────────────────
+  // ── Photo / Camera ──────────────────────────────────────────────────────────
 
   const stopScan = () => { if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current); };
 
@@ -1243,7 +1243,7 @@ const IdentityVerification: React.FC = () => {
         scanRef.current = { pos: 0, dir: 1 };
         startScanAnimation();
 
-        // Upload selfie to backend in background
+        // Upload Photo to backend in background
         (async () => {
           try {
             const blob = await (await fetch(img)).blob();
@@ -1252,12 +1252,12 @@ const IdentityVerification: React.FC = () => {
             if (!userId) { toast.error("User not authenticated"); return; }
             await userService.selfieVerification(userId, file);
           } catch (error) {
-            console.error("Selfie upload error:", error);
-            toast.error("Selfie upload failed. Please try again.");
+            console.error("Photo upload error:", error);
+            toast.error("Photo upload failed. Please try again.");
           }
         })();
 
-        setTimeout(() => { stopScan(); setCameraStatus("completed"); toast.success("Selfie captured successfully!"); }, 3000);
+        setTimeout(() => { stopScan(); setCameraStatus("completed"); toast.success("Photo captured successfully!"); }, 3000);
       }, 2500);
     } catch (error) {
       console.error("Camera error:", error);
@@ -1330,7 +1330,7 @@ const IdentityVerification: React.FC = () => {
               )}
             </AnimatePresence>
             <div>
-              <p className={`text-xs sm:text-sm font-semibold ${cameraStatus === "completed" ? "text-green-400" : "text-[#2D55FB]"}`}>Selfie Capture</p>
+              <p className={`text-xs sm:text-sm font-semibold ${cameraStatus === "completed" ? "text-green-400" : "text-[#2D55FB]"}`}>Photo Capture</p>
               <p className="text-gray-500 text-xs">{cameraStatus === "completed" ? "Completed" : "Identity verification"}</p>
             </div>
           </div>
@@ -1433,15 +1433,15 @@ const IdentityVerification: React.FC = () => {
                     className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-medium text-sm transition-all ${uploadStatus === "verified" ? "bg-[#2D55FB] text-white hover:bg-[#1e3fd4]" : "bg-gray-700 text-gray-400 cursor-not-allowed"}`}
                     whileHover={uploadStatus === "verified" ? { scale: 1.02 } : {}}
                     whileTap={uploadStatus === "verified" ? { scale: 0.98 } : {}}>
-                    Next: Selfie Verification →
+                    Next: Photo Verification →
                   </motion.button>
                 </div>
               </>
             ) : (
               <>
                 <div className="text-center mb-6">
-                  <h1 className="text-white text-2xl sm:text-3xl font-bold mb-2">Selfie Verification</h1>
-                  <p className="text-gray-400 text-sm sm:text-base">Take a clear selfie to verify your identity and ensure secure assessment access</p>
+                  <h1 className="text-white text-2xl sm:text-3xl font-bold mb-2">Photo Verification</h1>
+                  <p className="text-gray-400 text-sm sm:text-base">Take a clear Photo to verify your identity and ensure secure assessment access</p>
                 </div>
 
                 <div className="bg-[#0d1535]/80 backdrop-blur-xl rounded-2xl p-5 sm:p-6 border border-white/10 shadow-2xl mb-4">
@@ -1473,7 +1473,7 @@ const IdentityVerification: React.FC = () => {
                       style={{ maxHeight: "280px", minHeight: "260px" }} />
 
                     {(cameraStatus === "validating" || cameraStatus === "processing" || cameraStatus === "completed") && capturedImage && (
-                      <motion.img src={capturedImage} alt="Captured selfie" className="w-full object-cover rounded-xl"
+                      <motion.img src={capturedImage} alt="Captured Photo" className="w-full object-cover rounded-xl"
                         style={{ maxHeight: "280px", minHeight: "260px" }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4 }} />
                     )}
 
@@ -1551,7 +1551,7 @@ const IdentityVerification: React.FC = () => {
                 <div className="bg-[#0d1535]/80 backdrop-blur-xl rounded-2xl p-5 border border-white/10 mb-6">
                   <div className="flex items-center gap-2 mb-4">
                     <Shield className="h-4 w-4 text-[#2D55FB]" />
-                    <h3 className="text-[#2D55FB] font-semibold text-sm">Selfie Guidelines</h3>
+                    <h3 className="text-[#2D55FB] font-semibold text-sm">Photo Guidelines</h3>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
