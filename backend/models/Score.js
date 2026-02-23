@@ -1,35 +1,48 @@
 import mongoose from "mongoose";
 
-const scoreSchema = new mongoose.Schema({
-  interviewId: {
-    type: mongoose.Schema.Types.ObjectId,
-    required: true,
-  },
-
-  examType: {
-    type: String,
-    enum: ["AI", "MCQ"],
-    required: true,
-  },
-
-  candidateId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Candidate",
-    required: true,
-  },
-
-  scores: [
-    {
-      questionId: mongoose.Schema.Types.ObjectId,
-      score: Number,
-      feedback: String,
+const scoreSchema = new mongoose.Schema(
+  {
+    interviewId: {
+      type: mongoose.Schema.Types.ObjectId,
+      refPath: "interviewModel",
+      required: true,
     },
-  ],
 
-  totalScore: Number,
-  maxScore: Number,
-  summary: String,
-  pdfPath: String,
-});
+    interviewModel: {
+      type: String,
+      required: true,
+      enum: ["AI_Interview", "MCQ_Interview"],
+    },
+    examType: {
+      type: String,
+      enum: ["AI", "MCQ"],
+      required: true,
+    },
 
-export default mongoose.model('Score', scoreSchema);
+    candidateId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Candidate", // 👈 MUST MATCH model name exactly
+      required: true,
+    },
+
+    scores: [
+      {
+        questionId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Question",
+          required: true
+        },
+        score: Number,
+        feedback: String,
+      },
+    ],
+
+    totalScore: Number,
+    maxScore: Number,
+    summary: String,
+    pdfPath: String,
+  },
+  { timestamps: true },
+);
+
+export default mongoose.model("Score", scoreSchema);

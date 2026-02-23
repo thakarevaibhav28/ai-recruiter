@@ -10,20 +10,24 @@ class AdminApi {
     UPDATE_ASESMENT_TEMPLATE: "/admin/assessment/template",
     GET_ASSESMENTS: "/admin/assessment/mcq/list",
     GET_CANDIDATES: "/admin/candidates",
+    GET_CANDIDATE_PROFILE: "/admin/candidate_profile",
     SEND_INVITES: "/admin/assessment/:assessmentId/invite",
     GENERATE_AND_INVITE: "/admin/assessment/send-invites",
     CREATE_AI_TEMPLATE: "/admin/interview/template",
     UPDATE_AI_TEMPLATE: "/admin/interview/template",
     SEND_AI_INVITES: "/admin/interview/send-invites",
     GET_AI: "/admin/interviews/list",
-    DELETE_CANDIDATE:"/admin/candidate",
+    DELETE_CANDIDATE: "/admin/candidate",
     GET_ME: "/admin/me",
-    UPLOAD_JD:"/admin/analyze",
-    GENERATE_MCQ:"/admin/generate-mcq",
+    UPLOAD_JD: "/admin/analyze",
+    GENERATE_MCQ: "/admin/generate-mcq",
     TOTAL_SCHEDULE: "/admin/total-schedule",
+    RE_SCHEDULE: "/admin/interview",
+    CANCLE_INTERVIEW: "/admin/interview",
+    TOP_PERFORMANCE: "/admin/top-performance",
+    SCORES:"/admin/student-scores"
   };
 
- 
   login = (data: any) => {
     return api._post(this._url.LOGIN, data);
   };
@@ -38,32 +42,36 @@ class AdminApi {
     return api._postFormData(this._url.CREATE_ASESMENT_TEMPLATE, data);
   }
   updateAssessmentTemplate(id: string, data: any) {
-    return api._putFormData(`${this._url.UPDATE_ASESMENT_TEMPLATE}/${id}/update`, data);
+    return api._putFormData(
+      `${this._url.UPDATE_ASESMENT_TEMPLATE}/${id}/update`,
+      data,
+    );
   }
-
 
   getAssesments(id?: string) {
-  if (id) {
+    if (id) {
       return api._get(`${this._url.GET_ASSESMENTS}/?id=${id}`);
-  }
+    }
     return api._get(this._url.GET_ASSESMENTS);
-}
-
+  }
 
   // create candiate
-  addCandidate(data:any){
-    return api._post(this._url.ADD_CANDIDATE,data)
+  addCandidate(data: any) {
+    return api._post(this._url.ADD_CANDIDATE, data);
   }
-
 
   //get all candidates
-  getAllCandidate() {
-    return api._get(this._url.GET_CANDIDATES);
+  getAllCandidate(page = 1, limit = 10, status = "All") {
+    return api._get(
+      `${this._url.GET_CANDIDATES}?page=${page}&limit=${limit}&status=${status}`,
+    );
   }
-
-  // update Candidate 
-  updateCandidate(id:string, data:any){
-    return api._patch(`${this._url.DELETE_CANDIDATE}/${id}`, data )
+  getCandidateProfile(id: string) {
+    return api._get(`${this._url.GET_CANDIDATE_PROFILE}/${id}`);
+  }
+  // update Candidate
+  updateCandidate(id: string, data: any) {
+    return api._patch(`${this._url.DELETE_CANDIDATE}/${id}`, data);
   }
 
   //send invites
@@ -80,35 +88,52 @@ class AdminApi {
     return api._put(`${this._url.UPDATE_AI_TEMPLATE}/${id}/update`, data);
   }
 
-
-  getDraft(id?:string) {
-    if(id){
+  getDraft(id?: string) {
+    if (id) {
       return api._get(`${this._url.GET_AI}/?id=${id}`);
     }
     return api._get(this._url.GET_AI);
   }
 
-
-
-   generateAIInterview(data: any) {
+  generateAIInterview(data: any) {
     return api._postFormData(this._url.CREATE_AI_TEMPLATE, data);
   }
 
   sendInvitations(data: any) {
     return api._post(this._url.SEND_AI_INVITES, data);
   }
- getMe(){
+  getMe() {
     return api._get(this._url.GET_ME);
-  };
-  analyzeJD(data:any){
-    return api._postFormData(this._url.UPLOAD_JD,data)
   }
-  generateMCQ(data:any,id?:string){
-    return api._post(`${this._url.GENERATE_MCQ}/${id}`,data)
+  analyzeJD(data: any) {
+    return api._postFormData(this._url.UPLOAD_JD, data);
+  }
+  generateMCQ(data: any, id?: string) {
+    return api._post(`${this._url.GENERATE_MCQ}/${id}`, data);
   }
   //get total schedule
   getTotalSchedule() {
     return api._get(this._url.TOTAL_SCHEDULE);
+  }
+
+  getTopPerformance(examType: string) {
+    return api._get(`${this._url.TOP_PERFORMANCE}?examType=${examType}`);
+  }
+  getScore(examType: string) {
+    return api._get(`${this._url.SCORES}?examType=${examType}`);
+  }
+
+  reScheduleInterview(type: string, interviewId: string, data: any) {
+    return api._put(
+      `${this._url.RE_SCHEDULE}/${type}/${interviewId}/reschedule`,
+      data,
+    );
+  }
+  cancleInterview(type: string, interviewId: string, data: any) {
+    return api._put(
+      `${this._url.CANCLE_INTERVIEW}/${type}/${interviewId}/cancel`,
+      data,
+    );
   }
 }
 

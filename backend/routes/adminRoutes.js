@@ -1,6 +1,6 @@
 import express from "express";
-import multer from "multer";
 import auth from "../middleware/auth.js";
+import { uploadCSV, upload, uploadMemory } from "../middleware/upload.js";
 
 import mammoth from "mammoth";
 import OpenAI from "openai";
@@ -9,7 +9,8 @@ import {
   RegisterUser,
   LoginUser,
   getMe,
-  GetTopPerformance
+  GetTopPerformance,
+  GetAllSchedule,rescheduleInterview,cancelInterview,getStudentScores
 } from "../controllers/adminControllers/AuthorizationController.js";
 
 import {
@@ -26,30 +27,18 @@ import {
   AIInterviewInvitation,
   GetAllAIInterview,
   ScheduleAiInterview,
-  UpdateAIInterview
+  UpdateAIInterview,
 } from "../controllers/adminControllers/InterviewController.js";
 
 import {
   CreateCandidate,
   GetCandidate,
+  getCandidateProfile,
   UpdateCandidate,
-GetAllSchedule,
   BulkAddCandidates,
 } from "../controllers/candidateControllers/AuthorizationController.js";
 
 const router = express.Router();
-
-// Configure multer to preserve the original file extension and set a proper destination
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, "uploads");
-  },
-  filename: function (req, file, cb) {
-    cb(null, `${Date.now()}-${file.originalname}`);
-  },
-});
-
-const upload = multer({ storage });
 
 // Admin registration and login routes
 router.post("/register", RegisterUser);
@@ -57,6 +46,7 @@ router.post("/login", LoginUser);
 router.get("/me", auth("admin"), getMe);
 
 router.get("/top-performance", auth("admin"), GetTopPerformance);
+
 
 // POST Create MCQ Assessment Template
 router.post(
@@ -105,11 +95,7 @@ router.post(
 router.post("/interview/send-invites", auth("admin"), AIInterviewInvitation);
 
 // Update interview status (draft/scheduled)
-router.put(
-  "/interview/template/:id/update",
-  auth("admin"),
-  UpdateAIInterview,
-);
+router.put("/interview/template/:id/update", auth("admin"), UpdateAIInterview);
 
 router.get("/interviews/list", auth("admin"), GetAllAIInterview);
 
@@ -118,17 +104,31 @@ router.post("/create/candidate", auth("admin"), CreateCandidate);
 
 router.get("/candidates", auth("admin"), GetCandidate);
 
+router.get("/candidate_profile/:id", auth("admin"), getCandidateProfile);
+
 router.patch("/candidate/:id", auth("admin"), UpdateCandidate);
 
 // Get all Assessment Schedule data
 router.get("/total-schedule", auth("admin"), GetAllSchedule);
+
+router.put(
+  "/interview/:type/:interviewId/reschedule",
+  auth("admin"),
+  rescheduleInterview,
+);
+
+router.put(
+  "/interview/:type/:interviewId/cancel",
+  auth("admin"),
+  cancelInterview
+);
 
 // Get all AI Interview Schedule data
 // router.get("/total-schedule", auth("admin"), GetAllAiInterviewSchedule);
 router.post(
   "/candidates/bulk",
   auth("admin"),
-  upload.single("csvFile"),
+  uploadCSV.single("csvFile"),
   BulkAddCandidates,
 );
 
@@ -272,6 +272,14 @@ router.post(
   ScheduleAiInterview,
 );
 
+router.get("/student-scores",auth("admin"), getStudentScores);
+
+// router.put(
+//   "/interview/ai/:interviewId/reschedule",
+//   auth("admin"),
+//   rescheduleAiInterview,
+// );
+
 // router.get("/interview/:id/getcandidates/mcq",
 //   auth("admin"),
 //   async (req, res) => {
@@ -372,36 +380,14 @@ router.post(
 // );
 // Get all interviews created by the admin
 
-
-
-
-
-
-
-
-// ── Multer: memory storage for JD uploads ─────────────────
-const uploadJD = multer({
-  storage: multer.memoryStorage(), // ✅ explicit memoryStorage
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
-  fileFilter: (req, file, cb) => {
-    const allowed = [
-      "application/pdf",
-      "application/msword",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    ];
-    if (allowed.includes(file.mimetype)) cb(null, true);
-    else cb(new Error("Only PDF and DOC/DOCX files are allowed"), false);
-  },
-});
-
 // ── Helper: extract raw text from buffer ───────────────────
 async function extractTextFromFile(buffer, mimetype) {
   if (mimetype === "application/pdf") {
     const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
-    
+
     const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(buffer) });
     const pdf = await loadingTask.promise;
-    
+
     let fullText = "";
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
@@ -457,40 +443,51 @@ Return ONLY the JSON object. No markdown, no explanation.
   });
 
   const content = response.choices[0]?.message?.content?.trim();
-  const cleaned = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+  const cleaned = content
+    .replace(/```json\n?/g, "")
+    .replace(/```\n?/g, "")
+    .trim();
   return JSON.parse(cleaned);
 }
 
 // POST /api/jd/analyze
-router.post("/analyze", auth("admin"), uploadJD.single("jobDescription"), async (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ message: "No file uploaded" });
-  }
-
-  try {
-    // ✅ Use req.file.buffer directly — no file path needed
-    const rawText = await extractTextFromFile(req.file.buffer, req.file.mimetype);
-
-    if (!rawText || rawText.trim().length < 50) {
-      return res.status(422).json({
-        message: "Could not extract meaningful text from the document. Please check the file.",
-      });
+router.post(
+  "/analyze",
+  auth("admin"),
+  uploadMemory.single("jobDescription"),
+  async (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
     }
 
-    const analysis = await analyzeJDWithAI(rawText);
+    try {
+      // ✅ Use req.file.buffer directly — no file path needed
+      const rawText = await extractTextFromFile(
+        req.file.buffer,
+        req.file.mimetype,
+      );
 
-    res.json({
-      success: true,
-      fileName: req.file.originalname,
-      analysis,
-    });
+      if (!rawText || rawText.trim().length < 50) {
+        return res.status(422).json({
+          message:
+            "Could not extract meaningful text from the document. Please check the file.",
+        });
+      }
 
-  } catch (err) {
-    console.error("JD Analysis error:", err);
-    res.status(500).json({
-      message: err.message || "Failed to analyze job description",
-    });
-  }
-  // ✅ No cleanup needed — memory storage, nothing written to disk
-});
+      const analysis = await analyzeJDWithAI(rawText);
+
+      res.json({
+        success: true,
+        fileName: req.file.originalname,
+        analysis,
+      });
+    } catch (err) {
+      console.error("JD Analysis error:", err);
+      res.status(500).json({
+        message: err.message || "Failed to analyze job description",
+      });
+    }
+    // ✅ No cleanup needed — memory storage, nothing written to disk
+  },
+);
 export default router;

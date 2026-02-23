@@ -63,5 +63,31 @@ app.use("/scorecards", express.static("scorecards"));
 app.use("/api/admin", adminRoutes);
 app.use("/api/candidate", candidateRoutes);
 app.use("/api/admin/generate-mcq", MCQRoutes);
+  
 
+// Global error handler
+app.use((err, req, res, next) => {
+  console.error("Global Error:", err);
+
+  // Multer errors
+  if (err.name === "MulterError") {
+    return res.status(400).json({
+      success: false,
+      message: err.message,
+    });
+  }
+
+  // Custom fileFilter errors
+  if (err.message) {
+    return res.status(400).json({
+      success: false,
+      message: err.message,
+    });
+  }
+
+  res.status(500).json({
+    success: false,
+    message: "Internal Server Error",
+  });
+});
 export default app;
