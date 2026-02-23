@@ -1,11 +1,17 @@
 import { Button } from "../../../ui/button";
 import { useEffect, useState } from "react";
-import Comment from "../../../assets/admin/report/message.png";
-import Calender from "../../../assets/admin/report/calendar.png";
-import RightArrow from "../../../assets/admin/TestTemplates/arrow-right.png";
-import FileEdit from "../../../assets/admin/TestTemplates/file-edit1.png";
+import {
+  FileText,
+  Clock,
+  Calendar as CalendarIcon,
+  Upload,
+  X,
+  AlertCircle,
+  CheckCircle2,
+  Users,
+} from "lucide-react";
 import { adminService } from "../../../services/service/adminService";
-import { FileText} from "lucide-react";
+
 interface ActiveInterviewsProps {
   onNavigateToInterviewSetup: (assessment: any) => void;
   onEditInterview: (assessment: any) => void;
@@ -70,80 +76,155 @@ const ActiveInterviews: React.FC<ActiveInterviewsProps> = ({
     return `${diffInDays} day${diffInDays > 1 ? "s" : ""} ago`;
   };
 
+  const handleViewCandidates = () => {};
   return (
     <div className=" flex  ">
       <div className="w-full">
-        <div className="flex flex-wrap items-start justify-start gap-3   mt-0 pt-12">
+        <div className="pt-12">
           {templatesLoading ? (
-  <div className="flex items-center justify-center py-20 w-full">
-    <div className="flex flex-col items-center gap-3">
-      <div className="w-10 h-10 border-4 border-indigo-200 border-t-[#4318FF] rounded-full animate-spin" />
-      <p className="text-sm text-gray-400">Loading templates...</p>
-    </div>
-  </div>
-) : assessments.length === 0 ? (
-             <div className="flex flex-col items-center justify-center py-20 text-center w-full">
-                          <FileText className="h-10 w-10 text-gray-300 mb-3" />
-                          <p className="text-gray-500 font-medium">No templates yet</p>
-                          <p className="text-gray-400 text-sm mt-1">Create an assessment and save it as a template</p>
-                        </div>
-          ):(
-            assessments.map((assessment, index) => (
-              <div
-                key={index}
-                className="bg-white rounded-lg shadow-md p-4 border border-gray-200 w-[290px]"
-              >
-                <div className="flex items-center  justify-between mb-4">
-                  <div className="flex items-center justify-between w-full">
-                    <h3 className="text-lg font-semibold text-gray-900">
-                      {assessment.position}
-                    </h3>
-                    <span className="border border-[#C2410C] text-[#C2410C] text-xs font-medium px-2 py-1 rounded-xl">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="bg-white rounded-lg border border-gray-200 p-6 animate-pulse"
+                >
+                  <div className="flex justify-between items-center mb-4">
+                    <div className="h-5 w-12 bg-gray-200 rounded-full" />
+                    <div className="h-5 w-20 bg-gray-200 rounded-full" />
+                  </div>
+                  <div className="mb-4 space-y-2">
+                    <div className="h-5 w-3/4 bg-gray-200 rounded" />
+                    <div className="h-4 w-1/2 bg-gray-200 rounded" />
+                  </div>
+                  <div className="space-y-2 mb-4">
+                    <div className="h-4 w-full bg-gray-200 rounded" />
+                    <div className="h-4 w-2/3 bg-gray-200 rounded" />
+                  </div>
+                  <div className="flex gap-3 pt-4">
+                    <div className="flex-1 h-9 bg-gray-200 rounded-lg" />
+                    <div className="h-9 w-10 bg-gray-200 rounded-lg" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : assessments.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center w-full">
+              <FileText className="h-10 w-10 text-gray-300 mb-3" />
+              <p className="text-gray-500 font-medium">No templates yet</p>
+              <p className="text-gray-400 text-sm mt-1">
+                Create an assessment and save it as a template
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {assessments.map((assessment: any) => (
+                <div
+                  key={assessment._id}
+                  className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-lg transition-shadow"
+                >
+                  {/* Top badges */}
+                  <div className="flex justify-between items-center mb-4">
+                    <span className="px-3 py-1 bg-gray-100 text-gray-700 text-xs font-medium rounded-full">
+                      {assessment.passing_score || 60}%
+                    </span>
+
+                    <span
+                      className={`px-3 py-1 text-xs font-medium rounded-full ${
+                        assessment.difficulty === "Advanced"
+                          ? "bg-orange-100 text-orange-600"
+                          : assessment.difficulty === "Easy"
+                            ? "bg-green-100 text-green-600"
+                            : "bg-blue-100 text-blue-600"
+                      }`}
+                    >
                       {assessment.difficulty}
                     </span>
                   </div>
-                </div>
-                <div className="text-sm text-gray-500 mb-4">
-                  {assessment.skills.map((skill: string, i: number) => (
-                    <span
-                      key={i}
-                      className="inline-block bg-gray-200 text-gray-800 text-xs px-2 py-1 rounded-full mr-2 mb-2"
+
+                  {/* Title */}
+                  <div className="mb-4">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                      {assessment.test_title || assessment.position}
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      {assessment.primary_skill}
+                    </p>
+                  </div>
+
+                  {/* Details */}
+                  <div className="space-y-2 mb-4 text-sm text-gray-600">
+                    {assessment.secondary_skill && (
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4" />
+                        <span>{assessment.secondary_skill}</span>
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-4 w-4" />
+                        <span>{assessment.duration}</span>
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <CalendarIcon className="h-4 w-4" />
+                        <span>
+                          {assessment.no_of_questions ||
+                            assessment.numberOfQuestions}{" "}
+                          questions
+                        </span>
+                      </div>
+                    </div>
+
+                    {assessment.createdAt && (
+                      <p className="text-xs text-gray-400">
+                        Created{" "}
+                        {new Date(assessment.createdAt).toLocaleDateString()}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Buttons */}
+                  {/* <div className="flex gap-3 pt-4">
+            <button
+              onClick={() => onNavigateToInterviewSetup(assessment)}
+              className="flex-1 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
+            >
+              Use
+            </button>
+
+            <button
+              onClick={() => onEditInterview(assessment)}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              ✏️
+            </button>
+          </div> */}
+                  <div className="flex gap-3 pt-4">
+                    <button
+                      onClick={() => onNavigateToInterviewSetup(assessment)}
+                      className="flex-1 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
                     >
-                      {skill}
-                    </span>
-                  ))}
+                      Use
+                    </button>
+                    <button
+                      onClick={() => handleViewCandidates(item)}
+                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                      title="View Candidates"
+                    >
+                      <Users className="h-4 w-4" />
+                    </button>
+                    {/* NEW: spinner on the edit button while that specific item is loading */}
+                    <button
+                      onClick={() => onEditInterview(assessment)}
+                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                    >
+                      📄
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center text-sm text-gray-500 mb-4">
-                  <span className="flex items-center mr-4">
-                    <img src={Comment} alt="" className="w-4 h-4 mr-3" />
-                    {assessment.numberOfQuestions} questions
-                  </span>
-                  <span className="flex items-center">
-                    <img src={Calender} alt="" className="w-4 h-4 mr-3" />
-                    {assessment.createdDate}
-                  </span>
-                </div>
-                <p className="text-sm text-gray-500 mb-6">
-                  {" "}
-                  Last Use: {getTimeAgo(assessment.createdAt)}
-                </p>
-                <div className="flex space-x-3">
-                  <button
-                    onClick={() => onNavigateToInterviewSetup(assessment)}
-                    className="flex-1 bg-blue-600 text-white px-5 py-2 rounded-lg flex items-center justify-center hover:bg-blue-700"
-                  >
-                    <img src={RightArrow} className="w-4 h-4 mr-2" />
-                    Use
-                  </button>
-                  <button
-                    onClick={() => onEditInterview(assessment)}
-                    className="border border-[#4318FF99] px-4 py-2 rounded-lg"
-                  >
-                    <img src={FileEdit} className="w-6 h-6" />
-                  </button>
-                </div>
-              </div>
-            ))
+              ))}
+            </div>
           )}
         </div>
       </div>
