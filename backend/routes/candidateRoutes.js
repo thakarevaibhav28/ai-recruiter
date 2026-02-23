@@ -319,19 +319,21 @@ router.get("/interview/:id/questions", auth("candidate"), async (req, res) => {
 //   }
 // });
 
-router.post('/interview/:id/answer', async (req, res) => {
+router.post("/interview/:id/answer",auth("candidate"), async (req, res) => {
   const { id } = req.params;
   const { questionId, answerText } = req.body;
+
+  console.log("Answer submission received:", { id, questionId, answerText });
 
   try {
     const interview = await Interview.findById(id);
     if (!interview) {
-      return res.status(404).json({ message: 'Interview not found' });
+      return res.status(404).json({ message: "Interview not found" });
     }
 
     const question = await Question.findById(questionId);
     if (!question) {
-      return res.status(404).json({ message: 'Question not found' });
+      return res.status(404).json({ message: "Question not found" });
     }
 
     // Calculate score (MCQ logic)
@@ -340,17 +342,18 @@ router.post('/interview/:id/answer', async (req, res) => {
       answerText.trim() === question.correctAnswer.trim();
 
     const score = isCorrect ? 10 : 0;
-
+    console.log(question);
+    console.log(req);
     // Find existing answer for same candidate
     const existingAnswer = question.answers.find(
-      (a) => a.candidateId.toString() === "6994518d5ba585734ab7343d"
+      (a) => a.candidateId.toString() === req.user.id,
     );
-console.log("Existing Answer:", existingAnswer);
+    console.log("Existing Answer:", existingAnswer);
     if (existingAnswer) {
       // ✅ UPDATE existing score
       existingAnswer.answerText = answerText;
       existingAnswer.score = score;
-      existingAnswer.feedback = '';
+      existingAnswer.feedback = "";
     } else {
       // ✅ CREATE new answer entry
       question.answers.push({
@@ -358,7 +361,7 @@ console.log("Existing Answer:", existingAnswer);
         candidateId: req.user.id,
         answerText,
         score,
-        feedback: '',
+        feedback: "",
       });
     }
 
@@ -367,14 +370,13 @@ console.log("Existing Answer:", existingAnswer);
     res.json({
       success: true,
       message: existingAnswer
-        ? 'Answer updated successfully'
-        : 'Answer submitted successfully',
+        ? "Answer updated successfully"
+        : "Answer submitted successfully",
       score,
     });
-
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json(error);
   }
 });
 
@@ -400,7 +402,7 @@ router.post("/interview/:id/submit", auth("candidate"), async (req, res) => {
 
     // 🔥 2️⃣ Find candidate inside interview
     const candidateEntry = interview.candidates.find(
-      (c) => c.candidateId.toString() === candidateId
+      (c) => c.candidateId.toString() === candidateId,
     );
 
     if (!candidateEntry) {
@@ -434,7 +436,7 @@ router.post("/interview/:id/submit", auth("candidate"), async (req, res) => {
 
       questions.forEach((q) => {
         const answer = q.answers.find(
-          (a) => a.candidateId.toString() === candidateId
+          (a) => a.candidateId.toString() === candidateId,
         );
 
         const score = answer?.score || 0;
@@ -491,24 +493,20 @@ router.post("/interview/:id/submit", auth("candidate"), async (req, res) => {
       candidate,
       scores,
       totalScore,
-      summary
+      summary,
     );
 
-    const uploadResult = await new Promise((resolve, reject) => {
-      const stream = cloudinary.uploader.upload_stream(
-        {
-          folder: "scorecards",
-          resource_type: "raw",
-          public_id: `${candidate.email}-${id}-${Date.now()}`,
-          format: "pdf",
-        },
-        (error, result) => {
-          if (error) reject(error);
-          else resolve(result);
-        }
-      );
-      stream.end(pdfBuffer);
-    });
+    const uploadResult = await cloudinary.uploader.upload(
+      `data:application/pdf;base64,${pdfBuffer.toString("base64")}`,
+      {
+        folder: "scorecards",
+        resource_type: "image",
+        format: "pdf",
+        access_mode: "public", 
+        type: "upload",
+        overwrite: true,
+      },
+    );
 
     scoreDoc.pdfPath = uploadResult.secure_url;
     await scoreDoc.save();

@@ -109,41 +109,42 @@ export const CreateCandidate = async (req, res) => {
 
 export const GetCandidate = async (req, res) => {
   try {
-    // 1️⃣ Get page & limit from query params
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const status = req.query.status;
+    const page = Math.max(parseInt(req.query.page) || 1, 1);
+    const limit = Math.max(parseInt(req.query.limit) || 10, 1);
+    const status = (req.query.status || "all").toLowerCase();
 
     const skip = (page - 1) * limit;
 
+    // 🔥 Filter Logic
     let query = {};
-    if (["active", "inactive"].includes(status)) {
+
+    if (status !== "all" && ["active", "inactive"].includes(status)) {
       query.candidate_status = status;
     }
 
-    const total = await Candidate.countDocuments(query);
+    const totalRecords = await Candidate.countDocuments(query);
 
     const candidates = await Candidate.find(query)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
 
-    res.json({
+    res.status(200).json({
       success: true,
       data: candidates,
-      totalPages: Math.ceil(total / limit),
-      totalRecords: total,
+      totalPages: Math.ceil(totalRecords / limit),
+      totalRecords,
+      currentPage: page,
     });
+
   } catch (error) {
     console.error("Error fetching candidates:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch candidates",
-      error: error.message,
     });
   }
 };
-
 export const getCandidateProfile = async (req, res) => {
   try {
     const { id } = req.params;
