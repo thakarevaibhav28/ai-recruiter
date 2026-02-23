@@ -238,6 +238,8 @@ function generatePDF(data) {
 }
 
 // ─── Route ────────────────────────────────────────────────────────────────────
+import fs from "fs";
+import path from "path";
 router.post("/feedback", async (req, res) => {
   try {
     const {
@@ -251,38 +253,57 @@ router.post("/feedback", async (req, res) => {
     } = req.body;
 
     if (!interview_id) {
-      return res.status(400).json({ success: false, message: "interview_id is required" });
+      return res.status(400).json({
+        success: false,
+        message: "interview_id is required",
+      });
     }
 
-    // 1. Save to DB
-    const doc = await InterviewFeedback.findOneAndUpdate(
-      { interview_id },
-      {
-        $set: {
-          userName,
-          userEmail,
-          feedback,
-          transcript,
-          behaviorReport,
-          completedAt: completedAt ? new Date(completedAt) : new Date(),
-        },
-      },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    );
+    let savedFilePath = null;
 
-    // 2. Generate PDF (don't block response if it fails)
+    // ===============================
+    // 1️⃣ Generate & Save PDF Locally
+    // ===============================
     try {
-      const pdfBuffer = await generatePDF({ feedback, candidateName: userName, role: feedback?.role });
+      const pdfBuffer = await generatePDF({
+        feedback,
+        candidateName: userName,
+        role: feedback?.role,
+      });
 
-      const candidateName = feedback?.candidateName || userName || "Candidate";
-      const role          = feedback?.role || "Interview";
-      const verdict       = (feedback?.overallVerdict || "consider").toUpperCase();
-      const score         = feedback?.confidenceScore ?? "N/A";
+      const candidateName =
+        feedback?.candidateName || userName || "Candidate";
+      const role = feedback?.role || "Interview";
+      const verdict = (feedback?.overallVerdict || "consider").toUpperCase();
+      const score = feedback?.confidenceScore ?? "N/A";
 
-      // 3. Send email
+      // Create folder if not exists
+      const reportsDir = path.join(process.cwd(), "uploads", "reports");
+
+      if (!fs.existsSync(reportsDir)) {
+        fs.mkdirSync(reportsDir, { recursive: true });
+      }
+
+      const fileName = `Interview_Report_${candidateName.replace(
+        /\s+/g,
+        "_"
+      )}_${Date.now()}.pdf`;
+
+      const filePath = path.join(reportsDir, fileName);
+
+      // Save file
+      fs.writeFileSync(filePath, pdfBuffer);
+
+      savedFilePath = filePath;
+
+      console.log("PDF saved locally at:", filePath);
+
+      // ===============================
+      // 2️⃣ Send Email
+      // ===============================
       await transporter.sendMail({
-        from:    `"Vitric IQ" <${process.env.SMTP_USER}>`,
-        to:      "vaibhav@vitric.in",
+        from: `"Vitric IQ" <${process.env.SMTP_USER}>`,
+        to: "vaibhav@vitric.in",
         subject: `[${verdict}] Interview Report — ${candidateName} | ${role}`,
         html: `
           <div style="font-family:sans-serif;max-width:520px;margin:0 auto">
@@ -292,20 +313,55 @@ router.post("/feedback", async (req, res) => {
             </div>
             <div style="background:#F9FAFB;padding:24px 28px;border:1px solid #E5E7EB;border-top:none;border-radius:0 0 10px 10px">
               <table style="width:100%;border-collapse:collapse">
-                <tr><td style="color:#6B7280;padding:4px 0;font-size:13px">Candidate</td><td style="font-weight:600;font-size:13px">${candidateName}</td></tr>
-                <tr><td style="color:#6B7280;padding:4px 0;font-size:13px">Role</td><td style="font-size:13px">${role}</td></tr>
-                <tr><td style="color:#6B7280;padding:4px 0;font-size:13px">Confidence Score</td><td style="font-size:13px">${score}%</td></tr>
-                <tr><td style="color:#6B7280;padding:4px 0;font-size:13px">Verdict</td>
-                    <td><span style="background:${verdict==="HIRE"?"#D1FAE5":verdict==="REJECT"?"#FEE2E2":"#FEF3C7"};color:${verdict==="HIRE"?"#065F46":verdict==="REJECT"?"#991B1B":"#92400E"};padding:2px 10px;border-radius:20px;font-size:12px;font-weight:600">${verdict}</span></td></tr>
+                <tr>
+                  <td style="color:#6B7280;padding:4px 0;font-size:13px">Candidate</td>
+                  <td style="font-weight:600;font-size:13px">${candidateName}</td>
+                </tr>
+                <tr>
+                  <td style="color:#6B7280;padding:4px 0;font-size:13px">Role</td>
+                  <td style="font-size:13px">${role}</td>
+                </tr>
+                <tr>
+                  <td style="color:#6B7280;padding:4px 0;font-size:13px">Confidence Score</td>
+                  <td style="font-size:13px">${score}%</td>
+                </tr>
+                <tr>
+                  <td style="color:#6B7280;padding:4px 0;font-size:13px">Verdict</td>
+                  <td>
+                    <span style="
+                      background:${
+                        verdict === "HIRE"
+                          ? "#D1FAE5"
+                          : verdict === "REJECT"
+                          ? "#FEE2E2"
+                          : "#FEF3C7"
+                      };
+                      color:${
+                        verdict === "HIRE"
+                          ? "#065F46"
+                          : verdict === "REJECT"
+                          ? "#991B1B"
+                          : "#92400E"
+                      };
+                      padding:2px 10px;
+                      border-radius:20px;
+                      font-size:12px;
+                      font-weight:600">
+                      ${verdict}
+                    </span>
+                  </td>
+                </tr>
               </table>
-              <p style="color:#6B7280;font-size:12px;margin-top:20px">Full report attached as PDF.</p>
+              <p style="color:#6B7280;font-size:12px;margin-top:20px">
+                Full report attached as PDF.
+              </p>
             </div>
           </div>
         `,
         attachments: [
           {
-            filename: `Interview_Report_${candidateName.replace(/\s+/g, "_")}.pdf`,
-            content:  pdfBuffer,
+            filename: fileName,
+            content: pdfBuffer,
             contentType: "application/pdf",
           },
         ],
@@ -313,15 +369,42 @@ router.post("/feedback", async (req, res) => {
 
       console.log(`[feedback] PDF emailed for interview ${interview_id}`);
     } catch (pdfErr) {
-      // Log but don't fail the API response
       console.error("[feedback] PDF/email error:", pdfErr.message);
     }
 
-    return res.json({ success: true, message: "Feedback stored successfully", data: doc });
+    // ===============================
+    // 3️⃣ Save / Update in Database
+    // ===============================
+    const doc = await InterviewFeedback.findOneAndUpdate(
+      { interview_id },
+      {
+        $set: {
+          userName,
+          userEmail,
+          feedback,
+          transcript,
+          behaviorReport,
+          pdfPath: savedFilePath,
+          completedAt: completedAt
+            ? new Date(completedAt)
+            : new Date(),
+        },
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
 
+    return res.json({
+      success: true,
+      message: "Feedback stored successfully",
+      data: doc,
+    });
   } catch (error) {
     console.error("POST Feedback Error:", error);
-    return res.status(500).json({ success: false, message: "Internal server error", error: error.message });
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
   }
 });
 
@@ -455,7 +538,6 @@ router.post("/ai-feedback", async (req, res) => {
   }
 
   const { prompt } = req.body;
-  console.log("[ai-feedback] Received prompt length:", prompt.length);
 
   if (prompt.length > 200_000) {
     return res.status(413).json({
@@ -530,7 +612,6 @@ router.post("/ai-feedback", async (req, res) => {
       });
     }
 
-    console.log("[ai-feedback] Raw model output length:", raw.length);
 
     // 6. Parse the feedback JSON the model generated
     const parsed = safeJsonParse(raw);
