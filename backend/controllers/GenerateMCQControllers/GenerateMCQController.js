@@ -53,14 +53,14 @@ Format exactly like this:
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model: "mistralai/Mistral-7B-Instruct-v0.2",
+            model: "meta-llama/Llama-3.1-8B-Instruct",
             messages: [{ role: "user", content: prompt }],
             max_tokens: 800,
             temperature: 0.5,
           }),
         }
       );
-
+console.log("AI Response Status:", response);
       if (!response.ok) {
         const errorText = await response.text();
         return res.status(response.status).json({
@@ -94,6 +94,7 @@ Format exactly like this:
         questionText: q.question,
         options: q.options,
         correctAnswer: q.correctAnswer,
+        examType: "MCQ",
       }));
 
       await Question.insertMany(questionDocs);

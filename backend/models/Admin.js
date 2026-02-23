@@ -13,7 +13,8 @@ const adminSchema = new mongoose.Schema({
   refreshToken: {
     type: String,
   },
-});
+},
+{ timestamps: true });
 
 adminSchema.pre("save", async function (next) {
   if (this.isModified("password")) {

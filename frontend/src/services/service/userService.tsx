@@ -44,6 +44,12 @@ class UserService {
   finalSubmitMCQAssessment(id: string, data: any) {
     return userApi.FinalSubmit(id, data);
   }
+  generateMCQ(data:any,id?:string){
+    return userApi.generateMCQ(data,id);
+  }
+  generateFeedback(data:any){
+    return userApi.generateFeedback(data);
+  }
 }
 
 export const userService = new UserService();
