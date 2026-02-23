@@ -1,4 +1,4 @@
-const mongoose = require("mongoose");
+import mongoose from "mongoose";
 
 // ─── Sub Schema ─────────────────────────────
 const InsightSchema = new mongoose.Schema({
@@ -63,6 +63,5 @@ const InterviewFeedbackSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-module.exports =
-  mongoose.models.InterviewFeedback ||
-  mongoose.model("InterviewFeedback", InterviewFeedbackSchema);
+
+  export default mongoose.model("InterviewFeedback", InterviewFeedbackSchema);
