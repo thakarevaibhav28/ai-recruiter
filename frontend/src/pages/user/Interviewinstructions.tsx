@@ -358,7 +358,7 @@ const InterviewInstructions: React.FC = () => {
   const { id } = useParams();
   const [interview, setInterview] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const { setInterviewInfo } = useAuth();
+  const { setInterviewInfo,setUserData } = useAuth();
 
   const isMCQ = interview?.examType === "MCQ";
   const guidelines = isMCQ ? MCQ_GUIDELINES : AI_GUIDELINES;
@@ -371,6 +371,7 @@ const InterviewInstructions: React.FC = () => {
         const response = await userService.getInterviewInstruction(id!);
         setInterview(response?.interview);
         setInterviewInfo(response?.interview);
+        setUserData(response?.user);
       } catch (error) {
         console.error(error);
       }

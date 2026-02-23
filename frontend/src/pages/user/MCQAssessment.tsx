@@ -1405,7 +1405,7 @@ const MCQAssessment: React.FC = () => {
         answerText: a.selectedOption,
       }));
       const res = await userService.finalSubmitMCQAssessment(id!, { answers: answersArray });
-      if (res.ok){
+      if (res){
         navigate(`/user/${id}/assessment-complete`);
       setTotalScore(res?.totalScore ?? 0);
 
