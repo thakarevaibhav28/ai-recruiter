@@ -674,28 +674,3 @@ export const GetAllAssessmentSchedule = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
-
-// export const GenerateMCQQuestions = async (req, res) => {
-//   try {
-//     const { id } = req.params;
-
-//     const interview = await MCQ_Interview.findById(id);
-//     if (!interview) {
-//       return res.status(404).json({ message: "Interview not found" });
-//     }
-
-//     const jobDescription = interview.jobDescription || "";
-//     const questions = await generateMCQs(
-//       jobDescription,
-//       interview.test_title,
-//       interview.difficulty,
-//       "MCQ",
-//       interview.no_of_questions,
-//     );
-
-//     res.json({ questions });
-//   } catch (error) {
-//     console.error("Error generating questions:", error);
-//     res.status(500).json({ message: "Server error" });
-//   }
-// };
