@@ -64,9 +64,7 @@ class AdminService {
   analyzeJD(data:any){
     return adminApi.analyzeJD(data);
   }
-  generateMCQ(data:any,id?:string){
-    return adminApi.generateMCQ(data,id);
-  }
+ 
   // get total schedule
   getTotalSchedule() {
     return adminApi.getTotalSchedule();
