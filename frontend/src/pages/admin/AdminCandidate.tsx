@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import AdminLayout from "../../common/AdminLayout";
 import AddCandidateModal from "../../components/Candidates/AddCandidate";
 import ViewCandidateModal from "../../components/Candidates/ViewCandidate";
+import ViewCandidateReportModal from "../../components/Candidates/ViewCandidateReport";
 import { Plus, Filter, MoreVertical } from "lucide-react";
 import BulkUpload from "../../components/Candidates/BulkUpload";
 import toast from "react-hot-toast";
@@ -29,7 +30,7 @@ const Candidates = () => {
   const [loading, setLoading] = useState(false);
 
   const [page, setPage] = useState(1);
-  const [rowsPerPage] = useState(3); // fixed per page
+  const [rowsPerPage] = useState(5); // fixed per page
   const [totalRecords, setTotalRecords] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
 
@@ -37,6 +38,7 @@ const Candidates = () => {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [isViewReportModalOpen, setIsViewReportModalOpen] = useState(false);
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(
     null,
   );
@@ -176,6 +178,23 @@ const Candidates = () => {
       setOpenMenuId(null);
     }
   };
+  const handleViewReportCandidate = async (candidate: Candidate) => {
+    try {
+      setLoading(true);
+
+      const response = await adminService.getCandidateProfile(candidate._id);
+      console.log(response);
+      if (response.status === 200) {
+        setSelectedCandidate(response);
+        setIsViewReportModalOpen(true);
+      }
+    } catch (error) {
+      toast.error("Failed to load candidate profile");
+    } finally {
+      setLoading(false);
+      setOpenMenuId(null);
+    }
+  };
 
   const handleEditCandidate = (candidate: Candidate) => {
     setSelectedCandidate(candidate);
@@ -283,10 +302,12 @@ const Candidates = () => {
               className="px-3 py-2 text-sm  cursor-pointer border-none outline-none focus:ring-0"
             >
               <option value="all">All Status</option>
-              <option value="new">New</option>
+              <option value="active">Active</option>
+              <option value="Inactive">In-Active</option>
+              {/* <option value="new">New</option>
               <option value="In_Progress">In-Progress</option>
               <option value="Completed">Completed</option>
-              <option value="Rejected">Rejected</option>
+              <option value="Rejected">Rejected</option> */}
             </select>
           </div>
         </div>
@@ -472,7 +493,12 @@ const Candidates = () => {
                               >
                                 Edit
                               </button>
-
+                              <button
+                                onClick={() => handleViewReportCandidate(row)}
+                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition"
+                              >
+                                Report
+                              </button>
                               {row.candidate_status === "active" ? (
                                 <button
                                   onClick={() =>
@@ -589,6 +615,14 @@ const Candidates = () => {
         isOpen={isViewModalOpen}
         onClose={() => {
           setIsViewModalOpen(false);
+          setSelectedCandidate(null);
+        }}
+        candidateData={selectedCandidate}
+      />
+      <ViewCandidateReportModal
+        isOpen={isViewReportModalOpen}
+        onClose={() => {
+          setIsViewReportModalOpen(false);
           setSelectedCandidate(null);
         }}
         candidateData={selectedCandidate}
