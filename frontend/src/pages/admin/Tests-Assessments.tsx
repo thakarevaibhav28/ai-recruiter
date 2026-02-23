@@ -25,6 +25,7 @@ const EMPTY_FORM = {
   duration: "",
   jobDescription: null,
   jobDescriptionText: "",
+  secondry_jobDescription:""
 };
 
 const TestsAssessments = () => {
@@ -109,6 +110,7 @@ const TestsAssessments = () => {
       secondarySkill: item.secondary_skill || "",
       examLevel: item.difficulty,
       duration: item.duration,
+      secondry_jobDescription:item.secondry_jobDescription || "",
       startDate: fmt(today),
       endDate: fmt(tomorrow),
     });
@@ -144,6 +146,7 @@ const TestsAssessments = () => {
         secondarySkill: data.secondary_skill || "",
         examLevel: data.difficulty || "",
         duration: data.duration || "",
+        secondry_jobDescription:data.secondry_jobDescription || "",
         startDate: fmt(today),
         endDate: fmt(tomorrow),
       });
@@ -255,6 +258,7 @@ const TestsAssessments = () => {
           jobDescription: file,
           jobDescriptionText: analysis?.fullJobDescription || "",
           testTitle: prev.testTitle || analysis?.jobTitle || "",
+          // secondry_jobDescription: prev.secondry_jobDescription || analysis?.secondry_jobDescription || "",
           // ── CHANGED: populate primarySkill from requiredSkills array (comma-separated)
           primarySkill:
             prev.primarySkill ||
@@ -366,6 +370,7 @@ const TestsAssessments = () => {
     fd.append("primary_skill", formData.primarySkill);
     fd.append("secondary_skill", formData.secondarySkill || "");
     fd.append("passing_score", formData.passingScore);
+    fd.append("secondary_jobDescription", formData.secondry_jobDescription || "");
 
     if (formData.jobDescriptionText) {
       fd.append("job_description_text", formData.jobDescriptionText);
@@ -952,6 +957,29 @@ const TestsAssessments = () => {
                     <AlertCircle className="h-3 w-3 text-red-500" />
                     <span className="text-xs text-red-600">
                       {errors.duration}
+                    </span>
+                  </div>
+                )}
+              </div>
+                <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Job Description
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g., React.js"
+                  value={formData.secondry_jobDescription}
+                  onChange={(e) =>
+                    handleInputChange("secondry_jobDescription", e.target.value)
+                  }
+                  disabled={mode === "prefill"}
+                  className={`w-full px-4 py-2.5 border rounded-lg outline-none transition-all ${errors.secondry_jobDescription ? "border-red-300 bg-red-50 ring-2 ring-red-100" : "border-gray-300 focus:ring-2 focus:ring-indigo-600 focus:border-transparent"} ${mode === "prefill" ? "bg-gray-50 cursor-not-allowed" : ""}`}
+                />
+                {errors.secondry_jobDescription && (
+                  <div className="flex items-center gap-1 mt-1">
+                    <AlertCircle className="h-3 w-3 text-red-500" />
+                    <span className="text-xs text-red-600">
+                      {errors.secondry_jobDescription}
                     </span>
                   </div>
                 )}
