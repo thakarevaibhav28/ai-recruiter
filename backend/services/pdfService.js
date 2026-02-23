@@ -1,34 +1,21 @@
 import PDFDocument from "pdfkit";
-import fs from "fs";
-import path from "path";
 
-export const generateScorecardPDF = (
+export const generateScorecardPDFBuffer = (
   candidate,
   scores,
   totalScore,
-  summary,
-  pdfPath,
+  summary
 ) => {
-  console.log("Generating PDF with data:", {
-    candidate,
-    scores,
-    totalScore,
-    summary,
-    pdfPath,
-  });
   return new Promise((resolve, reject) => {
     try {
-      const dir = path.dirname(pdfPath);
+      const doc = new PDFDocument({ margin: 50, size: "A4" });
 
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-      if (fs.existsSync(pdfPath)) {
-        fs.unlinkSync(pdfPath);
-      }
-       const doc = new PDFDocument({ margin: 50 });
-      const stream = fs.createWriteStream(pdfPath);
-      doc.pipe(stream);
+      const buffers = [];
+      doc.on("data", buffers.push.bind(buffers));
+      doc.on("end", () => {
+        const pdfBuffer = Buffer.concat(buffers);
+        resolve(pdfBuffer);
+      });
 
       const totalQuestions = scores.length;
       const maxScore = totalQuestions * 10;
@@ -39,97 +26,154 @@ export const generateScorecardPDF = (
       else if (percentage >= 70) rating = "Very Good";
       else if (percentage >= 50) rating = "Good";
 
+      const passed = percentage >= 70;
+
       /* ================= HEADER ================= */
 
+      doc.rect(0, 0, doc.page.width, 90).fill("#0f172a");
+
       doc
+        .fillColor("white")
         .fontSize(22)
-        .fillColor("#1a237e")
-        .text("INTERVIEW EVALUATION REPORT", {
+        .text("INTERVIEW EVALUATION REPORT", 50, 35, {
           align: "center",
         });
 
-      doc.moveDown(2);
+      doc.moveDown(3);
+      doc.fillColor("#000");
 
-      /* ================= CANDIDATE INFO ================= */
-
-      doc
-        .fontSize(14)
-        .fillColor("#000")
-        .text("Candidate Details", { underline: true });
-
-      doc.moveDown(0.8);
-
-      doc.fontSize(12);
-      doc.text(`Name: ${candidate.name}`);
-      doc.text(`Email: ${candidate.email}`);
-      doc.text(`Interview Date: ${new Date().toLocaleDateString()}`);
-      doc.moveDown();
-
-      doc.text(`Total Questions: ${totalQuestions}`);
-      doc.text(`Maximum Score: ${maxScore}`);
-      doc.text(`Score Achieved: ${totalScore}`);
-      doc.text(`Percentage: ${percentage}%`);
-      doc.text(`Overall Rating: ${rating}`);
-
-      doc.moveDown(2);
-
-      /* ================= DETAILED SCORES TABLE ================= */
+      /* ================= META INFO ================= */
 
       doc
+        .fontSize(10)
+        .fillColor("#555")
+        .text(`Generated On: ${new Date().toLocaleString()}`, {
+          align: "right",
+        });
+
+      doc.moveDown(1.5);
+
+      /* ================= CANDIDATE CARD ================= */
+
+      const cardTop = doc.y;
+
+      doc
+        .roundedRect(50, cardTop, doc.page.width - 100, 110, 8)
+        .fillAndStroke("#f8fafc", "#e2e8f0");
+
+      doc.fillColor("#000").fontSize(14);
+      doc.text("Candidate Information", 70, cardTop + 15);
+
+      doc.fontSize(12).fillColor("#334155");
+      doc.text(`Name: ${candidate.name}`, 70, cardTop + 40);
+      doc.text(`Email: ${candidate.email}`, 70, cardTop + 60);
+      doc.text(
+        `Interview Date: ${new Date().toLocaleDateString()}`,
+        70,
+        cardTop + 80
+      );
+
+      doc.moveDown(6);
+
+      /* ================= SCORE SUMMARY ================= */
+
+      const boxTop = doc.y;
+
+      doc
+        .roundedRect(50, boxTop, doc.page.width - 100, 90, 8)
+        .fillAndStroke("#eef2ff", "#c7d2fe");
+
+      doc.fillColor("#000").fontSize(12);
+
+      doc.text(`Total Questions: ${totalQuestions}`, 70, boxTop + 20);
+      doc.text(`Maximum Score: ${maxScore}`, 70, boxTop + 40);
+
+      doc.text(`Score Achieved: ${totalScore}`, 300, boxTop + 20);
+      doc.text(`Percentage: ${percentage}%`, 300, boxTop + 40);
+
+      doc
+        .fillColor(passed ? "#16a34a" : "#dc2626")
         .fontSize(14)
-        .fillColor("#000")
+        .text(passed ? "STATUS: PASSED" : "STATUS: FAILED", 430, boxTop + 35);
+
+      doc.moveDown(6);
+
+      /* ================= TABLE ================= */
+
+      doc
+        .fontSize(15)
+        .fillColor("#0f172a")
         .text("Detailed Evaluation", { underline: true });
 
-      doc.moveDown(1);
+      doc.moveDown(1.5);
 
-      const tableTop = doc.y;
-      const itemSpacing = 20;
+      let tableY = doc.y;
+      const rowHeight = 28;
 
-      doc.fontSize(12).text("Q#", 50, tableTop);
-      doc.text("Score", 100, tableTop);
-      doc.text("Feedback", 170, tableTop);
+      // Table Header
+      doc.rect(50, tableY, doc.page.width - 100, rowHeight).fill("#1e293b");
 
-      doc.moveDown();
+      doc.fillColor("white").fontSize(11);
+      doc.text("Q#", 60, tableY + 8);
+      doc.text("Score", 120, tableY + 8);
+      doc.text("Feedback", 180, tableY + 8);
+
+      tableY += rowHeight;
+      doc.fillColor("#000");
 
       scores.forEach((item, index) => {
-        const y = tableTop + (index + 1) * itemSpacing;
+        if (tableY > doc.page.height - 100) {
+          doc.addPage();
+          tableY = 50;
+        }
 
-        doc.text(`${index + 1}`, 50, y);
-        doc.text(`${item.score}/10`, 100, y);
-        doc.text(item.feedback || "No feedback provided", 170, y, {
+        doc
+          .rect(50, tableY, doc.page.width - 100, rowHeight)
+          .stroke("#e2e8f0");
+
+        doc.fontSize(10);
+        doc.text(`${index + 1}`, 60, tableY + 8);
+        doc.text(`${item.score}/10`, 120, tableY + 8);
+        doc.text(item.feedback || "No feedback provided", 180, tableY + 8, {
           width: 350,
         });
+
+        tableY += rowHeight;
       });
 
-      doc.moveDown(scores.length + 2);
+      /* ================= SUMMARY PAGE ================= */
 
-      /* ================= SUMMARY ================= */
+      doc.addPage();
 
       doc
-        .moveDown(2)
-        .fontSize(14)
+        .fontSize(18)
+        .fillColor("#0f172a")
         .text("Performance Summary", { underline: true });
 
-      doc.moveDown(1);
+      doc.moveDown(1.5);
 
-      doc.fontSize(12).fillColor("#333").text(summary, {
-        align: "justify",
-      });
+      doc
+        .fontSize(12)
+        .fillColor("#374151")
+        .text(summary, {
+          align: "justify",
+        });
+
+      doc.moveDown(4);
 
       /* ================= FOOTER ================= */
 
-      doc.moveDown(3);
       doc
-        .fontSize(10)
+        .fontSize(9)
         .fillColor("gray")
-        .text("Generated by Interview Evaluation System", {
-          align: "center",
-        });
+        .text(
+          "Confidential | Generated by Interview Intelligence Platform",
+          {
+            align: "center",
+          }
+        );
 
       doc.end();
-
-      stream.on("finish", () => resolve(pdfPath));
-      stream.on("error", (err) => reject(err));
     } catch (err) {
       reject(err);
     }

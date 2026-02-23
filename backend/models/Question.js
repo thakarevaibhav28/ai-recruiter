@@ -28,6 +28,7 @@ const questionSchema = new mongoose.Schema({
       feedback: String,
     },
   ],
-});
+},
+{ timestamps: true });
 
 export default mongoose.model("Question", questionSchema);

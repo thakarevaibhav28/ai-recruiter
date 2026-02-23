@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import AdminLayout from "../../common/AdminLayout";
 import {
   Search,
@@ -13,7 +13,28 @@ import {
   CheckCircle,
   FileText,
 } from "lucide-react";
-
+import { adminService } from "../../services/service/adminService";
+interface ScoreType {
+  _id: string;
+  totalScore: number;
+  maxScore: number;
+  summary: string;
+  pdfPath: string;
+  createdAt: string;
+  candidateId: {
+    _id: string;
+    name: string;
+    email: string;
+    role: string;
+  };
+  interviewId: {
+    test_title?: string;
+    position?: string;
+    duration: string;
+    examType: string;
+  };
+  updatedAt: string;
+}
 const stats = [
   {
     title: "Average AI Score",
@@ -45,78 +66,126 @@ const stats = [
   },
 ];
 
-const candidates = [
-  {
-    name: "Yash Sharma",
-    role: "Frontend Developer",
-    score: "79%",
-    status: "L1 Pass",
-    submitted: "Dec21,2025",
-    duration: "18 min",
-    responses: 5,
-    tech: "86.0%",
-    comm: "90%",
-    conf: "High",
-    rel: "87%",
-    highlight: true,
-    summary:
-      "Strong candidate with excellent communication and solid technical knowledge. Demonstrates good problem-solving abilities and shows enthusiasm for the role.",
-  },
-  {
-    name: "Yash Sharma",
-    role: "Frontend Developer",
-    score: "79%",
-    status: "Pending Review",
-    submitted: "Dec21,2025",
-    duration: "18 min",
-    responses: 5,
-  },
-  {
-    name: "Yash Sharma",
-    role: "Frontend Developer",
-    score: "79%",
-    status: "Pending Review",
-    submitted: "Dec21,2025",
-    duration: "18 min",
-    responses: 5,
-  },
-];
+// const candidates = [
+//   {
+//     name: "Yash Sharma",
+//     role: "Frontend Developer",
+//     score: "79%",
+//     status: "L1 Pass",
+//     submitted: "Dec21,2025",
+//     duration: "18 min",
+//     responses: 5,
+//     tech: "86.0%",
+//     comm: "90%",
+//     conf: "High",
+//     rel: "87%",
+//     highlight: true,
+//     summary:
+//       "Strong candidate with excellent communication and solid technical knowledge. Demonstrates good problem-solving abilities and shows enthusiasm for the role.",
+//   },
+//   {
+//     name: "Yash Sharma",
+//     role: "Frontend Developer",
+//     score: "79%",
+//     status: "Pending Review",
+//     submitted: "Dec21,2025",
+//     duration: "18 min",
+//     responses: 5,
+//   },
+//   {
+//     name: "Yash Sharma",
+//     role: "Frontend Developer",
+//     score: "79%",
+//     status: "Pending Review",
+//     submitted: "Dec21,2025",
+//     duration: "18 min",
+//     responses: 5,
+//   },
+// ];
 
-const mcqResults = [
-  {
-    id: 1,
-    name: "Priya Sharma",
-    email: "priyasharma@gmail.com",
-    test: "Senior Frontend Developer",
-    score: "87%",
-    marks: "23/25",
-    duration: "58 mins",
-    completed: "Dec 28, 2:00PM",
-  },
-  {
-    id: 2,
-    name: "Priya Sharma",
-    email: "priyasharma@gmail.com",
-    test: "Senior Frontend Developer",
-    score: "Not Taken",
-    marks: "22/25",
-    duration: "45 mins",
-    completed: "Dec 28, 2:00PM",
-  },
-  {
-    id: 3,
-    name: "Priya Sharma",
-    email: "priyasharma@gmail.com",
-    test: "Senior Frontend Developer",
-    score: "95%",
-    marks: "21/25",
-    duration: "62 Mins",
-    completed: "Dec 28, 2:00PM",
-  },
-];
-
+// const MCQResults = [
+//   {
+//     id: 1,
+//     name: "Priya Sharma",
+//     email: "priyasharma@gmail.com",
+//     test: "Senior Frontend Developer",
+//     score: "87%",
+//     marks: "23/25",
+//     duration: "58 mins",
+//     completed: "Dec 28, 2:00PM",
+//   },
+//   {
+//     id: 2,
+//     name: "Priya Sharma",
+//     email: "priyasharma@gmail.com",
+//     test: "Senior Frontend Developer",
+//     score: "Not Taken",
+//     marks: "22/25",
+//     duration: "45 mins",
+//     completed: "Dec 28, 2:00PM",
+//   },
+//   {
+//     id: 3,
+//     name: "Priya Sharma",
+//     email: "priyasharma@gmail.com",
+//     test: "Senior Frontend Developer",
+//     score: "95%",
+//     marks: "21/25",
+//     duration: "62 Mins",
+//     completed: "Dec 28, 2:00PM",
+//   },
+// ];
+const TableSkeleton = () => {
+  return (
+    <>
+      {[...Array(5)].map((_, i) => (
+        <tr key={i} className="animate-pulse">
+          {[...Array(8)].map((__, j) => (
+            <td key={j} className="px-4 py-4">
+              <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+            </td>
+          ))}
+        </tr>
+      ))}
+    </>
+  );
+};
 const ReportsInsights = () => {
-  const [activeTab, setActiveTab] = useState("ai");
+  const [activeTab, setActiveTab] = useState<"AI" | "MCQ">("AI");
+  const [scores, setScores] = useState<ScoreType[]>([]);
+  const [selectedScore, setSelectedScore] = useState<ScoreType | null>(null);
+  const [loading, setLoading] = useState(false);
+  console.log(scores);
+  // 🔥 FETCH DATA
+  const fetchScores = async (type: "AI" | "MCQ") => {
+    try {
+      setLoading(true);
+      const res = await adminService.getScore(type);
+
+      if (res?.success) {
+        setScores(res.scores || []);
+      }
+    } catch (err) {
+      console.error("Error fetching scores:", err);
+      setScores([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchScores(activeTab);
+  }, [activeTab]);
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const year = String(date.getFullYear()).slice(-2);
+
+    return `${day}-${month}-${year}`;
+  };
 
   return (
     <AdminLayout
@@ -153,9 +222,9 @@ const ReportsInsights = () => {
       <div className="flex items-center justify-between mb-6">
         <div className="inline-flex bg-gray-100 rounded-lg p-1">
           <button
-            onClick={() => setActiveTab("ai")}
+            onClick={() => setActiveTab("AI")}
             className={`px-6 py-2 text-sm font-medium rounded-md transition-colors ${
-              activeTab === "ai"
+              activeTab === "AI"
                 ? "bg-white text-gray-900 shadow-sm"
                 : "text-gray-600 hover:text-gray-900"
             }`}
@@ -164,9 +233,9 @@ const ReportsInsights = () => {
           </button>
 
           <button
-            onClick={() => setActiveTab("mcq")}
+            onClick={() => setActiveTab("MCQ")}
             className={`px-6 py-2 text-sm font-medium rounded-md transition-colors ${
-              activeTab === "mcq"
+              activeTab === "MCQ"
                 ? "bg-white text-gray-900 shadow-sm"
                 : "text-gray-600 hover:text-gray-900"
             }`}
@@ -177,7 +246,7 @@ const ReportsInsights = () => {
       </div>
 
       {/* AI Interview Tab */}
-      {activeTab === "ai" && (
+      {activeTab === "AI" && (
         <div className="space-y-4">
           {/* Header */}
           <div className="flex items-center justify-between">
@@ -205,8 +274,15 @@ const ReportsInsights = () => {
           </div>
 
           {/* Candidate Cards */}
-          <div className="space-y-4">
-            {candidates.map((candidate, i) => (
+          <div className="space-y-4 ">
+            {!loading && scores.length === 0 && (
+              <tr className=" w-full flex items-center justify-center">
+                <td colSpan={8} className="text-center py-6 text-gray-500">
+                  No Data Available
+                </td>
+              </tr>
+            )}
+            {scores.map((candidate, i) => (
               <div
                 key={i}
                 className={`bg-white rounded-lg p-6 border ${
@@ -328,7 +404,7 @@ const ReportsInsights = () => {
       )}
 
       {/* MCQ Test Tab */}
-      {activeTab === "mcq" && (
+      {activeTab === "MCQ" && (
         <div className="space-y-4">
           {/* Filters Card */}
           <div className="bg-white rounded-lg border border-gray-200 p-6">
@@ -376,10 +452,10 @@ const ReportsInsights = () => {
               <h3 className="text-base font-semibold text-gray-900">
                 MCQ Test Result
               </h3>
-              <button className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+              {/* <button className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
                 <Download className="h-4 w-4" />
                 Export Result
-              </button>
+              </button> */}
             </div>
 
             <div className="overflow-x-auto">
@@ -413,43 +489,266 @@ const ReportsInsights = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {mcqResults.map((row) => (
-                    <tr key={row.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-4 text-sm text-gray-900">
-                        {row.id}
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="text-sm font-medium text-gray-900">
-                          {row.name}
-                        </div>
-                        <div className="text-xs text-gray-500">{row.email}</div>
-                      </td>
-                      <td className="px-4 py-4 text-sm text-gray-900">
-                        {row.test}
-                      </td>
-                      <td className="px-4 py-4 text-sm text-gray-900">
-                        {row.score}
-                      </td>
-                      <td className="px-4 py-4 text-sm text-gray-900">
-                        {row.marks}
-                      </td>
-                      <td className="px-4 py-4 text-sm text-gray-900">
-                        {row.duration}
-                      </td>
-                      <td className="px-4 py-4 text-sm text-gray-900">
-                        {row.completed}
-                      </td>
-                      <td className="px-4 py-4">
-                        <button className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 transition-colors">
-                          <Eye className="h-3.5 w-3.5" />
-                          View Details
-                        </button>
+                  {!loading && scores.length === 0 && (
+                    <tr className=" w-full flex items-center justify-center">
+                      <td
+                        colSpan={8}
+                        className="text-center  py-6 text-gray-500"
+                      >
+                        No Data Available
                       </td>
                     </tr>
-                  ))}
+                  )}
+                  {loading ? (
+                    <TableSkeleton />
+                  ) : (
+                    <>
+                      {scores.map((row, i) => (
+                        <tr key={row._id} className="hover:bg-gray-50">
+                          <td className="px-4 py-4 text-sm">{i + 1}</td>
+                          <td className="px-4 py-4">
+                            <div className="text-sm font-medium">
+                              {row.candidateId.name}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {row.candidateId.email}
+                            </div>
+                          </td>
+                          <td className="px-4 py-4 text-sm">
+                            {row.interviewId.test_title}
+                          </td>
+                          <td className="px-4 py-4 text-sm">
+                            {Math.round((row.totalScore / row.maxScore) * 100)}%
+                          </td>
+                          <td className="px-4 py-4 text-sm">
+                            {row.totalScore}/{row.maxScore}
+                          </td>
+                          <td className="px-4 py-4 text-sm">
+                            {row.interviewId.duration}
+                          </td>
+                          <td className="px-4 py-4 text-sm">
+                            {formatDate(row.updatedAt)}
+                          </td>
+                          <td className="px-4 py-4">
+                            <button
+                              onClick={() => setSelectedScore(row)}
+                              className="px-3 py-1.5 bg-indigo-600 text-white text-xs rounded-lg hover:bg-indigo-700"
+                            >
+                              View
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+
+                      {!loading && scores.length === 0 && (
+                        <tr>
+                          <td
+                            colSpan={8}
+                            className="text-center py-6 text-gray-500"
+                          >
+                            No Data Available
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  )}
                 </tbody>
               </table>
             </div>
+            {selectedScore && (
+              <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+                <div className="bg-white w-[1200px] max-h-[95vh] overflow-y-auto rounded-xl shadow-2xl p-6 relative animate-fadeIn">
+                  {/* Close Button */}
+                  <button
+                    onClick={() => setSelectedScore(null)}
+                    className="absolute top-4 right-4 text-gray-500 hover:text-black text-lg"
+                  >
+                    ✕
+                  </button>
+
+                  {/* Header */}
+                  <div className="mb-6">
+                    <h2 className="text-xl font-semibold text-gray-900">
+                      Exam Detailed Report
+                    </h2>
+                    <p className="text-sm text-gray-500">
+                      {selectedScore.interviewId.test_title}
+                    </p>
+                  </div>
+
+                  {/* Candidate Info */}
+                  <div className="grid grid-cols-2 gap-6 mb-6">
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                      <h3 className="text-sm font-semibold text-gray-700 mb-2">
+                        Candidate Details
+                      </h3>
+                      <p>
+                        <strong>Name:</strong> {selectedScore.candidateId.name}
+                      </p>
+                      <p>
+                        <strong>Email:</strong>{" "}
+                        {selectedScore.candidateId.email}
+                      </p>
+                      <p>
+                        <strong>Role:</strong> {selectedScore.candidateId.role}
+                      </p>
+                    </div>
+
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                      <h3 className="text-sm font-semibold text-gray-700 mb-2">
+                        Exam Details
+                      </h3>
+                      <p>
+                        <strong>Difficulty:</strong>{" "}
+                        {selectedScore.interviewId.difficulty}
+                      </p>
+                      <p>
+                        <strong>Duration:</strong>{" "}
+                        {selectedScore.interviewId.duration}
+                      </p>
+                      <p>
+                        <strong>Passing Score:</strong>{" "}
+                        {selectedScore.interviewId.passing_score}%
+                      </p>
+                      <p>
+                        <strong>Completed:</strong>{" "}
+                        {formatDate(selectedScore.updatedAt)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Score Overview */}
+                  <div className="bg-indigo-50 p-5 rounded-lg mb-6">
+                    <h3 className="text-sm font-semibold text-gray-700 mb-2">
+                      Overall Score
+                    </h3>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-3xl font-bold text-indigo-600">
+                          {Math.round(
+                            (selectedScore.totalScore /
+                              selectedScore.maxScore) *
+                              100,
+                          )}
+                          %
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          {selectedScore.totalScore}/{selectedScore.maxScore}
+                        </p>
+                      </div>
+
+                      <a
+                        href={selectedScore.pdfPath}
+                        download
+                        className="px-4 py-2 bg-indigo-600 text-white rounded-lg"
+                      >
+                        Download Scorecard
+                      </a>
+                    </div>
+                  </div>
+
+                  {/* Summary */}
+                  <div className="bg-blue-50 p-4 rounded-lg mb-6">
+                    <h3 className="text-sm font-semibold text-gray-700 mb-2">
+                      AI Assessment Summary
+                    </h3>
+                    <p className="text-sm text-gray-700">
+                      {selectedScore.summary}
+                    </p>
+                  </div>
+
+                  {/* Question-wise Scores */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-700 mb-4">
+                      Question Wise Analysis
+                    </h3>
+
+                    <div className="space-y-4">
+                      {selectedScore.scores.map((q, index) => {
+                        const question = q.questionId;
+
+                        // find candidate answer inside question.answers
+                        const candidateAnswer = question.answers?.find(
+                          (a: any) =>
+                            a.candidateId === selectedScore.candidateId._id,
+                        );
+
+                        const isCorrect =
+                          candidateAnswer?.answerText ===
+                          question.correctAnswer;
+
+                        return (
+                          <div
+                            key={q._id}
+                            className="border border-gray-100 rounded-lg p-4 bg-gray-50"
+                          >
+                            {/* Question */}
+                            <p className="font-medium text-gray-900 mb-2">
+                              Q{index + 1}. {question.questionText}
+                            </p>
+
+                            {/* Options (for MCQ) */}
+                            {question.options && (
+                              <div className="space-y-1 mb-3">
+                                {question.options.map(
+                                  (opt: string, i: number) => (
+                                    <div
+                                      key={i}
+                                      className={`text-sm px-3 py-1 rounded-md ${
+                                        opt === question.correctAnswer
+                                          ? "bg-green-100 text-green-700"
+                                          : opt === candidateAnswer?.answerText
+                                            ? "bg-red-100 text-red-700"
+                                            : "bg-white"
+                                      }`}
+                                    >
+                                      {opt}
+                                    </div>
+                                  ),
+                                )}
+                              </div>
+                            )}
+
+                            {/* Result Info */}
+                            <div className="flex items-center justify-between mt-2">
+                              <div className="text-sm">
+                                <span className="font-medium">
+                                  Candidate Answer:
+                                </span>{" "}
+                                {candidateAnswer?.answerText || "Not Answered"}
+                              </div>
+
+                              <div className="flex items-center gap-3">
+                                <span
+                                  className={`px-3 py-1 text-xs rounded-full font-medium ${
+                                    isCorrect
+                                      ? "bg-green-100 text-green-700"
+                                      : "bg-red-100 text-red-700"
+                                  }`}
+                                >
+                                  {isCorrect ? "Correct" : "Wrong"}
+                                </span>
+
+                                <span className="text-sm font-semibold">
+                                  Score: {q.score}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Feedback */}
+                            {q.feedback && (
+                              <p className="mt-2 text-sm text-gray-600">
+                                Feedback: {q.feedback}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

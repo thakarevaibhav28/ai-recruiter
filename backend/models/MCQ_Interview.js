@@ -20,8 +20,8 @@ const interviewSchema = new mongoose.Schema(
         end_Date: Date,
         status: {
           type: String,
-          enum: ["pending", "in_progress", "completed", "expired"],
-          default: "pending",
+          enum: ["scheduled", "in_progress", "completed", "cancelled"],
+          default: "scheduled",
         },
         score: Number,
         submittedAt: Date,

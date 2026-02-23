@@ -1,21 +1,18 @@
 import express from "express";
 import jwt from "jsonwebtoken";
-import multer from "multer";
-import path from "path";
-import fs from "fs";
-
+import { upload } from "../middleware/upload.js";
+import cloudinary from "../config/cloudinary.js";
 import Candidate from "../models/Candidate.js";
 import Interview from "../models/MCQ_Interview.js";
 import AI_Interview from "../models/AI_Interview.js";
 import MCQ_Interview from "../models/MCQ_Interview.js";
-import Admin from "../models/Admin.js";
 import Question from "../models/Question.js";
 import Score from "../models/Score.js";
 import auth from "../middleware/auth.js";
 
 import { generateSummary } from "../services/aiServiceold.js";
-import { generateScorecardPDF } from "../services/pdfService.js";
-import {getMCQInterviewById} from "../controllers/adminControllers/AssessmentController.js"
+import { generateScorecardPDFBuffer } from "../services/pdfService.js";
+import { getMCQInterviewById } from "../controllers/adminControllers/AssessmentController.js";
 
 const router = express.Router();
 
@@ -26,13 +23,17 @@ router.post("/login/:id", async (req, res) => {
 
   try {
     // 1️⃣ Try finding in Interview
-    let interview = await Interview.findById(id)
-      .populate("candidates.candidateId", "email");
+    let interview = await Interview.findById(id).populate(
+      "candidates.candidateId",
+      "email",
+    );
 
     // 2️⃣ If not found → Try AI_Interview
     if (!interview) {
-      interview = await AI_Interview.findById(id)
-        .populate("candidates.candidateId", "email");
+      interview = await AI_Interview.findById(id).populate(
+        "candidates.candidateId",
+        "email",
+      );
     }
 
     // 3️⃣ If still not found
@@ -45,7 +46,7 @@ router.post("/login/:id", async (req, res) => {
       (c) =>
         c.candidateId &&
         c.candidateId.email === email &&
-        c.password === password
+        c.password === password,
     );
 
     if (!candidateEntry) {
@@ -82,7 +83,7 @@ router.post("/login/:id", async (req, res) => {
     const token = jwt.sign(
       { id: candidateEntry.candidateId._id, role: "candidate" },
       process.env.JWT_SECRET,
-      { expiresIn: "1h" }
+      { expiresIn: "1h" },
     );
 
     res.json({
@@ -90,96 +91,107 @@ router.post("/login/:id", async (req, res) => {
       interviewId: id,
       candidateEntry,
     });
-
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Server error" });
   }
 });
 
-// Configure multer for multiple file uploads for candidate documents
-const documentsStorage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    let uploadPath = "uploads";
+// // Configure multer for multiple file uploads for candidate documents
+// const documentsStorage = multer.diskStorage({
+//   destination: function (req, file, cb) {
+//     let uploadPath = "uploads";
 
-    if (file.fieldname === "aadharCard") {
-      uploadPath = "uploads/aadharCards";
-    } else if (file.fieldname === "photo") {
-      uploadPath = "uploads/candidate-photo";
-    }
+//     if (file.fieldname === "aadharCard") {
+//       uploadPath = "uploads/aadharCards";
+//     } else if (file.fieldname === "photo") {
+//       uploadPath = "uploads/candidate-photo";
+//     }
 
-    // Create folder if it doesn't exist
-    if (!fs.existsSync(uploadPath)) {
-      fs.mkdirSync(uploadPath, { recursive: true });
-    }
+//     // Create folder if it doesn't exist
+//     if (!fs.existsSync(uploadPath)) {
+//       fs.mkdirSync(uploadPath, { recursive: true });
+//     }
 
-    cb(null, uploadPath);
-  },
+//     cb(null, uploadPath);
+//   },
 
-  filename: function (req, file, cb) {
-    const ext = path.extname(file.originalname);
+//   filename: function (req, file, cb) {
+//     const ext = path.extname(file.originalname);
 
-    const fileName = `${req.user.id}_${file.fieldname}_${Date.now()}${ext}`;
+//     const fileName = `${req.user.id}_${file.fieldname}_${Date.now()}${ext}`;
 
-    cb(null, fileName);
-  }
-});
+//     cb(null, fileName);
+//   }
+// });
 
-const documentsUpload = multer({
-  storage: documentsStorage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
-});
+// const documentsUpload = multer({
+//   storage: documentsStorage,
+//   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+// });
 
 // Upload candidate documents: aadharFront, aadharBack, photo
-router.put('/:id/upload-aadharCard', auth('candidate'), documentsUpload.fields([
-  { name: 'aadharCard', maxCount: 1 }
-]), async (req, res) => {
-  const { id } = req.params;
-  try {
-    // Remove debug return so code executes
-    const candidate = await Candidate.findById(req.user.id);
-    if (!candidate) {
-      return res.status(404).json({ message: 'Candidate not found' });
+router.put(
+  "/:id/upload-aadharCard",
+  auth("candidate"),
+  upload.fields([
+    { name: "photo", maxCount: 1 },
+    { name: "aadharCard", maxCount: 1 },
+  ]),
+  async (req, res) => {
+    const { id } = req.params;
+    try {
+      // Remove debug return so code executes
+      const candidate = await Candidate.findById(req.user.id);
+      if (!candidate) {
+        return res.status(404).json({ message: "Candidate not found" });
+      }
+      // Update fields if files are uploaded, convert backslashes to forward slashes
+      if (req.files["aadharCard"]) {
+        candidate.aadharCard = req.files["aadharCard"][0].path.replace(
+          /\\/g,
+          "/",
+        );
+      }
+      await candidate.save();
+      res.json({
+        message: "Document uploaded and candidate updated",
+        aadharCard: candidate.aadharCard,
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Server error" });
     }
-    // Update fields if files are uploaded, convert backslashes to forward slashes
-    if (req.files['aadharCard']) {
-      candidate.aadharCard = req.files['aadharCard'][0].path.replace(/\\/g, '/');
-    }
-    await candidate.save();
-    res.json({
-      message: 'Document uploaded and candidate updated',
-      aadharCard: candidate.aadharCard
-    });
-  } catch (error) {
-    res.status(500).json({ message: 'Server error' });
-  }
-});
+  },
+);
 
-router.put('/:id/upload-photo', auth('candidate'), documentsUpload.fields([
-  { name: 'photo', maxCount: 1 }
-]), async (req, res) => {
-  const { id } = req.params;
-  try {
-    // Remove debug return so code executes
-    const candidate = await Candidate.findById(req.user.id);
-    
-    if (!candidate) {
-      return res.status(404).json({ message: 'Candidate not found' });
+router.put(
+  "/:id/upload-photo",
+  auth("candidate"),
+  upload.fields([{ name: "photo", maxCount: 1 }]),
+  async (req, res) => {
+    const { id } = req.params;
+    try {
+      // Remove debug return so code executes
+      const candidate = await Candidate.findById(req.user.id);
+
+      if (!candidate) {
+        return res.status(404).json({ message: "Candidate not found" });
+      }
+      // Update fields if files are uploaded, convert backslashes to forward slashes
+
+      if (req.files["photo"]) {
+        candidate.photo = req.files["photo"][0].path.replace(/\\/g, "/");
+      }
+      await candidate.save();
+      res.json({
+        message: "Document uploaded and candidate updated",
+        photo: candidate.photo,
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Server error" });
     }
-    // Update fields if files are uploaded, convert backslashes to forward slashes
-    
-    if (req.files['photo']) {
-      candidate.photo = req.files['photo'][0].path.replace(/\\/g, '/');
-    }
-    await candidate.save();
-    res.json({
-      message: 'Document uploaded and candidate updated',
-      photo: candidate.photo
-    });
-  } catch (error) {
-    res.status(500).json({ message: 'Server error' });
-  }
-});
+  },
+);
 
 // Get MCQ interview template for candidate
 router.get("/assessment/template/:id", auth("candidate"), getMCQInterviewById);
@@ -194,7 +206,7 @@ router.get("/interview/:id", auth("candidate"), async (req, res) => {
       return res.status(404).json({ message: "Interview not found" });
 
     const candidateEntry = interview.candidates.find(
-      (c) => c.candidateId.toString() === candidateId
+      (c) => c.candidateId.toString() === candidateId,
     );
 
     if (!candidateEntry)
@@ -242,70 +254,126 @@ router.get("/interview/:id", auth("candidate"), async (req, res) => {
   }
 });
 
-
-//get interview MCQ question 
-router.get('/interview/:id/questions', auth('candidate'), async (req, res) => {
+//get interview MCQ question
+router.get("/interview/:id/questions", auth("candidate"), async (req, res) => {
   const { id } = req.params;
   try {
     const questions = await Question.find({ interviewId: id });
-    console.log("Questions fetched for interview",questions);
+    console.log("Questions fetched for interview", questions);
     res.json({ questions });
   } catch (error) {
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: "Server error" });
   }
 });
 
+// router.post("/interview/:id/answer", auth("candidate"), async (req, res) => {
+//   const { id } = req.params;
+//   const { questionId, answerText } = req.body;
+//   try {
+//     const interview = await Interview.findById(id);
+//     const question = await Question.findById(questionId);
+//     if (!question)
+//       return res.status(404).json({ message: "Question not found" });
 
+//     // Check if the candidate already answered this question
+//     const existingAnswerIndex = question.answers.findIndex(
+//       (a) => a.candidateId.toString() === req.user.id,
+//     );
 
-router.post('/interview/:id/answer', auth('candidate'), async (req, res) => {
+//     let evaluation;
+//     console.log("interview.Exam_Type", interview);
+
+//     // For MCQ, check if answer is correct, feedback should be blank
+//     const isCorrect =
+//       question.correctAnswer && answerText === question.correctAnswer;
+//     evaluation = {
+//       questionId,
+//       candidateId: req.user.id,
+//       answerText,
+//       score: isCorrect ? 10 : 0,
+//       feedback: "",
+//     };
+
+//     if (existingAnswerIndex !== -1) {
+//       // Update existing answer
+//       question.answers[existingAnswerIndex].answerText = answerText;
+//       question.answers[existingAnswerIndex].score = evaluation.score;
+//       question.answers[existingAnswerIndex].feedback = evaluation.feedback;
+//     } else {
+//       // Add new answer
+//       question.answers.push({
+//         questionId,
+//         candidateId: req.user.id,
+//         answerText,
+//         score: evaluation.score,
+//         feedback: evaluation.feedback,
+//       });
+//     }
+
+//     await question.save();
+
+//     res.json({ message: "Answer submitted", evaluation });
+//   } catch (error) {
+//     console.log(error);
+//     res.status(500).json({ message: "Server error" });
+//   }
+// });
+
+router.post('/interview/:id/answer', async (req, res) => {
   const { id } = req.params;
   const { questionId, answerText } = req.body;
+
   try {
-
     const interview = await Interview.findById(id);
+    if (!interview) {
+      return res.status(404).json({ message: 'Interview not found' });
+    }
+
     const question = await Question.findById(questionId);
-    if (!question) return res.status(404).json({ message: 'Question not found' });
+    if (!question) {
+      return res.status(404).json({ message: 'Question not found' });
+    }
 
-    // Check if the candidate already answered this question
-    const existingAnswerIndex = question.answers.findIndex(
-      a => a.candidateId.toString() === req.user.id
+    // Calculate score (MCQ logic)
+    const isCorrect =
+      question.correctAnswer &&
+      answerText.trim() === question.correctAnswer.trim();
+
+    const score = isCorrect ? 10 : 0;
+
+    // Find existing answer for same candidate
+    const existingAnswer = question.answers.find(
+      (a) => a.candidateId.toString() === "6994518d5ba585734ab7343d"
     );
-
-    let evaluation;
-    console.log("interview.Exam_Type",interview)
-
-      // For MCQ, check if answer is correct, feedback should be blank
-      const isCorrect = question.correctAnswer && answerText === question.correctAnswer;
-      evaluation = {
-        questionId,
-        candidateId: req.user.id,
-        answerText,
-        score: isCorrect ? 10 : 0,
-        feedback: ''
-      };
-  
-
-    if (existingAnswerIndex !== -1) {
-      // Update existing answer
-      question.answers[existingAnswerIndex].answerText = answerText;
-      question.answers[existingAnswerIndex].score = evaluation.score;
-      question.answers[existingAnswerIndex].feedback = evaluation.feedback;
+console.log("Existing Answer:", existingAnswer);
+    if (existingAnswer) {
+      // ✅ UPDATE existing score
+      existingAnswer.answerText = answerText;
+      existingAnswer.score = score;
+      existingAnswer.feedback = '';
     } else {
-      // Add new answer
+      // ✅ CREATE new answer entry
       question.answers.push({
         questionId,
         candidateId: req.user.id,
         answerText,
-        score: evaluation.score,
-        feedback: evaluation.feedback,
+        score,
+        feedback: '',
       });
     }
 
     await question.save();
 
-    res.json({ message: 'Answer submitted', evaluation });
+    res.json({
+      success: true,
+      message: existingAnswer
+        ? 'Answer updated successfully'
+        : 'Answer submitted successfully',
+      score,
+    });
+
   } catch (error) {
-    console.log(error);
+    console.error(error);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -314,95 +382,138 @@ router.post("/interview/:id/submit", auth("candidate"), async (req, res) => {
   try {
     const { id } = req.params;
     const candidateId = req.user.id;
-    console.log("Submit called for interview", id, "by candidate", candidateId);
 
-    // 🔥 1️⃣ Get interview
-    const interview = await MCQ_Interview.findById(id);
-    if (!interview)
+    console.log("Submit called for interview", id);
+
+    // 🔥 1️⃣ Try finding interview in both collections
+    let interview = await MCQ_Interview.findById(id);
+    let interviewModel = "MCQ_Interview";
+
+    if (!interview) {
+      interview = await AI_Interview.findById(id);
+      interviewModel = "AI_Interview";
+    }
+
+    if (!interview) {
       return res.status(404).json({ message: "Interview not found" });
+    }
 
-    // 🔥 2️⃣ Find candidate entry
+    // 🔥 2️⃣ Find candidate inside interview
     const candidateEntry = interview.candidates.find(
       (c) => c.candidateId.toString() === candidateId
     );
 
-    if (!candidateEntry)
+    if (!candidateEntry) {
       return res.status(403).json({ message: "Not authorized" });
+    }
 
-    // 🔥 3️⃣ Prevent double submission
     if (candidateEntry.status === "completed") {
       return res.status(400).json({
         message: "Interview already submitted",
       });
     }
 
-    // 🔥 4️⃣ Use ONLY assigned questions
-    const assignedQuestions = candidateEntry.assignedQuestions;
+    let totalScore = 0;
+    let scores = [];
 
-    if (!assignedQuestions || assignedQuestions.length === 0) {
-      return res.status(400).json({
-        message: "No assigned questions found",
+    // ==================================================
+    // 🔥 3️⃣ HANDLE MCQ INTERVIEW
+    // ==================================================
+    if (interview.examType === "MCQ") {
+      const assignedQuestions = candidateEntry.assignedQuestions;
+
+      if (!assignedQuestions?.length) {
+        return res.status(400).json({
+          message: "No assigned questions found",
+        });
+      }
+
+      const questions = await Question.find({
+        _id: { $in: assignedQuestions },
+      });
+
+      questions.forEach((q) => {
+        const answer = q.answers.find(
+          (a) => a.candidateId.toString() === candidateId
+        );
+
+        const score = answer?.score || 0;
+        totalScore += score;
+
+        scores.push({
+          questionId: q._id,
+          score,
+          feedback: answer?.feedback || "",
+        });
       });
     }
 
-    const questions = await Question.find({
-      _id: { $in: assignedQuestions },
-    });
+    // ==================================================
+    // 🔥 4️⃣ HANDLE AI INTERVIEW
+    // ==================================================
+    if (interview.examType === "AI") {
+      // Assume answers stored differently
+      const aiAnswers = req.body.answers || [];
 
-    let totalScore = 0;
-    const scores = [];
+      aiAnswers.forEach((a) => {
+        totalScore += a.score;
 
-    questions.forEach((q) => {
-      const answer = q.answers.find(
-        (a) => a.candidateId.toString() === candidateId
-      );
-
-      const score = answer?.score || 0;
-      totalScore += score;
-
-      scores.push({
-        questionId: q._id,
-        answerText: answer?.answerText || "",
-        score,
-        feedback: answer?.feedback || "",
+        scores.push({
+          questionId: a.questionId,
+          score: a.score,
+          feedback: a.feedback || "",
+        });
       });
-    });
+    }
 
-    const totalQuestions = assignedQuestions.length;
-    const maxScore = totalQuestions * 10;
+    const maxScore = scores.length * 10;
     const percentage = (totalScore / maxScore) * 100;
 
     // 🔥 5️⃣ Generate summary
     const summary = await generateSummary(scores);
 
     // 🔥 6️⃣ Save score document
-    const scoreDoc = new Score({
-      interviewId: id,
+    const scoreDoc = await Score.create({
+      interviewId: interview._id,
+      interviewModel,
       examType: interview.examType,
       candidateId,
       scores,
       totalScore,
+      maxScore,
       summary,
     });
- 
 
     // 🔥 7️⃣ Generate PDF
     const candidate = await Candidate.findById(candidateId);
 
-    const pdfPath = `uploads/scorecards/${candidate.email}-${id}-${Date.now()}.pdf`;
-
-    await generateScorecardPDF(
+    const pdfBuffer = await generateScorecardPDFBuffer(
       candidate,
       scores,
       totalScore,
-      summary,
-      pdfPath
+      summary
     );
 
-    scoreDoc.pdfPath = pdfPath;
+    const uploadResult = await new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        {
+          folder: "scorecards",
+          resource_type: "raw",
+          public_id: `${candidate.email}-${id}-${Date.now()}`,
+          format: "pdf",
+        },
+        (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        }
+      );
+      stream.end(pdfBuffer);
+    });
+
+    scoreDoc.pdfPath = uploadResult.secure_url;
     await scoreDoc.save();
 
-    // 🔥 8️⃣ Update candidate status inside interview
+    // 🔥 8️⃣ Update candidate status
     candidateEntry.status = "completed";
     candidateEntry.score = totalScore;
     candidateEntry.submittedAt = new Date();
@@ -412,16 +523,12 @@ router.post("/interview/:id/submit", auth("candidate"), async (req, res) => {
     res.json({
       message: "Interview submitted successfully",
       totalScore,
-      totalQuestions,
       percentage: Math.round(percentage),
-      pdfPath,
+      pdfPath: uploadResult.secure_url,
     });
   } catch (error) {
     console.error("Submit error:", error);
     res.status(500).json({ message: error.message });
   }
 });
-
-
-
 export default router;

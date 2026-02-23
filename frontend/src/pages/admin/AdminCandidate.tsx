@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef } from "react";
 import AdminLayout from "../../common/AdminLayout";
 import AddCandidateModal from "../../components/Candidates/AddCandidate";
 import ViewCandidateModal from "../../components/Candidates/ViewCandidate";
@@ -7,14 +7,6 @@ import BulkUpload from "../../components/Candidates/BulkUpload";
 import toast from "react-hot-toast";
 import { socket } from "../../utils/socket";
 import { adminService } from "../../services/service/adminService";
-
-const statusStyles = {
-  new: "bg-blue-100 text-blue-600",
-  Interview: "bg-purple-100 text-purple-600",
-  Completed: "bg-green-100 text-green-600",
-  Screening: "bg-orange-100 text-orange-600",
-  Rejected: "bg-red-100 text-red-600",
-};
 
 interface Candidate {
   _id: string;
@@ -32,67 +24,86 @@ interface Candidate {
 const Candidates = () => {
   const [activeTab, setActiveTab] = useState("list");
   const [activeMenuItem, setActiveMenuItem] = useState("Dashboard");
+
   const [data, setData] = useState<Candidate[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+
   const [page, setPage] = useState(1);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [rowsPerPage] = useState(3); // fixed per page
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<string>("all");
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(
     null,
   );
+
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-// 1️⃣ Filtered Data
-const filteredData = useMemo(() => {
-  if (statusFilter === "all") return data;
+  /* ================= FETCH ================= */
 
-  return data.filter(
-    (candidate) =>
-      candidate.status?.toLowerCase() === statusFilter.toLowerCase()
-  );
-}, [data, statusFilter]);
+  const fetchCandidates = async (
+    pageNumber = 1,
+    limit = rowsPerPage,
+    status = "all",
+  ) => {
+    setLoading(true);
+    try {
+      const response = await adminService.getAllCandidate(
+        pageNumber,
+        limit,
+        status,
+      );
 
-// 2️⃣ Pagination based on filtered data
-const totalPages = Math.ceil(filteredData.length / rowsPerPage);
+      if (response.status === 200) {
+        const { data, totalPages, totalRecords } = response;
 
-useEffect(() => {
-  setPage(1); // Reset page when filter changes
-}, [statusFilter]);
+        setData(Array.isArray(data) ? data : []);
+        setTotalPages(totalPages || 1);
+        setTotalRecords(totalRecords || 0);
 
-useEffect(() => {
-  if (page > totalPages) {
-    setPage(1);
-  }
-}, [filteredData, totalPages]);
-
-const paginated = useMemo(() => {
-  const start = (page - 1) * rowsPerPage;
-  return filteredData.slice(start, start + rowsPerPage);
-}, [filteredData, page, rowsPerPage]);
-
-  const getVisiblePages = () => {
-    const pages = [];
-    const maxVisible = 5;
-
-    let start = Math.max(1, page - 2);
-    let end = Math.min(totalPages, start + maxVisible - 1);
-
-    if (end - start < maxVisible - 1) {
-      start = Math.max(1, end - maxVisible + 1);
+        // if current page becomes invalid after filtering
+        if (pageNumber > totalPages && totalPages > 0) {
+          setPage(totalPages);
+        }
+      }
+    } catch (error) {
+      console.error(error);
+      setData([]);
+    } finally {
+      setLoading(false);
     }
-
-    for (let i = start; i <= end; i++) {
-      pages.push(i);
-    }
-
-    return pages;
   };
 
-  // Close menu when clicking outside
+  /* ================= EFFECT ================= */
+
+  useEffect(() => {
+    fetchCandidates(page, rowsPerPage, statusFilter);
+  }, [page, statusFilter]);
+
+  /* ================= SOCKET ================= */
+
+  useEffect(() => {
+    socket.on("candidate-added", () => {
+      fetchCandidates(page, rowsPerPage, statusFilter);
+    });
+
+    socket.on("candidate-updated", () => {
+      fetchCandidates(page, rowsPerPage, statusFilter);
+    });
+
+    return () => {
+      socket.off("candidate-added");
+      socket.off("candidate-updated");
+    };
+  }, [page, statusFilter]);
+
+  /* ================= MENU CLOSE ================= */
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -104,54 +115,31 @@ const paginated = useMemo(() => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Fetch all candidates on component mount
-  useEffect(() => {
-    fetchCandidates();
-  }, []);
+  /* ================= HANDLERS ================= */
 
-  const fetchCandidates = async () => {
-    setLoading(true);
-    try {
-      const response = await adminService.getAllCandidate();
+  const formatStatus = (status: string = "new") =>
+    status.charAt(0).toUpperCase() + status.slice(1);
 
-      if (response.status === 200) {
-        // Reverse the array to show newest first
-        setData(response.data.reverse());
+  const getVisiblePages = () => {
+    const pages: (number | string)[] = [];
+    const maxVisible = 5;
+
+    if (totalPages <= maxVisible) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      if (page > 3) pages.push(1, "...");
+
+      let start = Math.max(1, page - 2);
+      let end = Math.min(totalPages, page + 2);
+
+      for (let i = start; i <= end; i++) {
+        pages.push(i);
       }
-    } catch (error) {
-      console.error("Error fetching candidates:", error);
-      toast.error("Failed to load candidates");
-    } finally {
-      setLoading(false);
+
+      if (page < totalPages - 2) pages.push("...", totalPages);
     }
-  };
 
-  useEffect(() => {
-    socket.on("candidate-added", (newCandidate: Candidate) => {
-      setData((prevData) => [newCandidate, ...prevData]);
-    });
-    socket.on("candidate-updated", (updatedCandidate: Candidate) => {
-      setData((prevData) =>
-        prevData.map((candidate) =>
-          candidate._id === updatedCandidate._id ? updatedCandidate : candidate,
-        ),
-      );
-    });
-
-    return () => {
-      socket.off("candidate-updated");
-      socket.off("candidate-added");
-    };
-  }, []);
-  const toggleSelectAll = () => {
-    if (selected.length === data.length) setSelected([]);
-    else setSelected(data.map((d) => d._id));
-  };
-
-  const toggleRow = (id: string) => {
-    setSelected((prev) =>
-      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id],
-    );
+    return pages;
   };
 
   const handleAddCandidate = (candidateData: Candidate) => {
@@ -171,10 +159,22 @@ const paginated = useMemo(() => {
     );
   };
 
-  const handleViewCandidate = (candidate: Candidate) => {
-    setSelectedCandidate(candidate);
-    setIsViewModalOpen(true);
-    setOpenMenuId(null);
+  const handleViewCandidate = async (candidate: Candidate) => {
+    try {
+      setLoading(true);
+
+      const response = await adminService.getCandidateProfile(candidate._id);
+      console.log(response);
+      if (response.status === 200) {
+        setSelectedCandidate(response);
+        setIsViewModalOpen(true);
+      }
+    } catch (error) {
+      toast.error("Failed to load candidate profile");
+    } finally {
+      setLoading(false);
+      setOpenMenuId(null);
+    }
   };
 
   const handleEditCandidate = (candidate: Candidate) => {
@@ -182,23 +182,6 @@ const paginated = useMemo(() => {
     setIsModalOpen(true);
     setOpenMenuId(null);
   };
-
-  // const handleDeleteCandidate = async (candidateId: string) => {
-  //   if (window.confirm("Are you sure you want to delete this candidate?")) {
-  //     try {
-  //       await adminService.deleteCandidate(candidateId);
-
-  //       // Remove candidate from the list
-  //       setData((prevData) => prevData.filter((c) => c._id !== candidateId));
-
-  //       toast.success("Candidate deleted successfully!");
-  //       setOpenMenuId(null);
-  //     } catch (error) {
-  //       console.error("Error deleting candidate:", error);
-  //       toast.error("Failed to delete candidate");
-  //     }
-  //   }
-  // };
 
   const handleUpdateCandidateStatus = async (
     candidateId: string,
@@ -232,10 +215,16 @@ const paginated = useMemo(() => {
   const toggleMenu = (candidateId: string) => {
     setOpenMenuId(openMenuId === candidateId ? null : candidateId);
   };
-
-  // Capitalize first letter of status
-  const formatStatus = (status: string = "new") => {
-    return status.charAt(0).toUpperCase() + status.slice(1);
+  const SkeletonRow = () => {
+    return (
+      <tr className="animate-pulse">
+        {[...Array(8)].map((_, index) => (
+          <td key={index} className="px-6 py-4">
+            <div className="h-4 bg-gray-200 rounded w-full"></div>
+          </td>
+        ))}
+      </tr>
+    );
   };
 
   return (
@@ -287,22 +276,19 @@ const paginated = useMemo(() => {
             Add Candidates
           </button>
           <div className="flex cursor-pointer items-center gap-2 bg-white rounded-lg px-2  border border-[#00000033] focus:outline-none">
-
             <Filter className="h-4 w-4 text-gray-600" />
-  <select
-    value={statusFilter}
-    onChange={(e) => setStatusFilter(e.target.value)}
-    className="px-3 py-2 text-sm  cursor-pointer border-none outline-none focus:ring-0"
-  >
-    <option value="all">All Status</option>
-    <option value="new">New</option>
-    <option value="Screening">Screening</option>
-    <option value="Interview">Interview</option>
-    <option value="Completed">Completed</option>
-    <option value="Rejected">Rejected</option>
-  </select>
-</div>
-
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-3 py-2 text-sm  cursor-pointer border-none outline-none focus:ring-0"
+            >
+              <option value="all">All Status</option>
+              <option value="new">New</option>
+              <option value="In_Progress">In-Progress</option>
+              <option value="Completed">Completed</option>
+              <option value="Rejected">Rejected</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -310,9 +296,33 @@ const paginated = useMemo(() => {
         <div className="bg-white rounded-lg border border-[#00000033]">
           {/* Loading State */}
           {loading ? (
-            <div className="flex items-center justify-center py-20">
-              <div className="text-gray-500">Loading candidates...</div>
-            </div>
+            <>
+              <div className="relative overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b border-[#00000033]">
+                    <tr>
+                      <th className="px-6 py-3 text-xs uppercase">Sr. No</th>
+                      <th className="px-6 py-3 text-xs uppercase">
+                        Candidates
+                      </th>
+                      <th className="px-6 py-3 text-xs uppercase">Role</th>
+                      <th className="px-6 py-3 text-xs uppercase">Status</th>
+                      <th className="px-6 py-3 text-xs uppercase">
+                        Experience
+                      </th>
+                      <th className="px-6 py-3 text-xs uppercase">Skills</th>
+                      <th className="px-6 py-3 text-xs uppercase">Phone</th>
+                      <th className="px-6 py-3 text-xs uppercase">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...Array(rowsPerPage)].map((_, index) => (
+                      <SkeletonRow key={index} />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           ) : data.length === 0 ? (
             /* Empty State */
             <div className="flex flex-col items-center justify-center py-20">
@@ -331,7 +341,7 @@ const paginated = useMemo(() => {
                 <table className="w-full">
                   <thead className="bg-gray-50 border-b border-[#00000033]">
                     <tr>
-                      <th className="px-6 py-3 text-left">
+                      {/* <th className="px-6 py-3 text-left">
                         <input
                           type="checkbox"
                           checked={
@@ -340,7 +350,7 @@ const paginated = useMemo(() => {
                           onChange={toggleSelectAll}
                           className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"
                         />
-                      </th>
+                      </th> */}
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Sr. No
                       </th>
@@ -368,19 +378,19 @@ const paginated = useMemo(() => {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {paginated.map((row, index) => (
+                    {data.map((row, index) => (
                       <tr
                         key={row._id}
                         className="hover:bg-gray-50 transition-colors"
                       >
-                        <td className="px-6 py-4">
+                        {/* <td className="px-6 py-4">
                           <input
                             type="checkbox"
                             checked={selected.includes(row._id)}
                             onChange={() => toggleRow(row._id)}
                             className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"
                           />
-                        </td>
+                        </td> */}
                         <td className="px-6 py-4 text-sm text-gray-900">
                           {(page - 1) * rowsPerPage + index + 1}
                         </td>
@@ -411,13 +421,15 @@ const paginated = useMemo(() => {
                         </td>
                         <td className="px-6 py-4">
                           <span
-                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                              statusStyles[
-                                row.status as keyof typeof statusStyles
-                              ] || statusStyles.new
+                            className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
+                              row.candidate_status === "active"
+                                ? "bg-green-100 text-green-700"
+                                : "bg-red-100 text-red-700"
                             }`}
                           >
-                            {formatStatus(row.status)}
+                            {row.candidate_status === "active"
+                              ? "Active"
+                              : "Inactive"}
                           </span>
                         </td>
                         <td className="px-6 py-4">
@@ -445,17 +457,18 @@ const paginated = useMemo(() => {
                           {openMenuId === row._id && (
                             <div
                               ref={menuRef}
-                              className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10"
+                              className="absolute right-0 mt-2 w-52 bg-white rounded-xl shadow-2xl border border-gray-200 py-2 z-50"
                             >
                               <button
                                 onClick={() => handleViewCandidate(row)}
-                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition"
                               >
                                 View
                               </button>
+
                               <button
                                 onClick={() => handleEditCandidate(row)}
-                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition"
                               >
                                 Edit
                               </button>
@@ -468,7 +481,7 @@ const paginated = useMemo(() => {
                                       "inactive",
                                     )
                                   }
-                                  className="w-full text-left px-4 py-2 text-sm text-orange-600 hover:bg-orange-50 transition-colors"
+                                  className="w-full text-left px-4 py-2 text-sm text-orange-600 hover:bg-orange-50 transition"
                                 >
                                   Mark as Inactive
                                 </button>
@@ -480,7 +493,7 @@ const paginated = useMemo(() => {
                                       "active",
                                     )
                                   }
-                                  className="w-full text-left px-4 py-2 text-sm text-green-600 hover:bg-green-50 transition-colors"
+                                  className="w-full text-left px-4 py-2 text-sm text-green-600 hover:bg-green-50 transition"
                                 >
                                   Mark as Active
                                 </button>
@@ -495,76 +508,60 @@ const paginated = useMemo(() => {
               </div>
 
               {/* Pagination */}
-              <div className="flex flex-col md:flex-row justify-between items-center gap-4 px-6 py-4 border-t border-[#00000033]">
-                {/* Info + Rows per page */}
-                <div className="flex items-center gap-4">
-                  <div className="text-sm text-gray-700">
-                    Showing {(page - 1) * rowsPerPage + 1} to{" "}
-                    {Math.min(page * rowsPerPage, data.length)} of {data.length}{" "}
-                    results
-                  </div>
-
-                  <select
-                    value={rowsPerPage}
-                    onChange={(e) => {
-                      setRowsPerPage(Number(e.target.value));
-                      setPage(1);
-                    }}
-                    className="border border-[#00000033] rounded px-2 py-1 text-sm"
-                  >
-                    <option value={5}>5</option>
-                    <option value={10}>10</option>
-                    <option value={25}>25</option>
-                    <option value={50}>50</option>
-                  </select>
+              <div className=" z-0 flex flex-col md:flex-row justify-between items-center gap-4 px-6 py-4 border-t border-[#00000033]">
+                {/* Info */}
+                <div className="text-sm text-gray-700">
+                  {totalRecords === 0
+                    ? "No results found"
+                    : `Showing ${(page - 1) * rowsPerPage + 1} to 
+        ${Math.min(page * rowsPerPage, totalRecords)} 
+        of ${totalRecords} results`}
                 </div>
 
-                {/* Buttons */}
+                {/* Controls */}
                 <div className="flex items-center gap-1">
-                  <button
-                    disabled={page === 1}
-                    onClick={() => setPage(1)}
-                    className="px-3 py-1 text-sm border rounded disabled:opacity-50"
-                  >
-                    «
-                  </button>
+                  {/* First */}
 
+                  {/* Prev */}
                   <button
                     disabled={page === 1}
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    className="px-3 py-1 text-sm border rounded disabled:opacity-50"
+                    onClick={() => setPage((p) => p - 1)}
+                    className="px-3 py-1 text-sm border rounded disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     ‹
                   </button>
 
-                  {getVisiblePages().map((p) => (
-                    <button
-                      key={p}
-                      onClick={() => setPage(p)}
-                      className={`px-3 py-1 text-sm rounded ${
-                        page === p
-                          ? "bg-indigo-600 text-white"
-                          : "border hover:bg-gray-50"
-                      }`}
-                    >
-                      {p}
-                    </button>
-                  ))}
+                  {/* Page Numbers */}
+                  {getVisiblePages().map((p, index) =>
+                    p === "..." ? (
+                      <span
+                        key={index}
+                        className="px-2 py-1 text-sm text-gray-500"
+                      >
+                        ...
+                      </span>
+                    ) : (
+                      <button
+                        key={index}
+                        onClick={() => setPage(Number(p))}
+                        className={`px-3 py-1 text-sm rounded transition-all ${
+                          page === p
+                            ? "bg-indigo-600 text-white shadow-md"
+                            : "border hover:bg-gray-50"
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    ),
+                  )}
 
+                  {/* Next */}
                   <button
                     disabled={page === totalPages}
-                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                    className="px-3 py-1 text-sm border rounded disabled:opacity-50"
+                    onClick={() => setPage((p) => p + 1)}
+                    className="px-3 py-1 text-sm border rounded disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     ›
-                  </button>
-
-                  <button
-                    disabled={page === totalPages}
-                    onClick={() => setPage(totalPages)}
-                    className="px-3 py-1 text-sm border rounded disabled:opacity-50"
-                  >
-                    »
                   </button>
                 </div>
               </div>
