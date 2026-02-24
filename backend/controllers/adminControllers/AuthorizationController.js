@@ -4,6 +4,7 @@ import Score from "../../models/Score.js";
 import mongoose from "mongoose";
 import MCQ_Interview from "../../models/MCQ_Interview.js";
 import AI_Interview from "../../models/AI_Interview.js";
+import InterviewFeedback from "../../models/feedback.js";
 import Candidate from "../../models/Candidate.js";
 
 export const RegisterUser = async (req, res) => {
@@ -47,7 +48,7 @@ export const RegisterUser = async (req, res) => {
         user: {
           _id: admin._id,
           email: admin.email,
-          role: admin.role
+          role: admin.role,
         },
         accessToken,
         refreshToken,
@@ -62,7 +63,7 @@ export const LoginUser = async (req, res) => {
 
   try {
     const admin = await Admin.findOne({ email });
-    console.log(admin);
+    // console.log(admin);
     if (!admin) {
       return res.status(400).json({ message: "Invalid credentials" });
     }
@@ -101,7 +102,7 @@ export const LoginUser = async (req, res) => {
         user: {
           _id: admin._id,
           email: admin.email,
-           role: admin.role
+          role: admin.role,
         },
         accessToken,
         refreshToken,
@@ -112,10 +113,9 @@ export const LoginUser = async (req, res) => {
 };
 
 export const getMe = async (req, res) => {
-  console.log("getMe called with user ID:", req.user);
+  // console.log("getMe called with user ID:", req.user);
   try {
     const user = await Admin.findById(req.user.id).select("-password");
- 
 
     if (!user) {
       return res.status(404).json({ message: "User not found" });
@@ -137,125 +137,135 @@ export const getMe = async (req, res) => {
   }
 };
 
-
 export const GetTopPerformance = async (req, res) => {
-  const { examType } = req.query;
-
-  if (!examType || !["AI", "MCQ"].includes(examType)) {
-    return res.status(400).json({
-      success: false,
-      message: "examType must be AI or MCQ",
-    });
-  }
-
-  const allScores = await Score.find();
-console.log("All Scores:", allScores);
   try {
-    const testInterview = await MCQ_Interview.findById(allScores[0].interviewId);
-console.log("Interview exists?", testInterview);
-    // ✅ Get real collection names dynamically
-    const interviewCollection =
-      examType === "AI"
-        ? mongoose.model("AI_Interview").collection.name
-        : mongoose.model("MCQ_Interview").collection.name;
- console.log("Using interview collection:", interviewCollection);
+    const { examType, limit = 10 } = req.query;
 
-
- const topPerformers = await Score.aggregate([
-
-  // 🔥 Fix type casting issue
-  {
-    $addFields: {
-      interviewIdObj: {
-        $cond: [
-          { $eq: [{ $type: "$interviewId" }, "string"] },
-          { $toObjectId: "$interviewId" },
-          "$interviewId"
-        ]
-      }
+    if (!examType || !["AI", "MCQ"].includes(examType)) {
+      return res.status(400).json({
+        success: false,
+        message: "examType must be AI or MCQ",
+      });
     }
-  },
 
-  {
-    $lookup: {
-      from: interviewCollection,
-      localField: "interviewIdObj",
-      foreignField: "_id",
-      as: "interview",
-    },
-  },
-  { $unwind: "$interview" },
-
-  {
-    $lookup: {
-      from: mongoose.model("Candidate").collection.name,
-      localField: "candidateId",
-      foreignField: "_id",
-      as: "candidate",
-    },
-  },
-  { $unwind: "$candidate" },
-
-  {
-    $addFields: {
-      totalQuestions:
-        examType === "AI"
-          ? "$interview.numberOfQuestions"
-          : "$interview.no_of_questions",
-    },
-  },
-  {
-    $addFields: {
-      percentage: {
-        $cond: [
-          { $eq: ["$totalQuestions", 0] },
-          0,
-          {
-            $multiply: [
-              { $divide: ["$totalScore", "$totalQuestions"] },
-              100,
-            ],
+    if (examType === "AI") {
+      const aiData = await InterviewFeedback.find({
+        examType: "AI",
+      })
+        .populate({
+          path: "interview_id",
+          populate: {
+            path: "candidates.candidateId",
+            model: "Candidate",
+            select: "name email candidate_status",
           },
-        ],
-      },
-    },
-  },
+        })
+        .sort({ score: -1 });
 
-  { $sort: { percentage: -1 } },
-  { $limit: 10 },
+      return res.status(200).json({
+        success: true,
+        type: "AI",
+        total: aiData.length,
+        data: aiData, // 🔥 returning full document
+      });
+    }
 
-  {
-    $project: {
-      _id: 0,
-      candidate: {
-        name: "$candidate.name",
-        email: "$candidate.email",
-      },
-      interview: {
-        examType: "$interview.examType",
-        difficulty: "$interview.difficulty",
-        test_title: "$interview.test_title",
-      },
-      totalScore: 1,
-      totalQuestions: 1,
-      percentage: { $round: ["$percentage", 2] },
-    },
-  },
-]);
- console.log("Top Performers:", topPerformers);
-    res.status(200).json({
-      success: true,
-      data: topPerformers,
-    });
+    if (examType === "MCQ") {
+      const mcqData = await Score.aggregate([
+        {
+          $match: { examType: "MCQ" },
+        },
+
+        {
+          $lookup: {
+            from: mongoose.model("MCQ_Interview").collection.name,
+            localField: "interviewId",
+            foreignField: "_id",
+            as: "interview",
+          },
+        },
+        {
+          $unwind: {
+            path: "$interview",
+            preserveNullAndEmptyArrays: false,
+          },
+        },
+
+        {
+          $lookup: {
+            from: mongoose.model("Candidate").collection.name,
+            localField: "candidateId",
+            foreignField: "_id",
+            as: "candidate",
+          },
+        },
+        {
+          $unwind: {
+            path: "$candidate",
+            preserveNullAndEmptyArrays: false,
+          },
+        },
+
+        {
+          $addFields: {
+            percentage: {
+              $cond: [
+                { $eq: ["$maxScore", 0] },
+                0,
+                {
+                  $multiply: [{ $divide: ["$totalScore", "$maxScore"] }, 100],
+                },
+              ],
+            },
+          },
+        },
+
+        { $sort: { percentage: -1 } },
+        { $limit: Number(limit) },
+
+        {
+          $project: {
+            _id: 0,
+            candidate: {
+              name: "$candidate.name",
+              email: "$candidate.email",
+            },
+            interview: {
+              id: "$interview._id",
+              title: "$interview.test_title",
+              difficulty: "$interview.difficulty",
+              examType: "$examType",
+              JobsDescription: "$interview.jobDescription",
+              position: "$interview.position",
+            },
+            totalScore: "$totalScore",
+            maxScore: "$maxScore",
+            percentage: { $round: ["$percentage", 2] },
+            completedAt: "$updatedAt",
+          },
+        },
+      ]);
+
+      const formattedMCQ = mcqData.map((item, index) => ({
+        rank: index + 1,
+        ...item,
+      }));
+
+      return res.status(200).json({
+        success: true,
+        type: "MCQ",
+        total: formattedMCQ.length,
+        data: formattedMCQ,
+      });
+    }
   } catch (error) {
-    console.error("TopPerformance error:", error);
-    res.status(500).json({
+    console.error("GetTopPerformance Error:", error);
+    return res.status(500).json({
       success: false,
-      message: "Server error",
+      message: "Server Error",
     });
   }
 };
-
 
 // export const GetAllSchedule = async (req, res) => {
 //   try {
@@ -424,8 +434,6 @@ console.log("Interview exists?", testInterview);
 //   }
 // };
 
-
-
 export const GetAllSchedule = async (req, res) => {
   try {
     const now = new Date();
@@ -461,11 +469,9 @@ export const GetAllSchedule = async (req, res) => {
             email: "$candidateDetails.email",
             mobile: "$candidateDetails.mobile",
             role: "$candidateDetails.role",
-            year_of_experience:
-              "$candidateDetails.year_of_experience",
+            year_of_experience: "$candidateDetails.year_of_experience",
             status: "$candidateDetails.status",
-            candidate_status:
-              "$candidateDetails.candidate_status",
+            candidate_status: "$candidateDetails.candidate_status",
           },
           startDate: "$candidates.start_Date",
           endDate: "$candidates.end_Date",
@@ -507,11 +513,9 @@ export const GetAllSchedule = async (req, res) => {
             email: "$candidateDetails.email",
             mobile: "$candidateDetails.mobile",
             role: "$candidateDetails.role",
-            year_of_experience:
-              "$candidateDetails.year_of_experience",
+            year_of_experience: "$candidateDetails.year_of_experience",
             status: "$candidateDetails.status",
-            candidate_status:
-              "$candidateDetails.candidate_status",
+            candidate_status: "$candidateDetails.candidate_status",
           },
           startDate: "$candidates.scheduledStartDate",
           endDate: "$candidates.scheduledEndDate",
@@ -522,55 +526,62 @@ export const GetAllSchedule = async (req, res) => {
       },
     ]);
 
-      //  🔥 NEW: COUNT MCQ & AI SCHEDULED
+    //  🔥 NEW: COUNT MCQ & AI SCHEDULED
 
     const sheduled_mcq_interview = mcqData.filter(
       (item) =>
         item.interviewLink &&
         item.password &&
-        item.interviewStatus !== "cancelled"
+        item.interviewStatus !== "cancelled",
     ).length;
 
     const sheduled_ai_interview = aiData.filter(
       (item) =>
         item.interviewLink &&
         item.password &&
-        item.interviewStatus !== "cancelled"
+        item.interviewStatus !== "cancelled",
     ).length;
 
-      //  MERGE + FILTER
+    //  MERGE + FILTER
 
     const allInterviews = [...mcqData, ...aiData]
       .filter(
         (item) =>
           item.interviewLink &&
           item.password &&
-          item.interviewStatus !== "cancelled"
+          item.interviewStatus !== "cancelled",
       )
       .map(({ password, ...rest }) => rest);
 
     // CATEGORIZE
-  
+
     const upcoming = [];
-    const ongoing = [];
     const past = [];
 
     allInterviews.forEach((item) => {
       if (!item.startDate || !item.endDate) return;
 
-      const start = new Date(item.startDate);
       const end = new Date(item.endDate);
 
-      if (now < start) {
+      // 🔥 If interview not finished → upcoming
+      if (end >= now) {
         upcoming.push(item);
-      } else if (now >= start && now <= end) {
-        ongoing.push(item);
       } else {
         past.push(item);
       }
     });
 
-// response with counts and categorized interviews
+    // 🔥 Sort upcoming by nearest first (today first, then tomorrow)
+    upcoming.sort((a, b) => {
+      return new Date(a.startDate) - new Date(b.startDate);
+    });
+
+    // 🔥 Sort past by latest first
+    past.sort((a, b) => {
+      return new Date(b.endDate) - new Date(a.endDate);
+    });
+
+    // response with counts and categorized interviews
 
     return res.status(200).json({
       totalScheduledTests: allInterviews.length,
@@ -580,11 +591,9 @@ export const GetAllSchedule = async (req, res) => {
       sheduled_ai_interview,
 
       upcomingCount: upcoming.length,
-      ongoingCount: ongoing.length,
       pastCount: past.length,
 
       upcoming,
-      ongoing,
       past,
     });
   } catch (error) {
@@ -593,11 +602,17 @@ export const GetAllSchedule = async (req, res) => {
   }
 };
 
-
 export const rescheduleInterview = async (req, res) => {
   try {
     const { type, interviewId } = req.params;
     const { candidateId, newStartDate, newEndDate } = req.body;
+    // console.log("id, type, interviewId, candidateId, newStartDate, newEndDate", {
+    //   type,
+    //   interviewId,
+    //   candidateId,
+    //   newStartDate,
+    //   newEndDate,
+    // });
 
     if (!candidateId || !newStartDate || !newEndDate) {
       return res.status(400).json({
@@ -619,7 +634,7 @@ export const rescheduleInterview = async (req, res) => {
       return res.status(404).json({ message: "Interview not found" });
 
     const candidateEntry = interview.candidates.find(
-      (c) => c.candidateId.toString() === candidateId
+      (c) => c.candidateId.toString() === candidateId,
     );
 
     if (!candidateEntry)
@@ -666,6 +681,8 @@ export const cancelInterview = async (req, res) => {
     const { type, interviewId } = req.params;
     const { candidateId } = req.body;
 
+    // console.log("Cancel Request:", { type, interviewId, candidateId });
+
     if (!candidateId) {
       return res.status(400).json({ message: "candidateId required" });
     }
@@ -684,7 +701,7 @@ export const cancelInterview = async (req, res) => {
       return res.status(404).json({ message: "Interview not found" });
 
     const candidateEntry = interview.candidates.find(
-      (c) => c.candidateId.toString() === candidateId
+      (c) => c.candidateId.toString() === candidateId,
     );
 
     if (!candidateEntry)
@@ -708,7 +725,6 @@ export const cancelInterview = async (req, res) => {
   }
 };
 
-
 export const getStudentScores = async (req, res) => {
   try {
     const { examType } = req.query;
@@ -719,7 +735,7 @@ export const getStudentScores = async (req, res) => {
         message: "examType must be MCQ or AI",
       });
     }
-  
+
     // const results = await Score.aggregate([
     //   {
     //     $match: { examType },
@@ -787,12 +803,15 @@ export const getStudentScores = async (req, res) => {
 
     //   { $sort: { "scores.createdAt": -1 } },
     // ]);
-      const scores = await Score.find({ examType }).populate("interviewId").populate("candidateId").populate("scores.questionId")
+    const scores = await Score.find({ examType })
+      .populate("interviewId")
+      .populate("candidateId")
+      .populate("scores.questionId");
 
     return res.status(200).json({
       success: true,
       totalStudents: scores.length,
-       scores,
+      scores,
     });
   } catch (error) {
     console.error("getStudentScores Error:", error);

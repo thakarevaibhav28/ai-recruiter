@@ -45,8 +45,9 @@ export const GetAllMCQInterviews = async (req, res) => {
       createdBy: adminId,
     })
       .sort({ createdAt: -1 })
-      .populate("createdBy", "email").populate("candidates.candidateId")
- console.log("interviews",interviews)
+      .populate("createdBy", "email")
+      .populate("candidates.candidateId");
+    // console.log("interviews", interviews);
     return res.status(200).json({
       success: true,
       count: interviews.length,
@@ -72,7 +73,7 @@ export const CreateMCQTemplate = async (req, res) => {
       primary_skill,
       secondary_skill,
       passing_score,
-      secondry_jobDescription
+      jobDescriptionText,
     } = req.body;
 
     // Validate required fields
@@ -92,7 +93,7 @@ export const CreateMCQTemplate = async (req, res) => {
 
     // Get job description file path if uploaded
     const jobDescription = req.file ? req.file.path.replace(/\\/g, "/") : "";
-    console.log("Job description path:", jobDescription);
+    // console.log("Job description path:", jobDescription);
 
     // // Generate questions using AI
     // const questions = await generateQuestions(
@@ -114,7 +115,7 @@ export const CreateMCQTemplate = async (req, res) => {
       secondary_skill: secondary_skill || "",
       passing_score,
       jobDescription,
-      secondry_jobDescription,
+      jobDescriptionText,
       createdBy: req.user.id,
       isTemplate: true, // Mark as template
     });
@@ -371,8 +372,14 @@ export const AssessmentInvitationByID = async (req, res) => {
 
     const startDate = new Date(start_date);
     const endDate = new Date(end_date);
+    if (!start_date || !end_date) {
+      return res.status(400).json({
+        success: false,
+        message: "Start date and end date are required",
+      });
+    }
 
-    if (endDate <= startDate) {
+    if (endDate.getTime() <= startDate.getTime()) {
       return res.status(400).json({
         success: false,
         message: "End date must be after start date",
@@ -584,6 +591,7 @@ export const updateMCQInterview = async (req, res) => {
     const { id } = req.params;
 
     const interview = await MCQ_Interview.findById(id);
+    console.log("Found interview for update:", interview);
     if (!interview) {
       return res.status(404).json({ message: "Interview not found" });
     }
@@ -608,6 +616,7 @@ export const updateMCQInterview = async (req, res) => {
       "duration",
       "test_title",
       "no_of_questions",
+      "jobDescriptionText",
       "primary_skill",
       "secondary_skill",
       "passing_score",
@@ -636,7 +645,7 @@ export const getMCQInterviewById = async (req, res) => {
     const { id } = req.params;
     const userId = req.user.id;
 
-    if(!userId){
+    if (!userId) {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
@@ -662,7 +671,7 @@ export const getMCQInterviewById = async (req, res) => {
       return res.status(404).json({ message: "Interview not found" });
     }
 
-    res.json({ interview:interview,user:candidate._doc });
+    res.json({ interview: interview, user: candidate._doc });
   } catch (error) {
     console.log(error);
     res.status(500).json({ message: "Server error" });

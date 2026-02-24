@@ -14,7 +14,6 @@ export const CreateAITemplate = async (req, res) => {
       skills,
       duration,
       numberOfQuestions,
-      secondaryJobDescription,
     } = req.body;
 
     const file = req.file;
@@ -57,12 +56,14 @@ export const CreateAITemplate = async (req, res) => {
       skills,
       passingScore,
       numberOfQuestions,
-      secondaryJobDescription,
+      description: description,
       createdBy: req.user.id, // from auth middleware
       // questions,
       candidates: [],
       status: "draft", // default
     });
+
+    console.log("Created AI Interview:", interview);
 
     // ================= RESPONSE =================
     return res.status(201).json({
@@ -77,7 +78,7 @@ export const CreateAITemplate = async (req, res) => {
         skills: interview.skills,
         passingScore: interview.passingScore,
         description: interview.description,
-        secondaryJobDescription: interview.secondaryJobDescription,
+        jobDescription: interview.jobDescription,
         numberOfQuestions: interview.numberOfQuestions,
       },
       // questions,
@@ -113,7 +114,7 @@ export const GetAllAIInterview = async (req, res) => {
   select: "name email mobile",
 });
 
-      console.log("interview",interview)
+      // console.log("interview",interview)
       if (!interview) {
         return res.status(404).json({
           success: false,
@@ -181,7 +182,7 @@ export const AIInterviewInvitation = async (req, res) => {
     }
 
     const interview = await AI_Interview.findById(jobId);
-    console.log("Interview found:", interview);
+    // console.log("Interview found:", interview);
     if (!interview) {
       return res.status(404).json({ message: "Interview not found." });
     }
@@ -247,6 +248,7 @@ export const UpdateAIInterview = async (req, res) => {
   try {
     const { id } = req.params;
     const interview = await AI_Interview.findById(id);
+    console.log("Interview to update:", interview);
     if (!interview) {
       return res.status(404).json({ message: "Interview not found" });
     }
@@ -272,6 +274,7 @@ export const UpdateAIInterview = async (req, res) => {
       "position",
       "description",
       "jobDescription",
+      "jobDescriptionText",
       "secondaryJobDescription",
       "difficulty",
       "duration",
@@ -334,7 +337,7 @@ export const ScheduleAiInterview = async (req, res) => {
     const interview = await AI_Interview.findById(interviewId);
     if (!interview)
       return res.status(404).json({ message: "Interview not found" });
-    console.log("interview existing candidates:", interview);
+    // console.log("interview existing candidates:", interview);
     const scheduledCandidates = [];
 
     for (const candId of candidateArray) {

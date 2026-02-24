@@ -208,7 +208,7 @@ export const getCandidateProfile = async (req, res) => {
           s.interviewId.toString() === interview._id.toString()
       );
 
-      console.log()
+      
       allInterviews.push({
         interviewId: interview._id,
         title: interview.position,
@@ -276,7 +276,7 @@ export const UpdateCandidate = async (req, res) => {
     }
 
     const candidate = await Candidate.findById(id);
-    console.log(candidate)
+    // console.log(candidate)
 
     if (!candidate) {
       return res.status(404).json({
