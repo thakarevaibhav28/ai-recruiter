@@ -2,12 +2,7 @@ import { useState, useEffect } from "react";
 import AdminLayout from "../../common/AdminLayout";
 import { adminService } from "../../services/service/adminService";
 import toast from "react-hot-toast";
-import {
-  FaUsers,
-  FaClipboardList,
-  FaFileAlt,
-  FaRobot,
-} from "react-icons/fa";
+import { FaUsers, FaClipboardList, FaFileAlt, FaRobot } from "react-icons/fa";
 import { Plus, UserPlus, Calendar, TrendingUp } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -108,26 +103,55 @@ const TopPerformance = () => {
       setLoading(true);
 
       const res = await adminService.getTopPerformance(type);
+      // console.log("Top Performance Response:", res);
 
       if (res?.success) {
-        // Add ranking dynamically
-        const ranked = res.data
-          .slice(0, 3) // 🔥 ONLY TOP 5
-          .map((item: any, index: number) => ({
+        const ranked = res.data.slice(0, 3).map((item: any, index: number) => {
+          const isAI = res.type === "AI";
+
+          return {
             rank: index + 1,
-            name: item.candidate?.name,
-            email: item.candidate?.email,
-            score: `${item.totalScore}%`,
-            examType: item.interview?.examType,
-            testTitle: item.interview?.test_title,
-          }));
+
+            // ✅ Candidate Name
+            name: isAI
+              ? item.interview_id?.candidates?.[0]?.candidateId?.name || "-"
+              : item.candidate?.name || "-",
+
+            // ✅ Candidate Email
+            email: isAI
+              ? item.interview_id?.candidates?.[0]?.candidateId?.email || "-"
+              : item.candidate?.email || "-",
+
+            // ✅ Score
+            score: isAI ? `${item.score}%` : `${item.totalScore}%`,
+
+            // ✅ Percentage
+            percentage: isAI ? `${item.score}%` : `${item.percentage}%`,
+
+            // ✅ Exam Type
+            examType: isAI ? item.examType : item.interview?.examType,
+
+            // ✅ Title
+            testTitle: isAI
+              ? item.interview_id?.position
+              : item.interview?.title,
+
+            // ✅ Difficulty
+            difficulty: isAI
+              ? item.interview_id?.difficulty
+              : item.interview?.difficulty,
+
+            // ✅ Verdict (AI only)
+            verdict: isAI ? item.feedback?.overallVerdict : null,
+          };
+        });
 
         setPerformers(ranked);
       } else {
         setPerformers([]);
       }
     } catch (error: any) {
-      toast.error("Top Performance Error:", error);
+      toast.error("Top Performance Error");
       setPerformers([]);
     } finally {
       setLoading(false);
@@ -377,14 +401,18 @@ const Dashboard = () => {
       }
 
       const scheduleRes = await adminService.getTotalSchedule();
-      console.log(".....", scheduleRes);
+      console.log("total Shedule", scheduleRes);
 
       if (scheduleRes?.status === 200) {
         setTotalScheduledTests(
           scheduleRes.totalScheduledTests?.toString() || "0",
         );
-        setMcqScheduledCount(scheduleRes.sheduled_mcq_interview?.toString() || "0");
-        setAiScheduledCount(scheduleRes.sheduled_ai_interview?.toString() || "0");
+        setMcqScheduledCount(
+          scheduleRes.sheduled_mcq_interview?.toString() || "0",
+        );
+        setAiScheduledCount(
+          scheduleRes.sheduled_ai_interview?.toString() || "0",
+        );
         setUpcomingInterviews(scheduleRes.upcoming || []);
       }
     } catch (err: any) {
@@ -401,6 +429,7 @@ const Dashboard = () => {
   /* ================= RESCHEDULE ================= */
 
   const handleReschedule = (interview: any) => {
+    console.log("Selected Interview for Reschedule:", interview);
     setSelectedInterview(interview);
     setNewStartDate("");
     setNewEndDate("");
@@ -412,6 +441,16 @@ const Dashboard = () => {
 
     try {
       setActionLoading(true);
+
+      // ✅ Extract candidate ID safely
+      const candidateId =
+        selectedInterview.candidate?._id || selectedInterview.candidateId;
+
+      if (!candidateId) {
+        toast.error("Candidate ID not found");
+        setActionLoading(false);
+        return;
+      }
 
       await adminService.reScheduleInterview(
         selectedInterview.type,
@@ -555,6 +594,7 @@ const Dashboard = () => {
               type="datetime-local"
               className="w-full border p-2 rounded mb-3"
               value={newStartDate}
+              min={new Date().toISOString().slice(0, 16)}
               onChange={(e) => setNewStartDate(e.target.value)}
             />
 
@@ -562,6 +602,15 @@ const Dashboard = () => {
               type="datetime-local"
               className="w-full border p-2 rounded mb-4"
               value={newEndDate}
+              min={
+                newStartDate
+                  ? newStartDate
+                  : new Date(
+                      Date.now() - new Date().getTimezoneOffset() * 60000,
+                    )
+                      .toISOString()
+                      .slice(0, 16)
+              }
               onChange={(e) => setNewEndDate(e.target.value)}
             />
 

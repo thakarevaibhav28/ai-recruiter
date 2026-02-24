@@ -15,7 +15,7 @@ const candidateSchema = new mongoose.Schema({
       "scheduled",
       "in_progress",
       "completed",
-      "cancelled",
+      "cancelled"
     ],    //Interview status
     default: "new",
   },
