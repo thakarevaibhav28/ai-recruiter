@@ -7,7 +7,7 @@ const candidateSchema = new mongoose.Schema({
   role: { type: String, required: true },
   year_of_experience: { type: String, required: true },
   key_Skills: { type: String, require: true },
-  description: { type: String },
+  description: { type: String ,default:null},
   status: {
     type: String,
      enum: [
