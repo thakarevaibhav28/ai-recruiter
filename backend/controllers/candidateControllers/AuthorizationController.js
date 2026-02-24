@@ -19,6 +19,11 @@ export const CreateCandidate = async (req, res) => {
     year_of_experience,
   } = req.body;
 
+  if (!email || !name) {
+  return res.status(400).json({
+    message: "Name and Email are required.",
+  });
+}
   if (
     !email ||
     !name ||

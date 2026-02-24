@@ -66,6 +66,9 @@ class AdminService {
   analyzeJD(data: any) {
     return adminApi.analyzeJD(data);
   }
+  analyzeResume(data: any) {
+    return adminApi.analyzeResume(data);
+  }
 
   generateMCQ(data: any, id?: string) {
     return adminApi.generateMCQ(data, id);

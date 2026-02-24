@@ -11,7 +11,7 @@ class UserApi {
     SINGLE_SUBMIT: "/candidate/interview",
     FINAL_SUBMIT: "/candidate/interview",
     GENERATE_MCQ:"/admin/generate-mcq",
-    FEEDBACK:"/candidate/feedback"
+    FEEDBACK:"/feedback"
 
   };
 
