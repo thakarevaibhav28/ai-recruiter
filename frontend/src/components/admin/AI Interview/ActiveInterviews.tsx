@@ -272,9 +272,9 @@ const ActiveInterviews: React.FC<ActiveInterviewsProps> = ({
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
                             Status
                           </th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
+                          {/* <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
                             Interview Link
-                          </th>
+                          </th> */}
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
@@ -326,7 +326,7 @@ const ActiveInterviews: React.FC<ActiveInterviewsProps> = ({
                                     candidate.status.slice(1)}
                                 </span>
                               </td>
-                              <td className="px-4 py-3 text-sm">
+                              {/* <td className="px-4 py-3 text-sm">
                                 <a
                                   href={candidate.interviewLink}
                                   target="_blank"
@@ -335,7 +335,7 @@ const ActiveInterviews: React.FC<ActiveInterviewsProps> = ({
                                 >
                                   Open Link
                                 </a>
-                              </td>
+                              </td> */}
                             </tr>
                           ),
                         )}

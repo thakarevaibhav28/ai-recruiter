@@ -155,6 +155,50 @@ const ReportsInsights = () => {
   const [scores, setScores] = useState<ScoreType[]>([]);
   const [selectedScore, setSelectedScore] = useState<ScoreType | null>(null);
   const [loading, setLoading] = useState(false);
+  const [filters, setFilters] = useState({
+  name: "",
+  minScore: "",
+  maxScore: "",
+  startDate: "",
+  endDate: "",
+});
+
+const filteredScores = scores.filter((row) => {
+  const percentage = Math.round(
+    (row.totalScore / row.maxScore) * 100
+  );
+
+  const matchesName =
+    !filters.name ||
+    row.candidateId.name
+      .toLowerCase()
+      .includes(filters.name.toLowerCase());
+
+  const matchesMin =
+    !filters.minScore || percentage >= Number(filters.minScore);
+
+  const matchesMax =
+    !filters.maxScore || percentage <= Number(filters.maxScore);
+
+  const rowDate = new Date(row.updatedAt).getTime();
+  const start = filters.startDate
+    ? new Date(filters.startDate).getTime()
+    : null;
+  const end = filters.endDate
+    ? new Date(filters.endDate).getTime()
+    : null;
+
+  const matchesStart = !start || rowDate >= start;
+  const matchesEnd = !end || rowDate <= end;
+
+  return (
+    matchesName &&
+    matchesMin &&
+    matchesMax &&
+    matchesStart &&
+    matchesEnd
+  );
+});
   console.log(scores);
   // 🔥 FETCH DATA
   const fetchScores = async (type: "AI" | "MCQ") => {
@@ -253,9 +297,7 @@ const ReportsInsights = () => {
             <h2 className="text-lg font-semibold text-gray-900">
               AI Interview Result & L1 Screening
             </h2>
-            <p className="text-sm text-gray-500">
-              Showing 1-3 of 15 candidates
-            </p>
+         
           </div>
 
           {/* Search and Filter */}
@@ -274,7 +316,6 @@ const ReportsInsights = () => {
           </div>
 
           {/* Candidate Cards */}
-          <div className="space-y-4 ">
             {!loading && scores.length === 0 && (
               <tr className=" w-full flex items-center justify-center">
                 <td colSpan={8} className="text-center py-6 text-gray-500">
@@ -282,6 +323,7 @@ const ReportsInsights = () => {
                 </td>
               </tr>
             )}
+          <div className="space-y-4 ">
             {scores.map((candidate, i) => (
               <div
                 key={i}
@@ -407,44 +449,83 @@ const ReportsInsights = () => {
       {activeTab === "MCQ" && (
         <div className="space-y-4">
           {/* Filters Card */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="flex items-center gap-2 mb-4 text-sm font-semibold text-gray-900">
-              <SlidersHorizontal className="h-4 w-4" />
-              Filters
-            </div>
-            <div className="grid grid-cols-5 gap-4 mb-4">
-              <input
-                placeholder="Enter Candidates name..."
-                className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-600 focus:border-transparent outline-none"
-              />
-              <input
-                placeholder="All Score"
-                className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-600 focus:border-transparent outline-none"
-              />
-              <input
-                placeholder="All Types"
-                className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-600 focus:border-transparent outline-none"
-              />
-              <input
-                type="text"
-                placeholder="Start date"
-                className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-600 focus:border-transparent outline-none"
-              />
-              <input
-                type="text"
-                placeholder="End Date"
-                className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-600 focus:border-transparent outline-none"
-              />
-            </div>
-            <div className="flex justify-end gap-3">
-              <button className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                Clear All
-              </button>
-              <button className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors">
-                Apply Filters
-              </button>
-            </div>
-          </div>
+       <div className="bg-white rounded-lg border border-gray-200 p-6">
+  <div className="flex items-center gap-2 mb-4 text-sm font-semibold text-gray-900">
+    <SlidersHorizontal className="h-4 w-4" />
+    Filters
+  </div>
+
+  <div className="grid grid-cols-5 gap-4 mb-4">
+    {/* Candidate Name */}
+    <input
+      placeholder="Candidate Name..."
+      value={filters.name}
+      onChange={(e) =>
+        setFilters({ ...filters, name: e.target.value })
+      }
+      className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm outline-none"
+    />
+
+    {/* Min Score */}
+    <input
+      type="number"
+      placeholder="Min Score %"
+      value={filters.minScore}
+      onChange={(e) =>
+        setFilters({ ...filters, minScore: e.target.value })
+      }
+      className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm outline-none"
+    />
+
+    {/* Max Score */}
+    <input
+      type="number"
+      placeholder="Max Score %"
+      value={filters.maxScore}
+      onChange={(e) =>
+        setFilters({ ...filters, maxScore: e.target.value })
+      }
+      className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm outline-none"
+    />
+
+    {/* Start Date */}
+    <input
+      type="date"
+      value={filters.startDate}
+      onChange={(e) =>
+        setFilters({ ...filters, startDate: e.target.value })
+      }
+      className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm outline-none"
+    />
+
+    {/* End Date */}
+    <input
+      type="date"
+      value={filters.endDate}
+      onChange={(e) =>
+        setFilters({ ...filters, endDate: e.target.value })
+      }
+      className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm outline-none"
+    />
+  </div>
+
+  <div className="flex justify-end gap-3">
+    <button
+      onClick={() =>
+        setFilters({
+          name: "",
+          minScore: "",
+          maxScore: "",
+          startDate: "",
+          endDate: "",
+        })
+      }
+      className="px-4 py-2 text-sm bg-blue-700 text-white rounded-lg"
+    >
+      Clear
+    </button>
+  </div>
+</div>
 
           {/* Table Card */}
           <div className="bg-white rounded-lg border border-gray-200 p-6">
@@ -503,7 +584,7 @@ const ReportsInsights = () => {
                     <TableSkeleton />
                   ) : (
                     <>
-                      {scores.map((row, i) => (
+                      {filteredScores.map((row, i) => (
                         <tr key={row._id} className="hover:bg-gray-50">
                           <td className="px-4 py-4 text-sm">{i + 1}</td>
                           <td className="px-4 py-4">

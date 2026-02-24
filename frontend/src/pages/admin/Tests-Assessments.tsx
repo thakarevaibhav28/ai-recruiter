@@ -26,6 +26,7 @@ const EMPTY_FORM = {
   jobDescription: null,
   secondry_jobDescription:"",
   jobDescriptionText: "",
+  secondry_jobDescription: "",
 };
 
 const TestsAssessments = () => {
@@ -97,7 +98,7 @@ const TestsAssessments = () => {
       secondarySkill: item.secondary_skill || "",
       examLevel: item.difficulty,
       duration: item.duration,
-      secondry_jobDescription:item.secondry_jobDescription,
+      secondry_jobDescription: item.secondry_jobDescription || "",
       startDate: fmt(today),
       endDate: fmt(tomorrow),
     });
@@ -133,7 +134,7 @@ const TestsAssessments = () => {
         secondarySkill: data.secondary_skill || "",
         examLevel: data.difficulty || "",
         duration: data.duration || "",
-        secondry_jobDescription:data.secondry_jobDescription || "",
+        secondry_jobDescription: data.secondry_jobDescription || "",
         startDate: fmt(today),
         endDate: fmt(tomorrow),
       });
@@ -234,8 +235,22 @@ const TestsAssessments = () => {
           jobDescription: file,
           jobDescriptionText: analysis?.fullJobDescription || "",
           testTitle: prev.testTitle || analysis?.jobTitle || "",
-          primarySkill: prev.primarySkill || analysis?.primarySkill || "",
-          secondarySkill: prev.secondarySkill || analysis?.secondarySkill || "",
+          secondry_jobDescription:
+            prev.secondry_jobDescription ||
+            analysis?.secondry_jobDescription ||
+            "",
+          // ── CHANGED: populate primarySkill from requiredSkills array (comma-separated)
+          primarySkill:
+            prev.primarySkill ||
+            (analysis?.requiredSkills?.length
+              ? analysis.requiredSkills.join(", ")
+              : analysis?.primarySkill || ""),
+          // ── CHANGED: populate secondarySkill from niceToHaveSkills array (comma-separated)
+          secondarySkill:
+            prev.secondarySkill ||
+            (analysis?.niceToHaveSkills?.length
+              ? analysis.niceToHaveSkills.join(", ")
+              : analysis?.secondarySkill || ""),
         }));
       }
     } catch (err: any) {
@@ -313,7 +328,11 @@ const TestsAssessments = () => {
     fd.append("primary_skill", formData.primarySkill);
     fd.append("secondary_skill", formData.secondarySkill || "");
     fd.append("passing_score", formData.passingScore);
-    fd.append("secondry_jobDescription",formData.secondry_jobDescription)
+    fd.append(
+      "secondary_jobDescription",
+      formData.secondry_jobDescription || "",
+    );
+
     if (formData.jobDescriptionText) {
       fd.append("job_description_text", formData.jobDescriptionText);
     }
@@ -659,6 +678,29 @@ const TestsAssessments = () => {
                 </select>
                 {errors.duration && <div className="flex items-center gap-1 mt-1"><AlertCircle className="h-3 w-3 text-red-500" /><span className="text-xs text-red-600">{errors.duration}</span></div>}
               </div>
+              {/* <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Job Description
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g., React.js"
+                  value={formData.secondry_jobDescription}
+                  onChange={(e) =>
+                    handleInputChange("secondry_jobDescription", e.target.value)
+                  }
+                  disabled={mode === "prefill"}
+                  className={`w-full px-4 py-2.5 border rounded-lg outline-none transition-all ${errors.secondry_jobDescription ? "border-red-300 bg-red-50 ring-2 ring-red-100" : "border-gray-300 focus:ring-2 focus:ring-indigo-600 focus:border-transparent"} ${mode === "prefill" ? "bg-gray-50 cursor-not-allowed" : ""}`}
+                />
+                {errors.secondry_jobDescription && (
+                  <div className="flex items-center gap-1 mt-1">
+                    <AlertCircle className="h-3 w-3 text-red-500" />
+                    <span className="text-xs text-red-600">
+                      {errors.secondry_jobDescription}
+                    </span>
+                  </div>
+                )}
+              </div> */}
 
               {mode !== "prefill" && (
                 <div>
@@ -855,8 +897,14 @@ const TestsAssessments = () => {
 
       {/* Candidate Details Modal */}
       {showCandidateModal && selectedAssessment && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={closeCandidateModal}>
-          <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={closeCandidateModal}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
               <div>
                 <h3 className="text-xl font-semibold text-gray-900">{selectedAssessment.test_title}</h3>
@@ -873,45 +921,86 @@ const TestsAssessments = () => {
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-gray-200 bg-gray-50">
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">S.No</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">UserName</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Email</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
+                          S.No
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
+                          UserName
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
+                          Email
+                        </th>
                         {/* <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Password</th> */}
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Start Date</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">End Date</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Status</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Interview Link</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
+                          Start Date
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
+                          End Date
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
+                          Status
+                        </th>
+                        {/* <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Interview Link</th> */}
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {selectedAssessment.candidates.map((candidate: any, index: number) => (
-                        <tr key={candidate._id || index} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 text-sm text-gray-900">{index + 1}</td>
-                          <td className="px-4 py-3 text-sm text-gray-600 font-medium">{candidate.candidateId.name}</td>
-                          <td className="px-4 py-3 text-sm text-gray-600 font-medium">{candidate.candidateId.email}</td>
-                          {/* <td className="px-4 py-3 text-sm text-gray-900 font-mono">{candidate.password}</td> */}
-                          <td className="px-4 py-3 text-sm text-gray-600">
-                            {new Date(candidate.start_Date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-600">
-                            {new Date(candidate.end_Date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                          </td>
-                          <td className="px-4 py-3 text-sm">
-                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                              candidate.status === "completed" ? "bg-green-100 text-green-700" :
-                              candidate.status === "in_progress" ? "bg-blue-100 text-blue-700" :
-                              "bg-yellow-100 text-yellow-700"
-                            }`}>
-                              {candidate.status.charAt(0).toUpperCase() + candidate.status.slice(1)}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-sm">
+                      {selectedAssessment.candidates.map(
+                        (candidate: any, index: number) => (
+                          <tr
+                            key={candidate._id || index}
+                            className="hover:bg-gray-50"
+                          >
+                            <td className="px-4 py-3 text-sm text-gray-900">
+                              {index + 1}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-600 font-medium">
+                              {candidate.candidateId.name}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-600 font-medium">
+                              {candidate.candidateId.email}
+                            </td>
+                            {/* <td className="px-4 py-3 text-sm text-gray-900 font-mono">{candidate.password}</td> */}
+                            <td className="px-4 py-3 text-sm text-gray-600">
+                              {new Date(
+                                candidate.start_Date,
+                              ).toLocaleDateString("en-US", {
+                                month: "short",
+                                day: "numeric",
+                                year: "numeric",
+                              })}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-600">
+                              {new Date(candidate.end_Date).toLocaleDateString(
+                                "en-US",
+                                {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                },
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-sm">
+                              <span
+                                className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                  candidate.status === "completed"
+                                    ? "bg-green-100 text-green-700"
+                                    : candidate.status === "in_progress"
+                                      ? "bg-blue-100 text-blue-700"
+                                      : "bg-yellow-100 text-yellow-700"
+                                }`}
+                              >
+                                {candidate.status.charAt(0).toUpperCase() +
+                                  candidate.status.slice(1)}
+                              </span>
+                            </td>
+                            {/* <td className="px-4 py-3 text-sm">
                             <a href={candidate.interviewLink} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:text-indigo-800 underline">
                               Open Link
                             </a>
-                          </td>
-                        </tr>
-                      ))}
+                          </td> */}
+                          </tr>
+                        ),
+                      )}
                     </tbody>
                   </table>
                 </div>

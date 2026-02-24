@@ -33,6 +33,8 @@ type AuthContextType = {
   setInterviewInfo: React.Dispatch<
     React.SetStateAction<InterviewInfo>
   >;
+  userData: any;
+  setUserData: React.Dispatch<React.SetStateAction<any>>;
 };
 
 /* ================= CONTEXT ================= */
@@ -52,6 +54,7 @@ export const AuthProvider = ({
   const [interviewInfo, setInterviewInfo] =
     useState<InterviewInfo>(null);
   const [loading, setLoading] = useState(true);
+  const [userData, setUserData] = useState<any>(null);
 
   /* ================= INIT FROM STORAGE ================= */
 
@@ -140,6 +143,7 @@ export const AuthProvider = ({
         logout,
         interviewInfo,
         setInterviewInfo,
+        userData, setUserData
       }}
     >
       {children}

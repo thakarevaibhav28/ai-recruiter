@@ -5,11 +5,11 @@ import toast from "react-hot-toast";
 import {
   FaUsers,
   FaClipboardList,
-  FaCheckCircle,
-  FaClock,
+  FaFileAlt,
+  FaRobot,
 } from "react-icons/fa";
 import { Plus, UserPlus, Calendar, TrendingUp } from "lucide-react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 // Stat Card Component
 const StatCard = ({
@@ -350,6 +350,8 @@ const UpcomingInterviews = ({
 // Main Dashboard Component
 const Dashboard = () => {
   const [totalCandidates, setTotalCandidates] = useState("0");
+  const [mcqScheduledCount, setMcqScheduledCount] = useState("0");
+  const [aiScheduledCount, setAiScheduledCount] = useState("0");
   const [totalScheduledTests, setTotalScheduledTests] = useState("0");
   const [upcomingInterviews, setUpcomingInterviews] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -381,6 +383,8 @@ const Dashboard = () => {
         setTotalScheduledTests(
           scheduleRes.totalScheduledTests?.toString() || "0",
         );
+        setMcqScheduledCount(scheduleRes.sheduled_mcq_interview?.toString() || "0");
+        setAiScheduledCount(scheduleRes.sheduled_ai_interview?.toString() || "0");
         setUpcomingInterviews(scheduleRes.upcoming || []);
       }
     } catch (err: any) {
@@ -496,6 +500,26 @@ const Dashboard = () => {
           changeColor="text-green-600"
           bgColor="bg-green-100"
           iconColor="text-green-600"
+        />
+
+        <StatCard
+          icon={FaFileAlt}
+          title="MCQ Scheduled"
+          value={loading ? "..." : mcqScheduledCount}
+          change="MCQ Interviews"
+          changeColor="text-blue-600"
+          bgColor="bg-blue-100"
+          iconColor="text-blue-600"
+        />
+
+        <StatCard
+          icon={FaRobot}
+          title="AI Interviews"
+          value={loading ? "..." : aiScheduledCount}
+          change="AI Interviews"
+          changeColor="text-indigo-600"
+          bgColor="bg-indigo-100"
+          iconColor="text-indigo-600"
         />
       </div>
 
