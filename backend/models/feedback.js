@@ -1,4 +1,4 @@
-const mongoose = require("mongoose");
+import mongoose from "mongoose";
 
 // ─── Sub Schema ─────────────────────────────
 const InsightSchema = new mongoose.Schema({
@@ -11,7 +11,7 @@ const InsightSchema = new mongoose.Schema({
 const InterviewFeedbackSchema = new mongoose.Schema(
   {
     interview_id: { type: String, required: true, index: true },
-
+  pdfPath: String,
     userName:  String,
     userEmail: String,
     completedAt: { type: Date, default: Date.now },
@@ -63,6 +63,5 @@ const InterviewFeedbackSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-module.exports =
-  mongoose.models.InterviewFeedback ||
-  mongoose.model("InterviewFeedback", InterviewFeedbackSchema);
+
+  export default mongoose.model("InterviewFeedback", InterviewFeedbackSchema);

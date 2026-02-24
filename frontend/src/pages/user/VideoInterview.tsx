@@ -2601,7 +2601,7 @@ const NoiseBanner = ({ onDismiss }: { onDismiss: () => void }) => (
 // MAIN COMPONENT
 // ═════════════════════════════════════════════════════════════════════════════
 const VideoInterview: React.FC = () => {
-  const { interviewInfo } = useAuth();
+  const { interviewInfo, userData } = useAuth();
   const { id } = useParams();
   const navigate = useNavigate();
   const interview_id = id || "";
@@ -2973,7 +2973,7 @@ Instructions:
 ${STRICT_RULES}`;
       }
 
-      firstMessage = `Hi ${candidateName}, welcome! I'm your AI interviewer for the ${jobPosition} position today. We'll have a natural conversation — take your time with each answer and don't hesitate to think things through. Let's get started.`;
+      firstMessage = `Hi ${userData?.name || userData?.firstName || userData?.username || "Candidate"}, welcome! I'm your AI interviewer for the ${jobPosition} position today. We'll have a natural conversation — take your time with each answer and don't hesitate to think things through. Let's get started.`;
     }
 
     vapi.start({
@@ -2997,8 +2997,8 @@ ${STRICT_RULES}`;
     setIsGeneratingFeedback(true);
     try {
       const conversation  = conversationRef.current;
-      const candidateName = interviewInfo?.username || "Candidate";
-      const jobPosition   = interviewInfo?.position || interviewInfo?.jobPosition || "the role";
+      const candidateName = userData?.name || userData?.firstName || userData?.username || "Candidate";
+      const jobPosition   = userData?.role || interviewInfo?.jobPosition || "the role";
 
       if (!conversation.length) { navigate(`/user/${interview_id}/assessment-complete`); return; }
 
@@ -3055,7 +3055,7 @@ SCORING GUIDELINES:
 - complexityScore: 1-2 = very basic vocabulary and concepts. 3 = professional average. 4-5 = sophisticated domain expertise clearly demonstrated.
 - verdictReason must reference specific evidence from the transcript, not generic statements.`;
 
-      const result = await fetch("/api/ai-feedback", {
+      const result = await fetch("http://localhost:3000/api/ai-feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: feedbackPrompt, conversation }),
@@ -3068,8 +3068,8 @@ SCORING GUIDELINES:
         try { parsed = JSON.parse(raw); } catch (e) { console.error("Feedback parse error:", e); }
         const body = {
           interview_id,
-          userName:       interviewInfo?.username,
-          userEmail:      interviewInfo?.userEmail,
+          userName:       userData?.name,
+          userEmail:      userData?.email,
           feedback:       parsed,
           transcript,
           behaviorReport: behaviorTrackerRef.current.getReport(),
@@ -3129,7 +3129,7 @@ SCORING GUIDELINES:
     </div>
   );
 
-  const username = interviewInfo?.username || "You";
+  const username = userData?.name || "You";
 
   const BottomBar = () => (
     <div className="shrink-0 bg-[#070e2b] border-t border-white/5 px-5 sm:px-8 py-3.5 flex items-center justify-between">

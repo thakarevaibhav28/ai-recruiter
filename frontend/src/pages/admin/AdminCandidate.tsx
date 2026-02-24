@@ -458,10 +458,45 @@ const Candidates = () => {
                             {row.year_of_experience} years
                           </div>
                         </td>
-                        <td className="px-6 py-4">
-                          <div className="text-sm text-gray-600">
-                            {row.key_Skills.split("|").join(", ")}
-                          </div>
+                        <td className="px-6 py-4 relative">
+                          {(() => {
+                            const skills = row.key_Skills
+                              ? row.key_Skills
+                                  .split(/[|,]/)
+                                  .map((s: string) => s.trim())
+                              : [];
+
+                            const visibleSkills = skills.slice(0, 2);
+                            const remainingCount = skills.length - 2;
+
+                            return (
+                              <div className="flex flex-wrap gap-1 group relative">
+                                {visibleSkills.map(
+                                  (skill: string, i: number) => (
+                                    <span
+                                      key={i}
+                                      className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded-md"
+                                    >
+                                      {skill}
+                                    </span>
+                                  ),
+                                )}
+
+                                {remainingCount > 0 && (
+                                  <span className="px-2 py-1 text-xs bg-indigo-100 text-indigo-600 rounded-md cursor-pointer">
+                                    +{remainingCount} more
+                                  </span>
+                                )}
+
+                                {/* Hover Tooltip */}
+                                {skills.length > 2 && (
+                                  <div className="absolute left-0 top-full mt-2 hidden group-hover:block z-50 w-64 bg-gray-900 text-white text-xs rounded-lg p-3 shadow-lg">
+                                    {skills.join(", ")}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-600">
                           {row.mobile}
@@ -534,7 +569,7 @@ const Candidates = () => {
               </div>
 
               {/* Pagination */}
-              <div className=" z-0 flex flex-col md:flex-row justify-between items-center gap-4 px-6 py-4 border-t border-[#00000033]">
+              <div className=" z-0 flex flex-col md:flex-row justify-between items-center gap-4 px-6 py-4 border-t border-[#5e5e5e33]">
                 {/* Info */}
                 <div className="text-sm text-gray-700">
                   {totalRecords === 0
@@ -552,7 +587,7 @@ const Candidates = () => {
                   <button
                     disabled={page === 1}
                     onClick={() => setPage((p) => p - 1)}
-                    className="px-3 py-1 text-sm border rounded disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="px-3 py-1 text-sm border border-gray-200 rounded disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     ‹
                   </button>
