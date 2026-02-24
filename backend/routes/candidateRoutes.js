@@ -319,7 +319,7 @@ router.get("/interview/:id/questions", auth("candidate"), async (req, res) => {
 //   }
 // });
 
-router.post("/interview/:id/answer",auth("candidate"), async (req, res) => {
+router.post("/interview/:id/answer", auth("candidate"), async (req, res) => {
   const { id } = req.params;
   const { questionId, answerText } = req.body;
 
@@ -487,28 +487,38 @@ router.post("/interview/:id/submit", auth("candidate"), async (req, res) => {
     });
 
     // 🔥 7️⃣ Generate PDF
-    const candidate = await Candidate.findById(candidateId);
+   // 🔥 7️⃣ Generate PDF
+const candidate = await Candidate.findById(candidateId);
 
-    const pdfBuffer = await generateScorecardPDFBuffer(
-      candidate,
-      scores,
-      totalScore,
-      summary,
+const pdfBuffer = await generateScorecardPDFBuffer(
+  candidate,
+  scores,
+  totalScore,
+  summary,
+);
+
+// ✅ Upload via stream — most reliable for raw PDFs
+const uploadResult = await new Promise((resolve, reject) => {
+  const uploadStream = cloudinary.uploader.upload_stream(
+    {
+      folder: "scorecards",
+      resource_type: "raw",
+      format: "pdf",
+      public_id: `scorecard-${candidateId}-${Date.now()}`,
+      access_mode: "public",
+    },
+    (error, result) => {
+      if (error) return reject(error);
+      resolve(result);
+    }
+  );
+
+  uploadStream.end(pdfBuffer); // ✅ pipe buffer directly — no base64 corruption
+});
+    scoreDoc.pdfPath = uploadResult.secure_url.replace(
+      "/upload/",
+      "/upload/fl_attachment/",
     );
-
-    const uploadResult = await cloudinary.uploader.upload(
-      `data:application/pdf;base64,${pdfBuffer.toString("base64")}`,
-      {
-        folder: "scorecards",
-        resource_type: "image",
-        format: "pdf",
-        access_mode: "public", 
-        type: "upload",
-        overwrite: true,
-      },
-    );
-
-    scoreDoc.pdfPath = uploadResult.secure_url;
     await scoreDoc.save();
 
     // 🔥 8️⃣ Update candidate status
@@ -527,6 +537,37 @@ router.post("/interview/:id/submit", auth("candidate"), async (req, res) => {
   } catch (error) {
     console.error("Submit error:", error);
     res.status(500).json({ message: error.message });
+  }
+});
+
+// In your candidateRoutes or adminRoutes
+router.get("/download-scorecard", auth("admin"), async (req, res) => {
+  try {
+    const { url } = req.query;
+
+    if (!url || !url.startsWith("https://res.cloudinary.com")) {
+      return res.status(400).json({ message: "Invalid URL" });
+    }
+
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      return res
+        .status(response.status)
+        .json({ message: "Failed to fetch PDF from Cloudinary" });
+    }
+
+    const buffer = await response.arrayBuffer();
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="scorecard.pdf"`,
+    );
+    res.send(Buffer.from(buffer));
+  } catch (error) {
+    console.error("Download error:", error);
+    res.status(500).json({ message: "Download failed" });
   }
 });
 export default router;
