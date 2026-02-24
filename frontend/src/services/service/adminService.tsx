@@ -78,7 +78,7 @@ class AdminService {
   getTotalSchedule() {
     return adminApi.getTotalSchedule();
   }
-  reScheduleInterview(type: string, interviewId: string, data: ant) {
+  reScheduleInterview(type: string, interviewId: string, data: any) {
     return adminApi.reScheduleInterview(type, interviewId, data);
   }
   cancleInterview(type: string, interviewId: string, data: any) {
@@ -90,6 +90,11 @@ class AdminService {
   }
   getScore(examType:string){
     return adminApi.getScore(examType)
+  }
+
+  // get top AI performance
+  getTopAIPerformance() {
+    return adminApi.getTopAIPerformance();    
   }
 }
 

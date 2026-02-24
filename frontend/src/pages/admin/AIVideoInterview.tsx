@@ -100,7 +100,6 @@ export default function InterviewSetup() {
       ) || "";
 
     const autoQuestions = getDefaultQuestions(difficultyLevel);
-    const autoDuration = getDefaultDuration(difficultyLevel);
 
     // 🔥 Auto-fill without overwriting user values
     setPosition((prev) => prev || analysis?.jobTitle || "");
@@ -300,6 +299,8 @@ export default function InterviewSetup() {
       await adminService.sendInvitations(data);
 
       toast.success("Invitations Sent Successfully");
+      setSelectedCandidates([]);
+      setActiveTab("template");
     } catch (error: any) {
       toast.error(error.response?.data?.message || "Failed to send invitations");
     }finally {
@@ -453,18 +454,7 @@ const getDefaultQuestions = (difficulty: string) => {
   }
 };
 
-const getDefaultDuration = (difficulty: string) => {
-  switch (difficulty) {
-    case "Easy":
-      return "15 minutes";
-    case "Medium":
-      return "30 minutes";
-    case "Hard":
-      return "60 minutes";
-    default:
-      return "";
-  }
-};
+
   return (
     <>
       <AdminLayout

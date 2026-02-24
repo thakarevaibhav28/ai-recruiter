@@ -323,7 +323,7 @@ router.post("/interview/:id/answer", auth("candidate"), async (req, res) => {
   const { id } = req.params;
   const { questionId, answerText } = req.body;
 
-  console.log("Answer submission received:", { id, questionId, answerText });
+  // console.log("Answer submission received:", { id, questionId, answerText });
 
   try {
     const interview = await Interview.findById(id);
@@ -342,13 +342,13 @@ router.post("/interview/:id/answer", auth("candidate"), async (req, res) => {
       answerText.trim() === question.correctAnswer.trim();
 
     const score = isCorrect ? 10 : 0;
-    console.log(question);
-    console.log(req);
+    // console.log(question);
+    // console.log(req);
     // Find existing answer for same candidate
     const existingAnswer = question.answers.find(
       (a) => a.candidateId.toString() === req.user.id,
     );
-    console.log("Existing Answer:", existingAnswer);
+    // console.log("Existing Answer:", existingAnswer);
     if (existingAnswer) {
       // ✅ UPDATE existing score
       existingAnswer.answerText = answerText;
@@ -385,7 +385,7 @@ router.post("/interview/:id/submit", auth("candidate"), async (req, res) => {
     const { id } = req.params;
     const candidateId = req.user.id;
 
-    console.log("Submit called for interview", id);
+    // console.log("Submit called for interview", id);
 
     // 🔥 1️⃣ Try finding interview in both collections
     let interview = await MCQ_Interview.findById(id);

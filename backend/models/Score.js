@@ -11,7 +11,7 @@ const scoreSchema = new mongoose.Schema(
     interviewModel: {
       type: String,
       required: true,
-      enum: ["AI_Interview", "MCQ_Interview"],
+      enum: [ "MCQ_Interview"],
     },
     examType: {
       type: String,
