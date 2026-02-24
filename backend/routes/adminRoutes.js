@@ -49,7 +49,6 @@ router.get("/me", auth("admin"), getMe);
 
 router.get("/top-performance", auth("admin"), GetTopPerformance);
 
-
 // POST Create MCQ Assessment Template
 router.post(
   "/assessment/template",

@@ -261,7 +261,7 @@ router.post("/feedback", async (req, res) => {
     }
 
     const candidateData = await Candidate.findOne({ email: userEmail }).lean();
-    console.log("Candidate data for feedback:", candidateData);
+    // console.log("Candidate data for feedback:", candidateData);
     let savedFilePath = null;
 
     // ===============================
@@ -299,7 +299,7 @@ router.post("/feedback", async (req, res) => {
 
       savedFilePath = filePath;
 
-      console.log("PDF saved locally at:", filePath);
+      // console.log("PDF saved locally at:", filePath);
 
       // ===============================
       // 2️⃣ Send Email
@@ -370,7 +370,7 @@ router.post("/feedback", async (req, res) => {
         ],
       });
 
-      console.log(`[feedback] PDF emailed for interview ${interview_id}`);
+      // console.log(`[feedback] PDF emailed for interview ${interview_id}`);
     } catch (pdfErr) {
       console.error("[feedback] PDF/email error:", pdfErr.message);
     }

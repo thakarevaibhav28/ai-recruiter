@@ -25,7 +25,6 @@ const EMPTY_FORM = {
   duration: "",
   jobDescription: null,
   jobDescriptionText: "",
-  secondry_jobDescription: "",
 };
 
 const TestsAssessments = () => {
@@ -51,7 +50,7 @@ const TestsAssessments = () => {
   const [candidatesLoading, setCandidatesLoading] = useState(false);
   const [editLoading, setEditLoading] = useState(null); // stores item._id being edited
   const candidateDropdownRef = useRef(null);
-
+console.log("formData",formData)
   useEffect(() => {
     const handler = (e: any) => {
       if (
@@ -72,7 +71,7 @@ const TestsAssessments = () => {
   }, [activeTab]);
 
   const fetchCandidates = async () => {
-    setCandidatesLoading(true);
+    // setCandidatesLoading(true);
     try {
       const response = await adminService.getAllCandidate(1, 100, "all");
       setCandidatesList(response.data?.data || response.data || []);
@@ -95,11 +94,20 @@ const TestsAssessments = () => {
     }
   };
 
-  const handleUseTemplate = (item) => {
+  const handleUseTemplate = (item: any) => {
+    // console.log("Using template:", item);
     const today = new Date();
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
-    const fmt = (d) => d.toISOString().split("T")[0];
+
+    // format a date (or date-string) to `datetime-local` value (local timezone)
+    const toLocalDatetime = (input: any) => {
+      if (!input) return "";
+      const d = new Date(input);
+      if (isNaN(d.getTime())) return "";
+      const tzOffset = d.getTimezoneOffset() * 60000;
+      return new Date(d.getTime() - tzOffset).toISOString().slice(0, 16);
+    };
 
     setFormData({
       ...EMPTY_FORM,
@@ -110,9 +118,15 @@ const TestsAssessments = () => {
       secondarySkill: item.secondary_skill || "",
       examLevel: item.difficulty,
       duration: item.duration,
-      secondry_jobDescription: item.secondry_jobDescription || "",
-      startDate: fmt(today),
-      endDate: fmt(tomorrow),
+      jobDescription: item.jobDescription || "",
+      jobDescriptionText: item.jobDescriptionText || "",
+      // Prefer template-provided dates if available, else today/tomorrow
+      startDate: item.start_date
+        ? toLocalDatetime(item.start_date)
+        : toLocalDatetime(today),
+      endDate: item.end_date
+        ? toLocalDatetime(item.end_date)
+        : toLocalDatetime(tomorrow),
     });
     setActiveAssessmentId(item._id);
     setMode("prefill");
@@ -135,7 +149,15 @@ const TestsAssessments = () => {
       const today = new Date();
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
-      const fmt = (d) => d.toISOString().split("T")[0];
+
+      // format a date (or date-string) to `datetime-local` value (local timezone)
+      const toLocalDatetime = (input: any) => {
+        if (!input) return "";
+        const d = new Date(input);
+        if (isNaN(d.getTime())) return "";
+        const tzOffset = d.getTimezoneOffset() * 60000;
+        return new Date(d.getTime() - tzOffset).toISOString().slice(0, 16);
+      };
 
       setFormData({
         ...EMPTY_FORM,
@@ -146,9 +168,15 @@ const TestsAssessments = () => {
         secondarySkill: data.secondary_skill || "",
         examLevel: data.difficulty || "",
         duration: data.duration || "",
-        secondry_jobDescription: data.secondry_jobDescription || "",
-        startDate: fmt(today),
-        endDate: fmt(tomorrow),
+        jobDescriptionText: data.jobDescriptionText || "",
+        jobDescription: data.jobDescription || "",
+        // Prefer dates from the fetched assessment; otherwise default to today/tomorrow
+        startDate: data.start_date
+          ? toLocalDatetime(data.start_date)
+          : toLocalDatetime(today),
+        endDate: data.end_date
+          ? toLocalDatetime(data.end_date)
+          : toLocalDatetime(tomorrow),
       });
 
       setActiveAssessmentId(data._id);
@@ -242,6 +270,7 @@ const TestsAssessments = () => {
       fd.append("jobDescription", file);
       const response = await adminService.analyzeJD(fd);
       const analysis = response.analysis;
+      console.log("JD analysis response:", response.analysis);
 
       if (analysis) {
         setJdAnalysis(analysis);
@@ -258,10 +287,7 @@ const TestsAssessments = () => {
           jobDescription: file,
           jobDescriptionText: analysis?.fullJobDescription || "",
           testTitle: prev.testTitle || analysis?.jobTitle || "",
-          secondry_jobDescription:
-            prev.secondry_jobDescription ||
-            analysis?.secondry_jobDescription ||
-            "",
+          jobDescription: prev.jobDescription || analysis?.jobDescription || "",
           // ── CHANGED: populate primarySkill from requiredSkills array (comma-separated)
           primarySkill:
             prev.primarySkill ||
@@ -373,19 +399,12 @@ const TestsAssessments = () => {
     fd.append("primary_skill", formData.primarySkill);
     fd.append("secondary_skill", formData.secondarySkill || "");
     fd.append("passing_score", formData.passingScore);
-    fd.append(
-      "secondary_jobDescription",
-      formData.secondry_jobDescription || "",
-    );
-
     if (formData.jobDescriptionText) {
-      fd.append("job_description_text", formData.jobDescriptionText);
+      fd.append("jobDescriptionText", formData.jobDescriptionText);
     }
-
     if (formData.jobDescription instanceof File) {
       fd.append("jobDescription", formData.jobDescription);
     }
-
     if (includeDatesAndCandidates) {
       fd.append("start_date", formData.startDate);
       fd.append("end_date", formData.endDate);
@@ -748,9 +767,9 @@ const TestsAssessments = () => {
                   Start Date
                 </label>
                 <input
-                  type="date"
+                  type="datetime-local"
                   value={formData.startDate}
-                  min={new Date().toISOString().split("T")[0]}
+                  min={new Date().toISOString().slice(0, 16)}
                   onChange={(e) =>
                     handleInputChange("startDate", e.target.value)
                   }
@@ -771,10 +790,12 @@ const TestsAssessments = () => {
                   End Date
                 </label>
                 <input
-                  type="date"
+                  type="datetime-local"
                   value={formData.endDate}
                   min={
-                    formData.startDate || new Date().toISOString().split("T")[0]
+                    formData.endDate
+                      ? formData.endDate
+                      : new Date().toISOString().slice(0, 16)
                   }
                   onChange={(e) => handleInputChange("endDate", e.target.value)}
                   className={`w-full px-4 py-2.5 border rounded-lg outline-none transition-all ${errors.endDate ? "border-red-300 bg-red-50 ring-2 ring-red-100 focus:ring-red-200" : "border-gray-300 focus:ring-2 focus:ring-indigo-600 focus:border-transparent"}`}
@@ -967,31 +988,8 @@ const TestsAssessments = () => {
                   </div>
                 )}
               </div>
-              {/* <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Job Description
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g., React.js"
-                  value={formData.secondry_jobDescription}
-                  onChange={(e) =>
-                    handleInputChange("secondry_jobDescription", e.target.value)
-                  }
-                  disabled={mode === "prefill"}
-                  className={`w-full px-4 py-2.5 border rounded-lg outline-none transition-all ${errors.secondry_jobDescription ? "border-red-300 bg-red-50 ring-2 ring-red-100" : "border-gray-300 focus:ring-2 focus:ring-indigo-600 focus:border-transparent"} ${mode === "prefill" ? "bg-gray-50 cursor-not-allowed" : ""}`}
-                />
-                {errors.secondry_jobDescription && (
-                  <div className="flex items-center gap-1 mt-1">
-                    <AlertCircle className="h-3 w-3 text-red-500" />
-                    <span className="text-xs text-red-600">
-                      {errors.secondry_jobDescription}
-                    </span>
-                  </div>
-                )}
-              </div> */}
 
-              {mode !== "prefill" && (
+              
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Upload Job Description (Optional)
@@ -1019,7 +1017,7 @@ const TestsAssessments = () => {
                         <div className="flex items-center gap-2">
                           <FileText className="h-4 w-4 text-indigo-600" />
                           <span className="text-sm text-gray-700 truncate max-w-[200px]">
-                            {formData.jobDescription.name}
+                            {formData.jobDescription}
                           </span>
                         </div>
                         <button
@@ -1084,7 +1082,30 @@ const TestsAssessments = () => {
                     </div>
                   )}
                 </div>
-              )}
+         
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Job Description
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="Add a custom job description or use the uploaded JD to auto-fill this field"
+                  value={formData.jobDescriptionText}
+                  onChange={(e) =>
+                    handleInputChange("jobDescriptionText", e.target.value)
+                  }
+                  disabled={mode === "prefill"}
+                  className={`w-full px-4 py-2.5 border rounded-lg outline-none transition-all ${errors.jobDescriptionText ? "border-red-300 bg-red-50 ring-2 ring-red-100" : "border-gray-300 focus:ring-2 focus:ring-indigo-600 focus:border-transparent"} ${mode === "prefill" ? "bg-gray-50 cursor-not-allowed" : ""}`}
+                />
+                {errors.jobDescriptionText && (
+                  <div className="flex items-center gap-1 mt-1">
+                    <AlertCircle className="h-3 w-3 text-red-500" />
+                    <span className="text-xs text-red-600">
+                      {errors.jobDescriptionText}
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="flex justify-end gap-4 pt-6 border-t border-gray-200">

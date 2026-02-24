@@ -25,7 +25,8 @@ class AdminApi {
     RE_SCHEDULE: "/admin/interview",
     CANCLE_INTERVIEW: "/admin/interview",
     TOP_PERFORMANCE: "/admin/top-performance",
-    SCORES:"/admin/student-scores"
+    TOP_AI_PERFORMANCE: "/admin/top-ai-performance",
+    SCORES: "/admin/student-scores",
   };
 
   login = (data: any) => {
@@ -121,8 +122,14 @@ class AdminApi {
   getTopPerformance(examType: string) {
     return api._get(`${this._url.TOP_PERFORMANCE}?examType=${examType}`);
   }
+
   getScore(examType: string) {
     return api._get(`${this._url.SCORES}?examType=${examType}`);
+  }
+
+    // get top AI performance
+  getTopAIPerformance() {
+    return api._get(`${this._url.TOP_AI_PERFORMANCE}`);
   }
 
   reScheduleInterview(type: string, interviewId: string, data: any) {
