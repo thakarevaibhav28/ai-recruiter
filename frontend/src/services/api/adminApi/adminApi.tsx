@@ -20,6 +20,7 @@ class AdminApi {
     DELETE_CANDIDATE: "/admin/candidate",
     GET_ME: "/admin/me",
     UPLOAD_JD: "/admin/analyze",
+    UPLOAD_RESUME:"/admin/resume/analyze",
     GENERATE_MCQ: "/admin/generate-mcq",
     TOTAL_SCHEDULE: "/admin/total-schedule",
     RE_SCHEDULE: "/admin/interview",
@@ -108,6 +109,9 @@ class AdminApi {
 
   analyzeJD(data: any) {
     return api._postFormData(this._url.UPLOAD_JD, data);
+  }
+  analyzeResume(data: any) {
+    return api._postFormData(this._url.UPLOAD_RESUME, data);
   }
   generateMCQ(data: any, id?: string) {
     return api._post(`${this._url.GENERATE_MCQ}/${id}`, data);

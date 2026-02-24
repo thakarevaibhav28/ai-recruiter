@@ -3,9 +3,11 @@ import express from "express";
 import auth from "../middleware/auth.js";
 import { uploadCSV, upload, uploadMemory } from "../middleware/upload.js";
 import pkg from "pdf2json";
+import cloudinary from "../config/cloudinary.js";
 const PDFParser = pkg.default || pkg;
 import mammoth from "mammoth";
-import OpenAI from "openai";
+import openai from "openai";
+import pdf from "pdf-parse";
 
 import {
   RegisterUser,
@@ -384,36 +386,34 @@ router.get("/student-scores",auth("admin"), getStudentScores);
 
 // ── Helper: extract raw text from buffer ───────────────────
 
-async function extractTextFromFile(buffer, mimetype) {
-  if (mimetype === "application/pdf") {
-    const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
-
-    const loadingTask = pdfjsLib.getDocument({
-      data: new Uint8Array(buffer),
-    });
-
-    const pdf = await loadingTask.promise;
-
-    let fullText = "";
-
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const content = await page.getTextContent();
-
-      const pageText = content.items
-        .map((item) => item.str)
-        .join(" ");
-
-      fullText += pageText + "\n";
+export const extractTextFromFile = async (buffer, mimetype) => {
+  try {
+    // PDF
+    if (mimetype === "application/pdf") {
+      const data = await pdf(buffer);
+      return data.text;
     }
 
-    return fullText;
-  }
+    // DOCX
+    if (
+      mimetype ===
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    ) {
+      const result = await mammoth.extractRawText({ buffer });
+      return result.value;
+    }
 
-  // DOC / DOCX
-  const result = await mammoth.extractRawText({ buffer });
-  return result.value;
-}
+    // DOC (older format)
+    if (mimetype === "application/msword") {
+      throw new Error("DOC format not supported. Please upload DOCX.");
+    }
+
+    throw new Error("Unsupported file type");
+  } catch (error) {
+    console.error("Text extraction error:", error);
+    throw error;
+  }
+};
 /* ──────────────────────────────────────────────
    Helper: Analyze using Hugging Face
    SAME JSON STRUCTURE AS BEFORE
@@ -479,6 +479,52 @@ ${rawText}
   return JSON.parse(finalJson);
 }
 
+export const analyzeResumeWithAI = async (resumeText) => {
+  const prompt = `
+Extract structured candidate details from the resume.
+Also identify year_of_experience and show like 0-1,1-2,2-3,...
+
+Return ONLY valid JSON.
+Do NOT wrap in markdown.
+Do NOT include explanation.
+
+Format strictly:
+
+{
+  "name": "",
+  "email": "",
+  "mobile": "",
+  "role": "",
+  "year_of_experience": "",
+  "key_Skills": "",
+  "description": ""
+}
+
+Resume:
+${resumeText}
+`;
+
+  const response = await groq.chat.completions.create({
+    model: "llama-3.3-70b-versatile",
+    messages: [{ role: "user", content: prompt }],
+    temperature: 0,
+  });
+
+  let content = response.choices[0].message.content;
+
+  try {
+    // 🔥 Remove markdown if present
+    content = content
+      .replace(/```json/g, "")
+      .replace(/```/g, "")
+      .trim();
+
+    return JSON.parse(content);
+  } catch (error) {
+    console.error("AI returned invalid JSON:", content);
+    throw new Error("AI returned invalid JSON format");
+  }
+};
 /* ──────────────────────────────────────────────
    POST /api/analyze
    SAME RESPONSE FORMAT
@@ -520,4 +566,62 @@ router.post(
 );
 
 
+//Resume Upload
+router.post(
+  "/resume/analyze",
+  auth("admin"),
+  uploadMemory.single("resume"),
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "Resume file is required" });
+      }
+
+      /* ---------------- EXTRACT TEXT ---------------- */
+      const rawText = await extractTextFromFile(
+        req.file.buffer,
+        req.file.mimetype
+      );
+
+      if (!rawText || rawText.trim().length < 50) {
+        return res.status(422).json({
+          message: "Could not extract meaningful text from resume.",
+        });
+      }
+
+      /* ---------------- AI ANALYSIS ---------------- */
+      const analysis = await analyzeResumeWithAI(rawText);
+
+      /* ---------------- CLOUDINARY UPLOAD ---------------- */
+      const uploadResult = await new Promise((resolve, reject) => {
+        cloudinary.uploader
+          .upload_stream(
+            {
+              folder: "resumes",
+              resource_type: "auto",
+              public_id: `${Date.now()}-${req.file.originalname}`,
+
+            },
+            (error, result) => {
+              if (error) reject(error);
+              else resolve(result);
+            }
+          )
+          .end(req.file.buffer);
+      });
+
+      /* ---------------- RESPONSE ---------------- */
+      res.status(200).json({
+        success: true,
+        analysis,
+        resumeUrl: uploadResult.secure_url,
+      });
+    } catch (err) {
+      console.error("Resume Analyze + Upload Error:", err);
+      res.status(500).json({
+        message: err.message || "Resume processing failed",
+      });
+    }
+  }
+);
 export default router;
