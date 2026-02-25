@@ -323,7 +323,7 @@ const ActiveInterviews: React.FC<ActiveInterviewsProps> = ({
                             {/* <td className="px-4 py-3 text-sm text-gray-900 font-mono">{candidate.password}</td> */}
                             <td className="px-4 py-3 text-sm text-gray-600">
                               {new Date(
-                                candidate.start_Date,
+                                candidate.scheduledStartDate,
                               ).toLocaleDateString("en-US", {
                                 month: "short",
                                 day: "numeric",
@@ -331,7 +331,7 @@ const ActiveInterviews: React.FC<ActiveInterviewsProps> = ({
                               })}
                             </td>
                             <td className="px-4 py-3 text-sm text-gray-600">
-                              {new Date(candidate.end_Date).toLocaleDateString(
+                              {new Date(candidate.scheduledEndDate).toLocaleDateString(
                                 "en-US",
                                 {
                                   month: "short",

@@ -24,13 +24,15 @@ const InterviewFeedbackSchema = new mongoose.Schema(
     examType: {
       type: String,
       enum: ["AI"],
+      default: "AI",
       required: true,
     },
 
     feedback: {
       candidateName: String,
       role: String,
-
+      technicalScore: {type:Number, min: 0, max: 100},
+      relevanceScore: { type: Number, min: 0, max: 100 },
       confidenceScore: { type: Number, min: 0, max: 100 },
       confidenceLabel: {
         type: String,
