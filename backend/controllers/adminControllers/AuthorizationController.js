@@ -735,74 +735,28 @@ export const getStudentScores = async (req, res) => {
         message: "examType must be MCQ or AI",
       });
     }
+    if (examType === "AI") {
+      const aiData = await InterviewFeedback.find({
+        examType: "AI",
+      })
+        .populate({
+          path: "interview_id",
+          populate: {
+            path: "candidates.candidateId",
+            model: "Candidate",
+            select: "name email candidate_status",
+          },
+        })
 
-    // const results = await Score.aggregate([
-    //   {
-    //     $match: { examType },
-    //   },
+console.log("AI Data Retrieved:", aiData);
+      return res.status(200).json({
+        success: true,
+        type: "AI",
+        total: aiData.length,
+        data: aiData, // 🔥 returning full document
+      });
+    }
 
-    //   {
-    //     $lookup: {
-    //       from: "candidates",
-    //       localField: "candidateId",
-    //       foreignField: "_id",
-    //       as: "candidate",
-    //     },
-    //   },
-
-    //   { $unwind: "$candidate" },
-
-    //   // 🔥 Calculate maxScore dynamically
-    //   {
-    //     $addFields: {
-    //       maxScore: { $size: "$scores" },
-    //     },
-    //   },
-
-    //   {
-    //     $addFields: {
-    //       percentage: {
-    //         $cond: [
-    //           { $gt: ["$maxScore", 0] },
-    //           {
-    //             $multiply: [
-    //               { $divide: ["$totalScore", "$maxScore"] },
-    //               100,
-    //             ],
-    //           },
-    //           0,
-    //         ],
-    //       },
-    //     },
-    //   },
-
-    //   {
-    //     $group: {
-    //       _id: "$candidate._id",
-    //       candidate: {
-    //         $first: {
-    //           _id: "$candidate._id",
-    //           name: "$candidate.name",
-    //           email: "$candidate.email",
-    //           role: "$candidate.role",
-    //           candidate_status: "$candidate.candidate_status",
-    //         },
-    //       },
-    //       scores: {
-    //         $push: {
-    //           interviewId: "$interviewId",
-    //           totalScore: "$totalScore",
-    //           maxScore: "$maxScore",
-    //           percentage: { $round: ["$percentage", 2] },
-    //           createdAt: "$createdAt",
-    //         },
-    //       },
-    //       totalAttempts: { $sum: 1 },
-    //     },
-    //   },
-
-    //   { $sort: { "scores.createdAt": -1 } },
-    // ]);
     const scores = await Score.find({ examType })
       .populate("interviewId")
       .populate("candidateId")

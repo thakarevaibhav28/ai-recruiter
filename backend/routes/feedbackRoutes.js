@@ -239,9 +239,227 @@ function generatePDF(data) {
 }
 
 // ─── Route ────────────────────────────────────────────────────────────────────
-import fs from "fs";
-import path from "path";
-import Candidate from "../models/Candidate.js";
+const calculateScores = (feedback) => {
+  if (!feedback) return { technicalScore: 0, relevanceScore: 0 };
+
+  // ---------- Technical Competency ----------
+  const techItems = feedback.technicalCompetency || [];
+
+  const techGood = techItems.filter(i => i.status === "good").length;
+  const techWarning = techItems.filter(i => i.status === "warning").length;
+  const techBad = techItems.filter(i => i.status === "bad").length;
+
+  const totalTech = techItems.length || 1;
+
+  const techScoreRaw =
+    (techGood * 1 + techWarning * 0.5 + techBad * 0) / totalTech;  
+
+  const complexityScore = feedback?.speechPatterns?.complexityScore || 1;
+
+  const technicalScore = Math.round(
+    (techScoreRaw * 60) + ((complexityScore / 5) * 40)
+  );
+
+  // ---------- Relevance ----------
+  const behaviorItems = feedback.behavioralInsights || [];
+
+  const behaviorGood = behaviorItems.filter(i => i.status === "good").length;
+  const behaviorWarning = behaviorItems.filter(i => i.status === "warning").length;
+  const behaviorBad = behaviorItems.filter(i => i.status === "bad").length;
+
+  const totalBehavior = behaviorItems.length || 1;
+
+  const behaviorScoreRaw =
+    (behaviorGood * 1 + behaviorWarning * 0.5 + behaviorBad * 0) / totalBehavior;
+
+  const clarityScore = feedback?.speechPatterns?.clarityScore || 0;
+
+  const relevanceScore = Math.round(
+    (behaviorScoreRaw * 50) + (clarityScore * 0.5)
+  );
+
+  return {
+    technicalScore: Math.min(100, technicalScore),
+    relevanceScore: Math.min(100, relevanceScore),
+  };
+};
+
+
+// router.post("/feedback", async (req, res) => {
+//   try {
+//     const {
+//       interview_id,
+//       userName,
+//       userEmail,
+//       feedback,
+//       transcript,
+//       behaviorReport,
+//       completedAt,
+//     } = req.body;
+
+//     if (!interview_id) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "interview_id is required",
+//       });
+//     }
+
+//     console.log("Generating feedback for:", interview_id);
+//  const { technicalScore, relevanceScore } = calculateScores(feedback);
+
+//     // Inject into feedback object
+//     feedback.technicalScore = technicalScore;
+//     feedback.relevanceScore = relevanceScore; 
+//     // ===============================
+//     // 1️⃣ Generate PDF Buffer
+//     // ===============================
+//     const pdfBuffer = await generatePDF({
+//       feedback,
+//       candidateName: userName,
+//       role: feedback?.role,
+//     });
+
+//     const candidateName =
+//       feedback?.candidateName || userName || "Candidate";
+
+//     const role = feedback?.role || "Interview";
+//     const verdict = (feedback?.overallVerdict || "consider").toUpperCase();
+//     const score = feedback?.confidenceScore ?? "N/A";
+
+//     // ===============================
+//     // 2️⃣ Upload PDF to Cloudinary (STREAM - SAFEST METHOD)
+//     // ===============================
+//     const uploadResult = await new Promise((resolve, reject) => {
+//       const uploadStream = cloudinary.uploader.upload_stream(
+//         {
+//           folder: "scorecards",
+//           resource_type: "raw", // 🔥 IMPORTANT
+//           public_id: `feedback-${Date.now()}`,
+//             format: "pdf",
+//             access_mode: "public",
+//         },
+//         (error, result) => {
+//           if (error) return reject(error);
+//           resolve(result);
+//         }
+//       );
+
+//       uploadStream.end(pdfBuffer); // pipe buffer directly
+//     });
+
+//     console.log("Cloudinary upload success:", uploadResult.secure_url);
+
+//     // ===============================
+//     // 3️⃣ Send Email with PDF Attachment
+//     // ===============================
+//     await transporter.sendMail({
+//       from: `"Vitric IQ" <${process.env.SMTP_USER}>`,
+//       to: "vaibhav@vitric.in",
+//       subject: `[${verdict}] Interview Report — ${candidateName} | ${role}`,
+//       html: `
+//         <div style="font-family:sans-serif;max-width:520px;margin:0 auto">
+//           <div style="background:#1E1B4B;padding:24px 28px;border-radius:10px 10px 0 0">
+//             <p style="color:#A5B4FC;margin:0 0 4px;font-size:11px;letter-spacing:2px">VITRIC IQ</p>
+//             <h2 style="color:#fff;margin:0;font-size:20px">New Interview Report</h2>
+//           </div>
+//           <div style="background:#F9FAFB;padding:24px 28px;border:1px solid #E5E7EB;border-top:none;border-radius:0 0 10px 10px">
+//             <table style="width:100%;border-collapse:collapse">
+//               <tr>
+//                 <td style="color:#6B7280;padding:4px 0;font-size:13px">Candidate</td>
+//                 <td style="font-weight:600;font-size:13px">${candidateName}</td>
+//               </tr>
+//               <tr>
+//                 <td style="color:#6B7280;padding:4px 0;font-size:13px">Role</td>
+//                 <td style="font-size:13px">${role}</td>
+//               </tr>
+//               <tr>
+//                 <td style="color:#6B7280;padding:4px 0;font-size:13px">Confidence Score</td>
+//                 <td style="font-size:13px">${score}%</td>
+//               </tr>
+//               <tr>
+//                 <td style="color:#6B7280;padding:4px 0;font-size:13px">Verdict</td>
+//                 <td>
+//                   <span style="
+//                     background:${
+//                       verdict === "HIRE"
+//                         ? "#D1FAE5"
+//                         : verdict === "REJECT"
+//                         ? "#FEE2E2"
+//                         : "#FEF3C7"
+//                     };
+//                     color:${
+//                       verdict === "HIRE"
+//                         ? "#065F46"
+//                         : verdict === "REJECT"
+//                         ? "#991B1B"
+//                         : "#92400E"
+//                     };
+//                     padding:2px 10px;
+//                     border-radius:20px;
+//                     font-size:12px;
+//                     font-weight:600">
+//                     ${verdict}
+//                   </span>
+//                 </td>
+//               </tr>
+//             </table>
+//             <p style="color:#6B7280;font-size:12px;margin-top:20px">
+//               Full report attached as PDF.
+//             </p>
+//           </div>
+//         </div>
+//       `,
+//       attachments: [
+//         {
+//           filename: `Interview_Report_${candidateName}.pdf`,
+//           content: pdfBuffer,
+//           contentType: "application/pdf",
+//         },
+//       ],
+//     });
+
+//     console.log("Email sent successfully");
+
+//     // ===============================
+//     // 4️⃣ Save / Update in Database
+//     // ===============================
+//     const doc = await InterviewFeedback.findOneAndUpdate(
+//       { interview_id },
+//       {
+//         $set: {
+//           userName,
+//           userEmail,
+//           feedback,
+//           transcript,
+//           examType: "AI",
+//           behaviorReport,
+//           pdfPath: uploadResult.secure_url,
+//           completedAt: completedAt
+//             ? new Date(completedAt)
+//             : new Date(),
+//         },
+//       },
+//       { upsert: true, new: true, setDefaultsOnInsert: true }
+//     );
+
+//     return res.json({
+//       success: true,
+//       message: "Feedback stored successfully",
+//       pdfUrl: uploadResult.secure_url,
+//       data: doc,
+//     });
+//   } catch (error) {
+//     console.error("POST Feedback Error:", error);
+//     return res.status(500).json({
+//       success: false,
+//       message: "Internal server error",
+//       error: error.message,
+//     });
+//   }
+// });
+
+
+// ─── GET Single ─────────────────────────────
 router.post("/feedback", async (req, res) => {
   try {
     const {
@@ -263,6 +481,21 @@ router.post("/feedback", async (req, res) => {
 
     console.log("Generating feedback for:", interview_id);
 
+    // ==================================================
+    // 🔥 Calculate Technical & Relevance Scores
+    // ==================================================
+    const { technicalScore, relevanceScore } = calculateScores(feedback);
+
+    feedback.technicalScore = technicalScore;
+    feedback.relevanceScore = relevanceScore;
+
+    // ==================================================
+    // 🔥 Calculate Total Score (NEW)
+    // ==================================================
+    const totalScore = Math.round(
+      (technicalScore * 0.6) + (relevanceScore * 0.4)
+    );
+
     // ===============================
     // 1️⃣ Generate PDF Buffer
     // ===============================
@@ -280,16 +513,16 @@ router.post("/feedback", async (req, res) => {
     const score = feedback?.confidenceScore ?? "N/A";
 
     // ===============================
-    // 2️⃣ Upload PDF to Cloudinary (STREAM - SAFEST METHOD)
+    // 2️⃣ Upload PDF to Cloudinary
     // ===============================
     const uploadResult = await new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
         {
           folder: "scorecards",
-          resource_type: "raw", // 🔥 IMPORTANT
+          resource_type: "raw",
           public_id: `feedback-${Date.now()}`,
-            format: "pdf",
-            access_mode: "public",
+          format: "pdf",
+          access_mode: "public",
         },
         (error, result) => {
           if (error) return reject(error);
@@ -297,13 +530,13 @@ router.post("/feedback", async (req, res) => {
         }
       );
 
-      uploadStream.end(pdfBuffer); // pipe buffer directly
+      uploadStream.end(pdfBuffer);
     });
 
     console.log("Cloudinary upload success:", uploadResult.secure_url);
 
     // ===============================
-    // 3️⃣ Send Email with PDF Attachment
+    // 3️⃣ Send Email
     // ===============================
     await transporter.sendMail({
       from: `"Vitric IQ" <${process.env.SMTP_USER}>`,
@@ -330,30 +563,8 @@ router.post("/feedback", async (req, res) => {
                 <td style="font-size:13px">${score}%</td>
               </tr>
               <tr>
-                <td style="color:#6B7280;padding:4px 0;font-size:13px">Verdict</td>
-                <td>
-                  <span style="
-                    background:${
-                      verdict === "HIRE"
-                        ? "#D1FAE5"
-                        : verdict === "REJECT"
-                        ? "#FEE2E2"
-                        : "#FEF3C7"
-                    };
-                    color:${
-                      verdict === "HIRE"
-                        ? "#065F46"
-                        : verdict === "REJECT"
-                        ? "#991B1B"
-                        : "#92400E"
-                    };
-                    padding:2px 10px;
-                    border-radius:20px;
-                    font-size:12px;
-                    font-weight:600">
-                    ${verdict}
-                  </span>
-                </td>
+                <td style="color:#6B7280;padding:4px 0;font-size:13px">Total Score</td>
+                <td style="font-size:13px">${totalScore}%</td>
               </tr>
             </table>
             <p style="color:#6B7280;font-size:12px;margin-top:20px">
@@ -384,8 +595,10 @@ router.post("/feedback", async (req, res) => {
           userEmail,
           feedback,
           transcript,
+          examType: "AI",
+          score: totalScore, // ✅ Saved in top-level score field
           behaviorReport,
-          pdfPath: uploadResult.secure_url, // 🔥 Cloudinary URL
+          pdfPath: uploadResult.secure_url,
           completedAt: completedAt
             ? new Date(completedAt)
             : new Date(),
@@ -398,8 +611,10 @@ router.post("/feedback", async (req, res) => {
       success: true,
       message: "Feedback stored successfully",
       pdfUrl: uploadResult.secure_url,
+      totalScore, // ✅ Also returning directly
       data: doc,
     });
+
   } catch (error) {
     console.error("POST Feedback Error:", error);
     return res.status(500).json({
@@ -410,8 +625,6 @@ router.post("/feedback", async (req, res) => {
   }
 });
 
-
-// ─── GET Single ─────────────────────────────
 router.get("/feedback/:interview_id", async (req, res) => {
   try {
     const doc = await InterviewFeedback
