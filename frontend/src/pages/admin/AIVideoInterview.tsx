@@ -100,6 +100,7 @@ export default function InterviewSetup() {
       ) || "";
 
     const autoQuestions = getDefaultQuestions(difficultyLevel);
+    const autoDuration = getDefaultDuration(difficultyLevel);
 
     // 🔥 Auto-fill without overwriting user values
     setPosition((prev) => prev || analysis?.jobTitle || "");
@@ -449,6 +450,19 @@ const getDefaultQuestions = (difficulty: string) => {
       return "15";
     case "Hard":
       return "20";
+    default:
+      return "";
+  }
+};
+
+const getDefaultDuration = (difficulty: string) => {
+  switch (difficulty) {
+    case "Easy":
+      return "15 minutes";
+    case "Medium":
+      return "30 minutes";
+    case "Hard":
+      return "60 minutes";
     default:
       return "";
   }
@@ -1011,13 +1025,13 @@ const getDefaultQuestions = (difficulty: string) => {
 
                           <div className="relative">
                             <input
-                              type="date"
+                              type="datetime-local"
                               value={
                                 startDate
-                                  ? startDate.toISOString().split("T")[0]
+                                  ? startDate.toISOString().substring(0,16)
                                   : ""
                               }
-                              min={new Date().toISOString().split("T")[0]}
+                              min={new Date().toISOString().substring(0,16)}
                               onChange={(e) => {
                                 const value = e.target.value;
                                 const selected = value ? new Date(value) : null;
@@ -1047,16 +1061,16 @@ const getDefaultQuestions = (difficulty: string) => {
 
                           <div className="relative">
                             <input
-                              type="date"
+                              type="datetime-local"
                               value={
                                 endDate
-                                  ? endDate.toISOString().split("T")[0]
+                                  ? endDate.toISOString().substring(0,16)
                                   : ""
                               }
                               min={
                                 startDate
-                                  ? startDate.toISOString().split("T")[0]
-                                  : new Date().toISOString().split("T")[0]
+                                  ? startDate.toISOString().substring(0,16)
+                                  : new Date().toISOString().substring(0,16)
                               }
                               onChange={(e) => {
                                 const value = e.target.value;

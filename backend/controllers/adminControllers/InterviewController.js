@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import AI_Interview from "../../models/AI_Interview.js";
+import MCQ_Interview from "../../models/MCQ_Interview.js";
 import Candidate from "../../models/Candidate.js";
 import { sendAIInterviewLink } from "../../services/emailService.js";
 import mongoose from "mongoose";
@@ -198,8 +199,40 @@ export const AIInterviewInvitation = async (req, res) => {
     }
 
     interview.candidates = [];
+    const cooldownCandidates = [];
+
+    // 7-day cooldown threshold
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
     for (const candidate of candidates) {
+      // 🔒 7-day cooldown check across MCQ and AI interviews
+      const mcqCooldown = await MCQ_Interview.findOne({
+        candidates: {
+          $elemMatch: {
+            candidateId: candidate._id,
+            start_Date: { $gte: sevenDaysAgo },
+          },
+        },
+      });
+
+      const aiCooldown = await AI_Interview.findOne({
+        candidates: {
+          $elemMatch: {
+            candidateId: candidate._id,
+            scheduledStartDate: { $gte: sevenDaysAgo },
+          },
+        },
+      });
+
+      if (mcqCooldown || aiCooldown) {
+        cooldownCandidates.push({
+          candidate: candidate.email,
+          reason: "Candidate was recently invited to an interview. Please wait 7 days.",
+        });
+        continue;
+      }
+
       const interviewLink = `${process.env.FRONTEND_URL || "http://localhost:5173"}/user/login/${interview._id}`;
       const username = `user_${Math.random().toString(36).substring(2, 10)}`;
       const password = randomUUID().slice(0, 8);
@@ -234,7 +267,8 @@ export const AIInterviewInvitation = async (req, res) => {
 
     res.status(200).json({
       message: "Invitations sent successfully",
-      totalCandidates: candidates.length,
+      totalCandidates: interview.candidates.length,
+      cooldownCandidates,
     });
   } catch (error) {
     console.error("Error sending invitations:", error);
@@ -339,6 +373,11 @@ export const ScheduleAiInterview = async (req, res) => {
       return res.status(404).json({ message: "Interview not found" });
     // console.log("interview existing candidates:", interview);
     const scheduledCandidates = [];
+    const cooldownCandidates = [];
+
+    // 7-day cooldown threshold
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
     for (const candId of candidateArray) {
       const candidate = await Candidate.findById(candId);
@@ -346,6 +385,33 @@ export const ScheduleAiInterview = async (req, res) => {
         return res
           .status(404)
           .json({ message: `Candidate ID ${candId} not found` });
+
+      // 🔒 7-day cooldown check across MCQ and AI interviews
+      const mcqCooldown = await MCQ_Interview.findOne({
+        candidates: {
+          $elemMatch: {
+            candidateId: candId,
+            start_Date: { $gte: sevenDaysAgo },
+          },
+        },
+      });
+
+      const aiCooldown = await AI_Interview.findOne({
+        candidates: {
+          $elemMatch: {
+            candidateId: candId,
+            scheduledStartDate: { $gte: sevenDaysAgo },
+          },
+        },
+      });
+
+      if (mcqCooldown || aiCooldown) {
+        cooldownCandidates.push({
+          candidate: candidate.email,
+          reason: "Candidate was recently invited to an interview. Please wait 7 days.",
+        });
+        continue;
+      }
 
       const interviewLink = `${process.env.FRONTEND_URL || "http://localhost:5173"}/candidate/login/${interviewId}`;
       const password = Math.random().toString(36).slice(-8);
@@ -386,6 +452,7 @@ export const ScheduleAiInterview = async (req, res) => {
       message: "Interview invitations sent",
       interviewId,
       scheduledCandidates,
+      cooldownCandidates,
     });
   } catch (err) {
     console.error("Error scheduling AI interview:", err);

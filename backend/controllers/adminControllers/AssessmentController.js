@@ -246,11 +246,43 @@ export const AssessmentInvitation = async (req, res) => {
     // Schedule candidates and send emails
     const scheduledCandidates = [];
     const emailResults = [];
+    const cooldownCandidates = [];
+
+    // 7-day cooldown threshold
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
     for (const candId of candidateArray) {
       const candidate = await Candidate.findById(candId);
       if (!candidate) {
         console.warn(`Candidate ${candId} not found, skipping...`);
+        continue;
+      }
+
+      // 🔒 7-day cooldown check across MCQ and AI interviews
+      const mcqCooldown = await MCQ_Interview.findOne({
+        candidates: {
+          $elemMatch: {
+            candidateId: candId,
+            start_Date: { $gte: sevenDaysAgo },
+          },
+        },
+      });
+
+      const aiCooldown = await AI_Interview.findOne({
+        candidates: {
+          $elemMatch: {
+            candidateId: candId,
+            scheduledStartDate: { $gte: sevenDaysAgo },
+          },
+        },
+      });
+
+      if (mcqCooldown || aiCooldown) {
+        cooldownCandidates.push({
+          candidate: candidate.email,
+          reason: "Candidate was recently invited to an interview. Please wait 7 days.",
+        });
         continue;
       }
 
@@ -323,6 +355,7 @@ export const AssessmentInvitation = async (req, res) => {
         interview,
         // questionCount: questions.length,
         scheduledCandidates,
+        cooldownCandidates,
         emailStats: {
           total: emailResults.length,
           successful: successfulEmails,
@@ -397,7 +430,12 @@ export const AssessmentInvitationByID = async (req, res) => {
 
     const scheduledCandidates = [];
     const skippedCandidates = [];
+    const cooldownCandidates = [];
     const emailResults = [];
+
+    // 7-day cooldown threshold
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
     for (const candId of candidateArray) {
       const candidate = await Candidate.findById(candId);
@@ -414,6 +452,33 @@ export const AssessmentInvitationByID = async (req, res) => {
           reason: "Already invited",
         });
         continue; // ❌ skip sending again
+      }
+
+      // 🔒 7-day cooldown check across MCQ and AI interviews
+      const mcqCooldown = await MCQ_Interview.findOne({
+        candidates: {
+          $elemMatch: {
+            candidateId: candId,
+            start_Date: { $gte: sevenDaysAgo },
+          },
+        },
+      });
+
+      const aiCooldown = await AI_Interview.findOne({
+        candidates: {
+          $elemMatch: {
+            candidateId: candId,
+            scheduledStartDate: { $gte: sevenDaysAgo },
+          },
+        },
+      });
+
+      if (mcqCooldown || aiCooldown) {
+        cooldownCandidates.push({
+          candidate: candidate.email,
+          reason: "Candidate was recently invited to an interview. Please wait 7 days.",
+        });
+        continue;
       }
 
       const username = `user_${Math.random().toString(36).substring(2, 10)}`;
@@ -477,6 +542,7 @@ export const AssessmentInvitationByID = async (req, res) => {
       data: {
         scheduledCandidates,
         skippedCandidates,
+        cooldownCandidates,
         emailResults,
       },
     });
@@ -565,7 +631,7 @@ export const GetCandidatesInInterview = async (req, res) => {
           summary: score ? score.summary : null,
           pdfPath: score ? score.pdfPath : null,
           totalScore: totalScore,
-          scheduledDate: c.scheduledDate || null,
+          scheduledDate: c.scheduledStartDate || null,
           Exam_Type: examType,
           result: score ? result : null,
         };
