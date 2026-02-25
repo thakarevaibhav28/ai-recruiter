@@ -20,7 +20,7 @@ const interviewSchema = new mongoose.Schema(
         end_Date: Date,
         status: {
           type: String,
-          enum: ["scheduled", "in_progress", "completed", "cancelled"],
+          enum: ["scheduled", "in_progress", "completed", "cancelled","expired","pending"],
           default: "scheduled",
         },
         score: Number,
@@ -66,7 +66,7 @@ const interviewSchema = new mongoose.Schema(
       type: String, // Store file path or URL
       default: null,
     },
-    secondry_jobDescription:{
+    jobDescriptionText:{
       type:String
     },
     createdBy: {

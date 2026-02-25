@@ -4,6 +4,7 @@ import InterviewFeedback from "../models/feedback.js";
 import dotenv from "dotenv";
 import PDFDocument from "pdfkit";
 import nodemailer from "nodemailer";
+import cloudinary from "../config/cloudinary.js";
 dotenv.config();
 import OpenAI from "openai";
 // ─── POST /feedback ─────────────────────────
@@ -260,123 +261,120 @@ router.post("/feedback", async (req, res) => {
       });
     }
 
-    const candidateData = await Candidate.findOne({ email: userEmail }).lean();
-    console.log("Candidate data for feedback:", candidateData);
-    let savedFilePath = null;
+    console.log("Generating feedback for:", interview_id);
 
     // ===============================
-    // 1️⃣ Generate & Save PDF Locally
+    // 1️⃣ Generate PDF Buffer
     // ===============================
-    try {
-      const pdfBuffer = await generatePDF({
-        feedback,
-        candidateName: userName,
-        role: feedback?.role,
-      });
+    const pdfBuffer = await generatePDF({
+      feedback,
+      candidateName: userName,
+      role: feedback?.role,
+    });
 
-      const candidateName =
-        feedback?.candidateName || userName || "Candidate";
-      const role = feedback?.role || "Interview";
-      const verdict = (feedback?.overallVerdict || "consider").toUpperCase();
-      const score = feedback?.confidenceScore ?? "N/A";
+    const candidateName =
+      feedback?.candidateName || userName || "Candidate";
 
-      // Create folder if not exists
-      const reportsDir = path.join(process.cwd(), "uploads", "reports");
+    const role = feedback?.role || "Interview";
+    const verdict = (feedback?.overallVerdict || "consider").toUpperCase();
+    const score = feedback?.confidenceScore ?? "N/A";
 
-      if (!fs.existsSync(reportsDir)) {
-        fs.mkdirSync(reportsDir, { recursive: true });
-      }
+    // ===============================
+    // 2️⃣ Upload PDF to Cloudinary (STREAM - SAFEST METHOD)
+    // ===============================
+    const uploadResult = await new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder: "scorecards",
+          resource_type: "raw", // 🔥 IMPORTANT
+          public_id: `feedback-${Date.now()}`,
+            format: "pdf",
+            access_mode: "public",
+        },
+        (error, result) => {
+          if (error) return reject(error);
+          resolve(result);
+        }
+      );
 
-      const fileName = `Interview_Report_${candidateName.replace(
-        /\s+/g,
-        "_"
-      )}_${Date.now()}.pdf`;
+      uploadStream.end(pdfBuffer); // pipe buffer directly
+    });
 
-      const filePath = path.join(reportsDir, fileName);
+    console.log("Cloudinary upload success:", uploadResult.secure_url);
 
-      // Save file
-      fs.writeFileSync(filePath, pdfBuffer);
-
-      savedFilePath = filePath;
-
-      console.log("PDF saved locally at:", filePath);
-
-      // ===============================
-      // 2️⃣ Send Email
-      // ===============================
-      await transporter.sendMail({
-        from: `"Vitric IQ" <${process.env.SMTP_USER}>`,
-        to: "vaibhav@vitric.in",
-        subject: `[${verdict}] Interview Report — ${candidateName} | ${role}`,
-        html: `
-          <div style="font-family:sans-serif;max-width:520px;margin:0 auto">
-            <div style="background:#1E1B4B;padding:24px 28px;border-radius:10px 10px 0 0">
-              <p style="color:#A5B4FC;margin:0 0 4px;font-size:11px;letter-spacing:2px">VITRIC IQ</p>
-              <h2 style="color:#fff;margin:0;font-size:20px">New Interview Report</h2>
-            </div>
-            <div style="background:#F9FAFB;padding:24px 28px;border:1px solid #E5E7EB;border-top:none;border-radius:0 0 10px 10px">
-              <table style="width:100%;border-collapse:collapse">
-                <tr>
-                  <td style="color:#6B7280;padding:4px 0;font-size:13px">Candidate</td>
-                  <td style="font-weight:600;font-size:13px">${candidateName}</td>
-                </tr>
-                <tr>
-                  <td style="color:#6B7280;padding:4px 0;font-size:13px">Role</td>
-                  <td style="font-size:13px">${role}</td>
-                </tr>
-                <tr>
-                  <td style="color:#6B7280;padding:4px 0;font-size:13px">Confidence Score</td>
-                  <td style="font-size:13px">${score}%</td>
-                </tr>
-                <tr>
-                  <td style="color:#6B7280;padding:4px 0;font-size:13px">Verdict</td>
-                  <td>
-                    <span style="
-                      background:${
-                        verdict === "HIRE"
-                          ? "#D1FAE5"
-                          : verdict === "REJECT"
-                          ? "#FEE2E2"
-                          : "#FEF3C7"
-                      };
-                      color:${
-                        verdict === "HIRE"
-                          ? "#065F46"
-                          : verdict === "REJECT"
-                          ? "#991B1B"
-                          : "#92400E"
-                      };
-                      padding:2px 10px;
-                      border-radius:20px;
-                      font-size:12px;
-                      font-weight:600">
-                      ${verdict}
-                    </span>
-                  </td>
-                </tr>
-              </table>
-              <p style="color:#6B7280;font-size:12px;margin-top:20px">
-                Full report attached as PDF.
-              </p>
-            </div>
+    // ===============================
+    // 3️⃣ Send Email with PDF Attachment
+    // ===============================
+    await transporter.sendMail({
+      from: `"Vitric IQ" <${process.env.SMTP_USER}>`,
+      to: "vaibhav@vitric.in",
+      subject: `[${verdict}] Interview Report — ${candidateName} | ${role}`,
+      html: `
+        <div style="font-family:sans-serif;max-width:520px;margin:0 auto">
+          <div style="background:#1E1B4B;padding:24px 28px;border-radius:10px 10px 0 0">
+            <p style="color:#A5B4FC;margin:0 0 4px;font-size:11px;letter-spacing:2px">VITRIC IQ</p>
+            <h2 style="color:#fff;margin:0;font-size:20px">New Interview Report</h2>
           </div>
-        `,
-        attachments: [
-          {
-            filename: fileName,
-            content: pdfBuffer,
-            contentType: "application/pdf",
-          },
-        ],
-      });
+          <div style="background:#F9FAFB;padding:24px 28px;border:1px solid #E5E7EB;border-top:none;border-radius:0 0 10px 10px">
+            <table style="width:100%;border-collapse:collapse">
+              <tr>
+                <td style="color:#6B7280;padding:4px 0;font-size:13px">Candidate</td>
+                <td style="font-weight:600;font-size:13px">${candidateName}</td>
+              </tr>
+              <tr>
+                <td style="color:#6B7280;padding:4px 0;font-size:13px">Role</td>
+                <td style="font-size:13px">${role}</td>
+              </tr>
+              <tr>
+                <td style="color:#6B7280;padding:4px 0;font-size:13px">Confidence Score</td>
+                <td style="font-size:13px">${score}%</td>
+              </tr>
+              <tr>
+                <td style="color:#6B7280;padding:4px 0;font-size:13px">Verdict</td>
+                <td>
+                  <span style="
+                    background:${
+                      verdict === "HIRE"
+                        ? "#D1FAE5"
+                        : verdict === "REJECT"
+                        ? "#FEE2E2"
+                        : "#FEF3C7"
+                    };
+                    color:${
+                      verdict === "HIRE"
+                        ? "#065F46"
+                        : verdict === "REJECT"
+                        ? "#991B1B"
+                        : "#92400E"
+                    };
+                    padding:2px 10px;
+                    border-radius:20px;
+                    font-size:12px;
+                    font-weight:600">
+                    ${verdict}
+                  </span>
+                </td>
+              </tr>
+            </table>
+            <p style="color:#6B7280;font-size:12px;margin-top:20px">
+              Full report attached as PDF.
+            </p>
+          </div>
+        </div>
+      `,
+      attachments: [
+        {
+          filename: `Interview_Report_${candidateName}.pdf`,
+          content: pdfBuffer,
+          contentType: "application/pdf",
+        },
+      ],
+    });
 
-      console.log(`[feedback] PDF emailed for interview ${interview_id}`);
-    } catch (pdfErr) {
-      console.error("[feedback] PDF/email error:", pdfErr.message);
-    }
+    console.log("Email sent successfully");
 
     // ===============================
-    // 3️⃣ Save / Update in Database
+    // 4️⃣ Save / Update in Database
     // ===============================
     const doc = await InterviewFeedback.findOneAndUpdate(
       { interview_id },
@@ -387,7 +385,7 @@ router.post("/feedback", async (req, res) => {
           feedback,
           transcript,
           behaviorReport,
-          pdfPath: savedFilePath,
+          pdfPath: uploadResult.secure_url, // 🔥 Cloudinary URL
           completedAt: completedAt
             ? new Date(completedAt)
             : new Date(),
@@ -399,6 +397,7 @@ router.post("/feedback", async (req, res) => {
     return res.json({
       success: true,
       message: "Feedback stored successfully",
+      pdfUrl: uploadResult.secure_url,
       data: doc,
     });
   } catch (error) {

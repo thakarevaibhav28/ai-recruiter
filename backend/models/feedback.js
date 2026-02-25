@@ -2,19 +2,30 @@ import mongoose from "mongoose";
 
 // ─── Sub Schema ─────────────────────────────
 const InsightSchema = new mongoose.Schema({
-  title:       { type: String, required: true },
+  title: { type: String, required: true },
   description: { type: String, required: true },
-  status:      { type: String, enum: ["good", "warning", "bad"], required: true },
+  status: { type: String, enum: ["good", "warning", "bad"], required: true },
 });
 
 // ─── Main Schema ────────────────────────────
 const InterviewFeedbackSchema = new mongoose.Schema(
   {
-    interview_id: { type: String, required: true, index: true },
-  pdfPath: String,
-    userName:  String,
+    interview_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "AI_Interview",
+      index: true,
+    },
+    pdfPath: String,
+    userName: String,
     userEmail: String,
     completedAt: { type: Date, default: Date.now },
+
+    score: { type: Number, min: 0, max: 100 },
+    examType: {
+      type: String,
+      enum: ["AI"],
+      required: true,
+    },
 
     feedback: {
       candidateName: String,
@@ -26,19 +37,19 @@ const InterviewFeedbackSchema = new mongoose.Schema(
         enum: ["High Confidence", "Moderate Confidence", "Low Confidence"],
       },
 
-      behavioralInsights:  [InsightSchema],
+      behavioralInsights: [InsightSchema],
       technicalCompetency: [InsightSchema],
 
       speechPatterns: {
-        clarityScore:    { type: Number, min: 0, max: 100 },
+        clarityScore: { type: Number, min: 0, max: 100 },
         avgResponseTime: String,
         confidenceLevel: { type: Number, min: 0, max: 100 },
         complexityScore: { type: Number, min: 1, max: 5 },
       },
 
       recommendations: [String],
-      overallVerdict:  { type: String, enum: ["hire", "consider", "reject"] },
-      verdictReason:   String,
+      overallVerdict: { type: String, enum: ["hire", "consider", "reject"] },
+      verdictReason: String,
     },
 
     transcript: [
@@ -49,8 +60,8 @@ const InterviewFeedbackSchema = new mongoose.Schema(
     ],
 
     behaviorReport: {
-      totalEvents:        Number,
-      noFaceCount:        Number,
+      totalEvents: Number,
+      noFaceCount: Number,
       multipleFacesCount: Number,
       events: [
         {
@@ -60,8 +71,7 @@ const InterviewFeedbackSchema = new mongoose.Schema(
       ],
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
-
-  export default mongoose.model("InterviewFeedback", InterviewFeedbackSchema);
+export default mongoose.model("InterviewFeedback", InterviewFeedbackSchema);
