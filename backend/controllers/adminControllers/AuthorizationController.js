@@ -747,13 +747,50 @@ export const getStudentScores = async (req, res) => {
             select: "name email candidate_status",
           },
         })
+        .lean();
 
-console.log("AI Data Retrieved:", aiData);
+      // Compute score for records that don't have it
+      const data = aiData.map((item) => {
+        if (item.score != null) return item;
+
+        const fb = item.feedback || {};
+        const techItems = fb.technicalCompetency || [];
+        const behaviorItems = fb.behavioralInsights || [];
+
+        // Calculate technicalScore if missing
+        let technicalScore = fb.technicalScore;
+        if (technicalScore == null) {
+          const totalTech = techItems.length || 1;
+          const techGood = techItems.filter((i) => i.status === "good").length;
+          const techWarning = techItems.filter((i) => i.status === "warning").length;
+          const techScoreRaw = (techGood * 1 + techWarning * 0.5) / totalTech;
+          const complexityScore = fb.speechPatterns?.complexityScore || 1;
+          technicalScore = Math.min(100, Math.round(techScoreRaw * 60 + (complexityScore / 5) * 40));
+        }
+
+        // Calculate relevanceScore if missing
+        let relevanceScore = fb.relevanceScore;
+        if (relevanceScore == null) {
+          const totalBehavior = behaviorItems.length || 1;
+          const behaviorGood = behaviorItems.filter((i) => i.status === "good").length;
+          const behaviorWarning = behaviorItems.filter((i) => i.status === "warning").length;
+          const behaviorScoreRaw = (behaviorGood * 1 + behaviorWarning * 0.5) / totalBehavior;
+          const clarityScore = fb.speechPatterns?.clarityScore || 0;
+          relevanceScore = Math.min(100, Math.round(behaviorScoreRaw * 50 + clarityScore * 0.5));
+        }
+
+        item.score = Math.round(technicalScore * 0.6 + relevanceScore * 0.4);
+        if (!fb.technicalScore) item.feedback.technicalScore = technicalScore;
+        if (!fb.relevanceScore) item.feedback.relevanceScore = relevanceScore;
+
+        return item;
+      });
+
       return res.status(200).json({
         success: true,
         type: "AI",
-        total: aiData.length,
-        data: aiData, // 🔥 returning full document
+        total: data.length,
+        data,
       });
     }
 

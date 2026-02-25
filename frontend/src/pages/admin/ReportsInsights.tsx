@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import AdminLayout from "../../common/AdminLayout";
 import { useAdminSocket } from "../../hooks/useAdminSocket";
 import {
@@ -13,6 +13,10 @@ import {
   CheckCircle,
   FileText,
   X,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  XCircle,
 } from "lucide-react";
 import { adminService } from "../../services/service/adminService";
 
@@ -48,38 +52,7 @@ interface ScoreType {
   scores?: any[];
 }
 
-const stats = [
-  {
-    title: "Average AI Score",
-    value: "86.0%",
-    icon: TrendingUp,
-    color: "text-green-600",
-    bgColor: "bg-green-50",
-  },
-  {
-    title: "L1 Pass Rate",
-    value: "75%",
-    icon: Users,
-    color: "text-purple-600",
-    bgColor: "bg-purple-50",
-  },
-  {
-    title: "AI Interviews Completed",
-    value: "15",
-    icon: CheckCircle,
-    color: "text-pink-600",
-    bgColor: "bg-pink-50",
-  },
-  {
-    title: "L1 Pass Rate",
-    value: "75%",
-    icon: TrendingUp,
-    color: "text-orange-600",
-    bgColor: "bg-orange-50",
-  },
-];
-
-const TableSkeleton = () => {
+const TableSkeleton =()=>{
   return (
     <>
       {[...Array(5)].map((_, i) => (
@@ -101,7 +74,10 @@ const ReportsInsights = () => {
   const [selectedScore, setSelectedScore] = useState<ScoreType | null>(null);
   const [showDetailedScorecard, setShowDetailedScorecard] = useState(false);
   const [showAIAnalysis, setShowAIAnalysis] = useState(false);
+  const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [aiCurrentPage, setAiCurrentPage] = useState(1);
+  const aiItemsPerPage = 5;
   const [filters, setFilters] = useState({
     name: "",
     minScore: "",
@@ -167,6 +143,29 @@ const ReportsInsights = () => {
     fetchScores(activeTab);
   }, [activeTab]);
 
+  useEffect(() => {
+    if (scores.length > 0 && activeTab === "AI") {
+      setExpandedCardId(scores[0]._id);
+      setAiCurrentPage(1);
+    }
+  }, [scores, activeTab]);
+
+  // AI pagination computed values
+  const aiTotalPages = Math.ceil(scores.length / aiItemsPerPage);
+  const aiPaginatedScores = activeTab === "AI"
+    ? scores.slice(
+        (aiCurrentPage - 1) * aiItemsPerPage,
+        aiCurrentPage * aiItemsPerPage,
+      )
+    : [];
+
+  // Auto-expand first card on page change
+  useEffect(() => {
+    if (aiPaginatedScores.length > 0) {
+      setExpandedCardId(aiPaginatedScores[0]._id);
+    }
+  }, [aiCurrentPage]);
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     const options: Intl.DateTimeFormatOptions = {
@@ -197,6 +196,69 @@ const ReportsInsights = () => {
     setSelectedScore(result);
     setShowAIAnalysis(true);
   };
+
+  // Compute stats dynamically from scores
+  const stats = useMemo(() => {
+    const total = scores.length;
+
+    // Average AI Score
+    const avgScore =
+      total > 0
+        ? (scores.reduce((sum, s) => sum + (s.score || 0), 0) / total).toFixed(
+            1,
+          )
+        : "0.0";
+
+    // L1 Pass Rate: candidates whose score >= passingScore
+    const passCount =
+      total > 0
+        ? scores.filter(
+            (s) =>
+              (s.score || 0) >=
+              (s.interview_id?.passingScore || 70),
+          ).length
+        : 0;
+    const passRate =
+      total > 0 ? Math.round((passCount / total) * 100) : 0;
+
+    // Rejection rate
+    const rejectCount = scores.filter(
+      (s) => s.feedback?.overallVerdict === "reject",
+    ).length;
+    const rejectRate =
+      total > 0 ? Math.round((rejectCount / total) * 100) : 0;
+
+    return [
+      {
+        title: "Average AI Score",
+        value: `${avgScore}%`,
+        icon: TrendingUp,
+        color: "text-green-600",
+        bgColor: "bg-green-50",
+      },
+      {
+        title: "L1 Pass Rate",
+        value: `${passRate}%`,
+        icon: Users,
+        color: "text-purple-600",
+        bgColor: "bg-purple-50",
+      },
+      {
+        title: "AI Interviews Completed",
+        value: String(total),
+        icon: CheckCircle,
+        color: "text-pink-600",
+        bgColor: "bg-pink-50",
+      },
+      {
+        title: "Rejection Rate",
+        value: `${rejectRate}%`,
+        icon: TrendingUp,
+        color: "text-orange-600",
+        bgColor: "bg-orange-50",
+      },
+    ];
+  }, [scores]);
 
   return (
     <AdminLayout
@@ -265,7 +327,11 @@ const ReportsInsights = () => {
               AI Interview Result & L1 Screening
             </h2>
             <div className="text-sm text-gray-500">
-              Showing 1-{scores.length} of {scores.length} candidates
+              Showing{" "}
+              {scores.length === 0
+                ? "0"
+                : `${(aiCurrentPage - 1) * aiItemsPerPage + 1}-${Math.min(aiCurrentPage * aiItemsPerPage, scores.length)}`}{" "}
+              of {scores.length} candidates
             </div>
           </div>
 
@@ -299,46 +365,70 @@ const ReportsInsights = () => {
           )}
 
           {/* AI Interview Results Cards */}
-          <div className="space-y-4">
+          <div className="space-y-3">
             {!loading &&
-              scores.map((result) => {
-                const candidate =
-                  result.interview_id?.candidates?.[0]?.candidateId;
+              aiPaginatedScores.map((result) => {
                 const feedback = result.feedback;
+                const isExpanded = expandedCardId === result._id;
 
                 return (
                   <div
                     key={result._id}
-                    className="bg-white rounded-xl p-6 border-2 border-indigo-200 shadow-sm hover:shadow-md transition-shadow"
+                    className={`bg-white rounded-xl border-2 ${
+                      isExpanded
+                        ? "border-indigo-200 shadow-md"
+                        : "border-gray-200 shadow-sm hover:border-gray-300"
+                    } transition-all`}
                   >
-                    {/* Card Header */}
-                    <div className="flex items-start justify-between mb-6">
+                    {/* Clickable Header */}
+                    <div
+                      className="flex items-center justify-between p-5 cursor-pointer select-none"
+                      onClick={() =>
+                        setExpandedCardId(
+                          isExpanded ? null : result._id,
+                        )
+                      }
+                    >
                       <div className="flex items-center gap-4">
-                        <div className="h-14 w-14 rounded-full bg-gradient-to-br from-indigo-400 to-indigo-600 flex items-center justify-center text-white text-lg font-semibold">
-                          {getInitials(feedback?.candidateName || "NA")}
+                        <div className="h-12 w-12 rounded-full bg-gradient-to-br from-indigo-400 to-indigo-600 flex items-center justify-center text-white font-semibold">
+                          {getInitials(
+                            feedback?.candidateName || "NA",
+                          )}
                         </div>
                         <div>
-                          <h3 className="text-xl font-bold text-gray-900">
-                            {feedback?.candidateName || "Unknown Candidate"}
+                          <h3 className="text-lg font-bold text-gray-900">
+                            {feedback?.candidateName ||
+                              "Unknown Candidate"}
                           </h3>
-                          <p className="text-sm text-gray-600">
-                            {feedback?.role || "N/A"}
-                          </p>
-                          <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                          <div className="flex items-center gap-2 text-sm text-gray-500 mt-0.5">
+                            <span>
+                              {feedback?.role || "N/A"}
+                            </span>
+                            <span className="text-gray-300">
+                              ·
+                            </span>
                             <span className="flex items-center gap-1">
                               <Calendar className="h-3.5 w-3.5" />
-                              Submitted:{" "}
                               {formatDate(
-                                result.completedAt || result.createdAt,
+                                result.completedAt ||
+                                  result.createdAt,
                               )}
+                            </span>
+                            <span className="text-gray-300">
+                              ·
                             </span>
                             <span className="flex items-center gap-1">
                               <Clock className="h-3.5 w-3.5" />
-                              Duration: {result.interview_id?.duration || "N/A"}
+                              {result.interview_id?.duration ||
+                                "N/A"}
+                            </span>
+                            <span className="text-gray-300">
+                              ·
                             </span>
                             <span className="flex items-center gap-1">
                               <MessageSquare className="h-3.5 w-3.5" />
-                              Responses: {result.transcript?.length || 0}
+                              {result.transcript?.length || 0}{" "}
+                              responses
                             </span>
                           </div>
                         </div>
@@ -346,90 +436,175 @@ const ReportsInsights = () => {
 
                       <div className="flex items-center gap-3">
                         <span
-                          className={`px-4 py-1.5 rounded-full text-sm font-semibold ${
-                            feedback?.overallVerdict === "accept" ||
+                          className={`px-3 py-1 rounded-full text-xs font-semibold capitalize ${
+                            feedback?.overallVerdict ===
+                              "accept" ||
                             feedback?.overallVerdict === "hire"
                               ? "bg-green-100 text-green-700"
-                              : feedback?.overallVerdict === "reject"
+                              : feedback?.overallVerdict ===
+                                  "reject"
                                 ? "bg-red-100 text-red-700"
                                 : "bg-yellow-100 text-yellow-700"
                           }`}
                         >
-                          {feedback?.overallVerdict}
+                          {feedback?.overallVerdict || "N/A"}
                         </span>
-                        <span className="px-4 py-1.5 rounded-full text-sm font-semibold bg-indigo-100 text-indigo-700">
-                          Overall AI Score: {result.score || 0}%
+                        <span className="px-3 py-1 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-700">
+                          AI Score: {result.score || 0}%
                         </span>
+                        <ChevronDown
+                          className={`h-5 w-5 text-gray-400 transition-transform duration-200 ${
+                            isExpanded ? "rotate-180" : ""
+                          }`}
+                        />
                       </div>
                     </div>
 
-                    {/* Score Cards */}
-                    <div className="grid grid-cols-4 gap-4 mb-6">
-                      <div className="bg-gray-50 rounded-lg p-4 text-center border border-gray-100">
-                        <p className="text-xs text-gray-600 mb-2 font-medium">
-                          Technical Skills
-                        </p>
-                        <p className="text-2xl font-bold text-gray-900">
-                          {feedback?.technicalScore || 0}%
-                        </p>
-                      </div>
-                      <div className="bg-gray-50 rounded-lg p-4 text-center border border-gray-100">
-                        <p className="text-xs text-gray-600 mb-2 font-medium">
-                          Communication
-                        </p>
-                        <p className="text-2xl font-bold text-gray-900">
-                          {feedback?.speechPatterns?.clarityScore || 0}%
-                        </p>
-                      </div>
-                      <div className="bg-gray-50 rounded-lg p-4 text-center border border-gray-100">
-                        <p className="text-xs text-gray-600 mb-2 font-medium">
-                          Confidence
-                        </p>
-                        <p className="text-xl font-bold text-green-600">
-                          {feedback?.confidenceLabel || "N/A"}
-                        </p>
-                      </div>
-                      <div className="bg-gray-50 rounded-lg p-4 text-center border border-gray-100">
-                        <p className="text-xs text-gray-600 mb-2 font-medium">
-                          Relevance
-                        </p>
-                        <p className="text-2xl font-bold text-gray-900">
-                          {feedback?.relevanceScore || 0}%
-                        </p>
-                      </div>
-                    </div>
+                    {/* Expanded Content */}
+                    {isExpanded && (
+                      <div className="px-5 pb-5 border-t border-gray-100">
+                        {/* Score Cards */}
+                        <div className="grid grid-cols-4 gap-4 mt-4 mb-5">
+                          <div className="bg-gray-50 rounded-lg p-4 text-center border border-gray-100">
+                            <p className="text-xs text-gray-600 mb-2 font-medium">
+                              Technical Skills
+                            </p>
+                            <p className="text-2xl font-bold text-gray-900">
+                              {feedback?.technicalScore || 0}%
+                            </p>
+                          </div>
+                          <div className="bg-gray-50 rounded-lg p-4 text-center border border-gray-100">
+                            <p className="text-xs text-gray-600 mb-2 font-medium">
+                              Communication
+                            </p>
+                            <p className="text-2xl font-bold text-gray-900">
+                              {feedback?.speechPatterns
+                                ?.clarityScore || 0}%
+                            </p>
+                          </div>
+                          <div className="bg-gray-50 rounded-lg p-4 text-center border border-gray-100">
+                            <p className="text-xs text-gray-600 mb-2 font-medium">
+                              Confidence
+                            </p>
+                            <p
+                              className={`text-xl font-bold ${
+                                feedback?.confidenceLabel
+                                  ?.toLowerCase()
+                                  ?.includes("high")
+                                  ? "text-green-600"
+                                  : feedback?.confidenceLabel
+                                        ?.toLowerCase()
+                                        ?.includes("medium")
+                                    ? "text-yellow-600"
+                                    : "text-red-600"
+                              }`}
+                            >
+                              {feedback?.confidenceLabel ||
+                                "N/A"}
+                            </p>
+                          </div>
+                          <div className="bg-gray-50 rounded-lg p-4 text-center border border-gray-100">
+                            <p className="text-xs text-gray-600 mb-2 font-medium">
+                              Relevance
+                            </p>
+                            <p className="text-2xl font-bold text-gray-900">
+                              {feedback?.relevanceScore || 0}%
+                            </p>
+                          </div>
+                        </div>
 
-                    {/* Assessment Summary */}
-                    <div className="bg-blue-50 rounded-lg p-4 mb-6 border border-blue-100">
-                      <p className="text-xs text-gray-600 mb-2 font-semibold">
-                        Assessment summary
-                      </p>
-                      <p className="text-sm text-gray-800 italic">
-                        "{feedback?.verdictReason || "No summary available"}"
-                      </p>
-                    </div>
+                        {/* Assessment Summary */}
+                        <div className="bg-blue-50 rounded-lg p-4 mb-5 border border-blue-100">
+                          <p className="text-xs text-gray-600 mb-2 font-semibold">
+                            Assessment summary
+                          </p>
+                          <p className="text-sm text-gray-800 italic">
+                            "
+                            {feedback?.verdictReason ||
+                              "No summary available"}
+                            "
+                          </p>
+                        </div>
 
-                    {/* Action Buttons */}
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => handleViewDetailedScorecard(result)}
-                        className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition-colors"
-                      >
-                        <Eye className="h-4 w-4" />
-                        View Detailed Scorecard
-                      </button>
-                      <button
-                        onClick={() => handleViewAIAnalysis(result)}
-                        className="flex items-center gap-2 px-6 py-3 text-gray-700 bg-white border-2 border-gray-200 text-sm font-semibold rounded-lg hover:bg-gray-50 transition-colors"
-                      >
-                        <FileText className="h-4 w-4" />
-                        AI Analysis Details
-                      </button>
-                    </div>
+                        {/* Action Buttons */}
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleViewDetailedScorecard(
+                                result,
+                              );
+                            }}
+                            className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition-colors"
+                          >
+                            <Eye className="h-4 w-4" />
+                            View Detailed Scorecard
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleViewAIAnalysis(result);
+                            }}
+                            className="flex items-center gap-2 px-6 py-3 text-gray-700 bg-white border-2 border-gray-200 text-sm font-semibold rounded-lg hover:bg-gray-50 transition-colors"
+                          >
+                            <FileText className="h-4 w-4" />
+                            AI Analysis Details
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
           </div>
+
+          {/* Pagination */}
+          {!loading && scores.length > aiItemsPerPage && (
+            <div className="flex items-center justify-between pt-2">
+              <p className="text-sm text-gray-500">
+                Page {aiCurrentPage} of {aiTotalPages}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() =>
+                    setAiCurrentPage((p) => Math.max(1, p - 1))
+                  }
+                  disabled={aiCurrentPage === 1}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Previous
+                </button>
+                {Array.from({ length: aiTotalPages }, (_, i) => i + 1).map(
+                  (page) => (
+                    <button
+                      key={page}
+                      onClick={() => setAiCurrentPage(page)}
+                      className={`w-8 h-8 text-sm font-medium rounded-lg transition-colors ${
+                        page === aiCurrentPage
+                          ? "bg-indigo-600 text-white"
+                          : "bg-white text-gray-700 border border-gray-200 hover:bg-gray-50"
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ),
+                )}
+                <button
+                  onClick={() =>
+                    setAiCurrentPage((p) =>
+                      Math.min(aiTotalPages, p + 1),
+                    )
+                  }
+                  disabled={aiCurrentPage === aiTotalPages}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -782,13 +957,15 @@ const ReportsInsights = () => {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl shadow-2xl">
             {/* Modal Header */}
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-8 py-6 flex items-center justify-between">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-8 py-6 flex items-center justify-between z-10">
               <div>
                 <h2 className="text-2xl font-bold text-gray-900">
-                  Detailed Scorecard -{" "}
-                  {selectedScore.interview_id?.candidates?.[0]?.candidateId
-                    ?.name || "Candidate"}
+                  Detailed Scorecard
                 </h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  {selectedScore.feedback?.candidateName || "Candidate"} &middot;{" "}
+                  {selectedScore.feedback?.role || selectedScore.interview_id?.position || "N/A"}
+                </p>
               </div>
               <button
                 onClick={() => setShowDetailedScorecard(false)}
@@ -801,212 +978,295 @@ const ReportsInsights = () => {
             {/* Modal Body */}
             <div className="p-8 space-y-6">
               {/* Overall Performance */}
-              <div className="bg-blue-50 rounded-xl p-6 border border-blue-100">
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-100">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-lg font-bold text-gray-900 mb-2">
+                    <h3 className="text-lg font-bold text-gray-900 mb-3">
                       Overall Performance
                     </h3>
-                    <div className="flex items-center gap-2">
-                      <span className="text-green-600 font-semibold">✓</span>
-                      <span className="text-sm font-medium text-gray-700">
-                        L1 Screening: PASSED
+                    <div className="flex items-center gap-4">
+                      <span
+                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold ${
+                          (selectedScore.score || 0) >=
+                          (selectedScore.interview_id?.passingScore || 70)
+                            ? "bg-green-100 text-green-700"
+                            : "bg-red-100 text-red-700"
+                        }`}
+                      >
+                        {(selectedScore.score || 0) >=
+                        (selectedScore.interview_id?.passingScore || 70) ? (
+                          <CheckCircle className="h-4 w-4" />
+                        ) : (
+                          <XCircle className="h-4 w-4" />
+                        )}
+                        L1 Screening:{" "}
+                        {(selectedScore.score || 0) >=
+                        (selectedScore.interview_id?.passingScore || 70)
+                          ? "PASSED"
+                          : "FAILED"}
+                      </span>
+                      <span
+                        className={`px-3 py-1 rounded-full text-sm font-semibold capitalize ${
+                          selectedScore.feedback?.overallVerdict === "accept" ||
+                          selectedScore.feedback?.overallVerdict === "hire"
+                            ? "bg-green-100 text-green-700"
+                            : selectedScore.feedback?.overallVerdict === "reject"
+                              ? "bg-red-100 text-red-700"
+                              : "bg-yellow-100 text-yellow-700"
+                        }`}
+                      >
+                        Verdict: {selectedScore.feedback?.overallVerdict || "N/A"}
                       </span>
                     </div>
                   </div>
                   <div className="text-right">
                     <div className="text-4xl font-bold text-indigo-600">
-                      {selectedScore.score ||
-                        selectedScore.feedback?.totalScore ||
-                        0}
-                      %
+                      {selectedScore.score || 0}%
                     </div>
-                    <div className="text-sm text-gray-600">AI Score</div>
+                    <div className="text-sm text-gray-500">AI Score</div>
+                    <div className="text-xs text-gray-400 mt-1">
+                      Passing: {selectedScore.interview_id?.passingScore || 70}%
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* Two Column Layout */}
+              {/* Interview Details */}
+              <div className="grid grid-cols-4 gap-4">
+                <div className="bg-gray-50 rounded-lg p-4 text-center border border-gray-100">
+                  <p className="text-xs text-gray-500 mb-1">Position</p>
+                  <p className="text-sm font-semibold text-gray-900">
+                    {selectedScore.interview_id?.position || "N/A"}
+                  </p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-4 text-center border border-gray-100">
+                  <p className="text-xs text-gray-500 mb-1">Difficulty</p>
+                  <p className="text-sm font-semibold text-gray-900">
+                    {selectedScore.interview_id?.difficulty || "N/A"}
+                  </p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-4 text-center border border-gray-100">
+                  <p className="text-xs text-gray-500 mb-1">Duration</p>
+                  <p className="text-sm font-semibold text-gray-900">
+                    {selectedScore.interview_id?.duration || "N/A"}
+                  </p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-4 text-center border border-gray-100">
+                  <p className="text-xs text-gray-500 mb-1">Questions</p>
+                  <p className="text-sm font-semibold text-gray-900">
+                    {selectedScore.interview_id?.numberOfQuestions || "N/A"}
+                  </p>
+                </div>
+              </div>
+
+              {/* Skills Tags */}
+              {selectedScore.interview_id?.skills?.length > 0 && (
+                <div>
+                  <p className="text-sm font-semibold text-gray-700 mb-2">Skills Evaluated</p>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedScore.interview_id.skills.map((skill: string, idx: number) => (
+                      <span
+                        key={idx}
+                        className="px-3 py-1 bg-indigo-50 text-indigo-700 text-xs font-medium rounded-full border border-indigo-200"
+                      >
+                        {skill}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Two Column: Technical Competency + Speech & Communication */}
               <div className="grid grid-cols-2 gap-6">
-                {/* Technical Assessment */}
+                {/* Technical Competency */}
                 <div>
                   <div className="flex items-center gap-2 mb-4">
                     <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center">
                       <FileText className="h-4 w-4 text-indigo-600" />
                     </div>
                     <h3 className="text-lg font-bold text-gray-900">
-                      Technical Assessment
+                      Technical Competency
                     </h3>
                   </div>
                   <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-700">
-                        Problem Solving
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <div className="w-32 h-2 bg-gray-200 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-green-500 rounded-full"
-                            style={{ width: "90%" }}
-                          ></div>
+                    {selectedScore.feedback?.technicalCompetency?.map(
+                      (item: any, idx: number) => (
+                        <div
+                          key={idx}
+                          className={`p-3 rounded-lg border ${
+                            item.status === "good"
+                              ? "bg-green-50 border-green-200"
+                              : "bg-red-50 border-red-200"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 mb-1">
+                            {item.status === "good" ? (
+                              <CheckCircle className="h-4 w-4 text-green-600" />
+                            ) : (
+                              <XCircle className="h-4 w-4 text-red-500" />
+                            )}
+                            <p className="text-sm font-semibold text-gray-900">
+                              {item.title}
+                            </p>
+                          </div>
+                          <p className="text-xs text-gray-600 ml-6">
+                            {item.description}
+                          </p>
                         </div>
-                        <span className="text-sm font-semibold text-gray-900">
-                          90%
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-700">
-                        Code Quality
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <div className="w-32 h-2 bg-gray-200 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-blue-500 rounded-full"
-                            style={{ width: "85%" }}
-                          ></div>
-                        </div>
-                        <span className="text-sm font-semibold text-gray-900">
-                          85%
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-700">
-                        System Design
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <div className="w-32 h-2 bg-gray-200 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-yellow-500 rounded-full"
-                            style={{ width: "80%" }}
-                          ></div>
-                        </div>
-                        <span className="text-sm font-semibold text-gray-900">
-                          80%
-                        </span>
-                      </div>
-                    </div>
+                      ),
+                    ) || (
+                      <p className="text-sm text-gray-500">No data available</p>
+                    )}
                   </div>
                 </div>
 
-                {/* Communication Skills */}
+                {/* Speech & Communication */}
                 <div>
                   <div className="flex items-center gap-2 mb-4">
                     <div className="h-8 w-8 rounded-full bg-green-100 flex items-center justify-center">
                       <MessageSquare className="h-4 w-4 text-green-600" />
                     </div>
                     <h3 className="text-lg font-bold text-gray-900">
-                      Communication Skills
+                      Speech & Communication
                     </h3>
                   </div>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-700">
-                        Clarity of Expression
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <div className="w-32 h-2 bg-gray-200 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-green-500 rounded-full"
-                            style={{ width: "90%" }}
-                          ></div>
-                        </div>
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm text-gray-700">Clarity Score</span>
                         <span className="text-sm font-semibold text-gray-900">
-                          90%
+                          {selectedScore.feedback?.speechPatterns?.clarityScore || 0}%
                         </span>
                       </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-700">
-                        Technical Explanation
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <div className="w-32 h-2 bg-gray-200 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-green-500 rounded-full"
-                            style={{ width: "90%" }}
-                          ></div>
-                        </div>
-                        <span className="text-sm font-semibold text-gray-900">
-                          90%
-                        </span>
+                      <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-blue-500 rounded-full transition-all"
+                          style={{
+                            width: `${selectedScore.feedback?.speechPatterns?.clarityScore || 0}%`,
+                          }}
+                        ></div>
                       </div>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-700">
-                        Listening Skills
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <div className="w-32 h-2 bg-gray-200 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-green-500 rounded-full"
-                            style={{ width: "90%" }}
-                          ></div>
-                        </div>
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm text-gray-700">Confidence Level</span>
                         <span className="text-sm font-semibold text-gray-900">
-                          90%
+                          {selectedScore.feedback?.speechPatterns?.confidenceLevel || 0}%
                         </span>
+                      </div>
+                      <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-purple-500 rounded-full transition-all"
+                          style={{
+                            width: `${selectedScore.feedback?.speechPatterns?.confidenceLevel || 0}%`,
+                          }}
+                        ></div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 mt-2">
+                      <div className="bg-gray-50 rounded-lg p-3 text-center border border-gray-100">
+                        <p className="text-lg font-bold text-gray-900">
+                          {selectedScore.feedback?.speechPatterns?.avgResponseTime || "N/A"}
+                        </p>
+                        <p className="text-xs text-gray-500">Avg Response Time</p>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-3 text-center border border-gray-100">
+                        <p className="text-lg font-bold text-gray-900">
+                          {selectedScore.feedback?.speechPatterns?.complexityScore || 0}
+                        </p>
+                        <p className="text-xs text-gray-500">Complexity Score</p>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Key Strengths and Areas for Improvement */}
-              <div className="grid grid-cols-2 gap-6">
-                <div className="bg-green-50 rounded-xl p-6 border border-green-200">
-                  <h3 className="text-lg font-bold text-green-800 mb-4">
-                    Key Strengths
-                  </h3>
-                  <ul className="space-y-2">
-                    <li className="flex items-start gap-2 text-sm text-green-700">
-                      <span className="text-green-600 mt-0.5">•</span>
-                      <span>Excellent problem-solving approach</span>
-                    </li>
-                    <li className="flex items-start gap-2 text-sm text-green-700">
-                      <span className="text-green-600 mt-0.5">•</span>
-                      <span>Clear and concise communication</span>
-                    </li>
-
-                    <li className="flex items-start gap-2 text-sm text-green-700">
-                      <span className="text-green-600 mt-0.5">•</span>
-                      <span> Strong understanding of React concepts</span>
-                    </li>
-                    <li className="flex items-start gap-2 text-sm text-green-700">
-                      <span className="text-green-600 mt-0.5">•</span>
-                      <span>Good knowledge of modern web technologies</span>
-                    </li>
-                  </ul>
-                </div>
-
-                <div className="bg-red-50 rounded-xl p-6 border border-red-200">
-                  <h3 className="text-lg font-bold text-red-800 mb-4">
-                    Areas for Improvement
-                  </h3>
-                  <ul className="space-y-2">
-                    {selectedScore.feedback?.technicalCompetency
-                      ?.filter((t: any) => t.status === "bad")
-                      .slice(0, 3)
-                      .map((item: any, idx: number) => (
-                        <li
-                          key={idx}
-                          className="flex items-start gap-2 text-sm text-red-700"
-                        >
-                          <span className="text-red-600 mt-0.5">•</span>
-                          <span>{item.title || item.description}</span>
-                        </li>
-                      )) || (
-                      <>
-                        <li className="flex items-start gap-2 text-sm text-red-700">
-                          <span className="text-red-600 mt-0.5">•</span>
-                          <span>System design could be more detail</span>
-                        </li>
-                      </>
-                    )}
-                  </ul>
+              {/* Behavioral Assessment */}
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 mb-4">
+                  Behavioral Assessment
+                </h3>
+                <div className="grid grid-cols-1 gap-3">
+                  {selectedScore.feedback?.behavioralInsights?.map(
+                    (item: any, idx: number) => (
+                      <div
+                        key={idx}
+                        className={`flex items-start gap-3 p-3 rounded-lg border ${
+                          item.status === "good"
+                            ? "bg-green-50 border-green-200"
+                            : "bg-red-50 border-red-200"
+                        }`}
+                      >
+                        {item.status === "good" ? (
+                          <CheckCircle className="h-5 w-5 mt-0.5 flex-shrink-0 text-green-600" />
+                        ) : (
+                          <XCircle className="h-5 w-5 mt-0.5 flex-shrink-0 text-red-500" />
+                        )}
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900">
+                            {item.title}
+                          </p>
+                          <p className="text-xs text-gray-600">
+                            {item.description}
+                          </p>
+                        </div>
+                      </div>
+                    ),
+                  ) || (
+                    <p className="text-sm text-gray-500">No data available</p>
+                  )}
                 </div>
               </div>
+
+              {/* Assessment Summary */}
+              <div className="bg-blue-50 rounded-xl p-6 border border-blue-100">
+                <h3 className="text-sm font-semibold text-gray-700 mb-2">
+                  Assessment Summary
+                </h3>
+                <p className="text-sm text-gray-800 italic">
+                  "{selectedScore.feedback?.verdictReason || "No summary available"}"
+                </p>
+              </div>
+
+              {/* Recommendations */}
+              {selectedScore.feedback?.recommendations &&
+                selectedScore.feedback.recommendations.length > 0 && (
+                  <div className="bg-indigo-50 rounded-xl p-6 border border-indigo-200">
+                    <h3 className="text-lg font-bold text-gray-900 mb-3">
+                      Recommendations
+                    </h3>
+                    <ul className="space-y-2">
+                      {selectedScore.feedback.recommendations.map(
+                        (rec: string, idx: number) => (
+                          <li
+                            key={idx}
+                            className="flex items-start gap-2 text-sm text-gray-700"
+                          >
+                            <span className="text-indigo-600 mt-0.5 font-bold">
+                              •
+                            </span>
+                            <span>{rec}</span>
+                          </li>
+                        ),
+                      )}
+                    </ul>
+                  </div>
+                )}
+
+              {/* Download Scorecard */}
+              {selectedScore.pdfPath && (
+                <div className="flex justify-end">
+                  <a
+                    href={selectedScore.pdfPath}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition-colors"
+                  >
+                    <FileText className="h-4 w-4" />
+                    Download Scorecard PDF
+                  </a>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1017,13 +1277,15 @@ const ReportsInsights = () => {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl shadow-2xl">
             {/* Modal Header */}
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-8 py-6 flex items-center justify-between">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-8 py-6 flex items-center justify-between z-10">
               <div>
                 <h2 className="text-2xl font-bold text-gray-900">
-                  AI Analysis Details -{" "}
-                  {selectedScore.interview_id?.candidates?.[0]?.candidateId
-                    ?.name || "Candidate"}
+                  AI Analysis Details
                 </h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  {selectedScore.feedback?.candidateName || "Candidate"} &middot;{" "}
+                  {selectedScore.feedback?.role || selectedScore.interview_id?.position || "N/A"}
+                </p>
               </div>
               <button
                 onClick={() => setShowAIAnalysis(false)}
@@ -1041,15 +1303,23 @@ const ReportsInsights = () => {
                   <h3 className="text-lg font-bold text-gray-900">
                     AI Confidence Analysis
                   </h3>
-                  <span className="px-4 py-1.5 bg-purple-200 text-purple-800 text-sm font-bold rounded-full">
-                    High Confidence:{" "}
-                    {selectedScore.feedback?.confidenceScore || 94}%
+                  <span
+                    className={`px-4 py-1.5 text-sm font-bold rounded-full ${
+                      (selectedScore.feedback?.confidenceScore || 0) >= 70
+                        ? "bg-green-200 text-green-800"
+                        : (selectedScore.feedback?.confidenceScore || 0) >= 40
+                          ? "bg-yellow-200 text-yellow-800"
+                          : "bg-red-200 text-red-800"
+                    }`}
+                  >
+                    {selectedScore.feedback?.confidenceLabel || "N/A"}:{" "}
+                    {selectedScore.feedback?.confidenceScore || 0}%
                   </span>
                 </div>
                 <p className="text-sm text-gray-700 leading-relaxed">
                   Our AI model analyzed speech patterns, response timing,
                   technical accuracy, and communication clarity to generate this
-                  assessment with high confidence.
+                  assessment.
                 </p>
               </div>
 
@@ -1066,13 +1336,21 @@ const ReportsInsights = () => {
                     </h3>
                   </div>
                   <div className="space-y-3">
-                    {selectedScore.feedback?.behavioralInsights
-                      ?.slice(0, 3)
-                      .map((insight: any, idx: number) => (
-                        <div key={idx} className="flex items-start gap-3">
-                          <CheckCircle
-                            className={`h-5 w-5 mt-0.5 ${insight.status === "good" ? "text-green-600" : "text-yellow-600"}`}
-                          />
+                    {selectedScore.feedback?.behavioralInsights?.map(
+                      (insight: any, idx: number) => (
+                        <div
+                          key={idx}
+                          className={`flex items-start gap-3 p-3 rounded-lg border ${
+                            insight.status === "good"
+                              ? "bg-green-50 border-green-200"
+                              : "bg-red-50 border-red-200"
+                          }`}
+                        >
+                          {insight.status === "good" ? (
+                            <CheckCircle className="h-5 w-5 mt-0.5 flex-shrink-0 text-green-600" />
+                          ) : (
+                            <XCircle className="h-5 w-5 mt-0.5 flex-shrink-0 text-red-500" />
+                          )}
                           <div>
                             <p className="font-semibold text-sm text-gray-900">
                               {insight.title}
@@ -1082,31 +1360,11 @@ const ReportsInsights = () => {
                             </p>
                           </div>
                         </div>
-                      )) || (
-                      <>
-                        <div className="flex items-start gap-3">
-                          <CheckCircle className="h-5 w-5 text-green-600 mt-0.5" />
-                          <div>
-                            <p className="font-semibold text-sm text-gray-900">
-                              Confident Communication
-                            </p>
-                            <p className="text-xs text-gray-600">
-                              Minimal hesitation, clear articulation
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-start gap-3">
-                          <CheckCircle className="h-5 w-5 text-green-600 mt-0.5" />
-                          <div>
-                            <p className="font-semibold text-sm text-gray-900">
-                              Structured Thinking
-                            </p>
-                            <p className="text-xs text-gray-600">
-                              Logical flow in problem-solving approach
-                            </p>
-                          </div>
-                        </div>
-                      </>
+                      ),
+                    ) || (
+                      <p className="text-sm text-gray-500">
+                        No behavioral data available
+                      </p>
                     )}
                   </div>
                 </div>
@@ -1122,13 +1380,21 @@ const ReportsInsights = () => {
                     </h3>
                   </div>
                   <div className="space-y-3">
-                    {selectedScore.feedback?.technicalCompetency
-                      ?.slice(0, 3)
-                      .map((comp: any, idx: number) => (
-                        <div key={idx} className="flex items-start gap-3">
-                          <CheckCircle
-                            className={`h-5 w-5 mt-0.5 ${comp.status === "good" ? "text-green-600" : "text-yellow-600"}`}
-                          />
+                    {selectedScore.feedback?.technicalCompetency?.map(
+                      (comp: any, idx: number) => (
+                        <div
+                          key={idx}
+                          className={`flex items-start gap-3 p-3 rounded-lg border ${
+                            comp.status === "good"
+                              ? "bg-green-50 border-green-200"
+                              : "bg-red-50 border-red-200"
+                          }`}
+                        >
+                          {comp.status === "good" ? (
+                            <CheckCircle className="h-5 w-5 mt-0.5 flex-shrink-0 text-green-600" />
+                          ) : (
+                            <XCircle className="h-5 w-5 mt-0.5 flex-shrink-0 text-red-500" />
+                          )}
                           <div>
                             <p className="font-semibold text-sm text-gray-900">
                               {comp.title}
@@ -1138,31 +1404,11 @@ const ReportsInsights = () => {
                             </p>
                           </div>
                         </div>
-                      )) || (
-                      <>
-                        <div className="flex items-start gap-3">
-                          <CheckCircle className="h-5 w-5 text-green-600 mt-0.5" />
-                          <div>
-                            <p className="font-semibold text-sm text-gray-900">
-                              Strong Fundamentals
-                            </p>
-                            <p className="text-xs text-gray-600">
-                              Solid understanding of core concepts
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-start gap-3">
-                          <CheckCircle className="h-5 w-5 text-green-600 mt-0.5" />
-                          <div>
-                            <p className="font-semibold text-sm text-gray-900">
-                              Practical Experience
-                            </p>
-                            <p className="text-xs text-gray-600">
-                              Real-world examples and applications
-                            </p>
-                          </div>
-                        </div>
-                      </>
+                      ),
+                    ) || (
+                      <p className="text-sm text-gray-500">
+                        No technical data available
+                      </p>
                     )}
                   </div>
                 </div>
@@ -1176,9 +1422,7 @@ const ReportsInsights = () => {
                 <div className="grid grid-cols-4 gap-4">
                   <div className="text-center p-4 bg-blue-50 rounded-xl border border-blue-200">
                     <div className="text-3xl font-bold text-blue-600">
-                      {selectedScore.feedback?.speechPatterns?.clarityScore ||
-                        0}
-                      %
+                      {selectedScore.feedback?.speechPatterns?.clarityScore || 0}%
                     </div>
                     <div className="text-xs text-gray-600 mt-1">
                       Clarity Score
@@ -1186,8 +1430,7 @@ const ReportsInsights = () => {
                   </div>
                   <div className="text-center p-4 bg-green-50 rounded-xl border border-green-200">
                     <div className="text-3xl font-bold text-green-600">
-                      {selectedScore.feedback?.speechPatterns
-                        ?.avgResponseTime || "1.2"}
+                      {selectedScore.feedback?.speechPatterns?.avgResponseTime || "N/A"}
                     </div>
                     <div className="text-xs text-gray-600 mt-1">
                       Avg Response Time
@@ -1195,7 +1438,7 @@ const ReportsInsights = () => {
                   </div>
                   <div className="text-center p-4 bg-purple-50 rounded-xl border border-purple-200">
                     <div className="text-3xl font-bold text-purple-600">
-                      {selectedScore.feedback?.confidenceScore || 89}%
+                      {selectedScore.feedback?.speechPatterns?.confidenceLevel || 0}%
                     </div>
                     <div className="text-xs text-gray-600 mt-1">
                       Confidence Level
@@ -1203,8 +1446,7 @@ const ReportsInsights = () => {
                   </div>
                   <div className="text-center p-4 bg-orange-50 rounded-xl border border-orange-200">
                     <div className="text-3xl font-bold text-orange-600">
-                      {selectedScore.feedback?.speechPatterns
-                        ?.complexityScore || "4.2"}
+                      {selectedScore.feedback?.speechPatterns?.complexityScore || 0}
                     </div>
                     <div className="text-xs text-gray-600 mt-1">
                       Complexity Score
@@ -1213,21 +1455,86 @@ const ReportsInsights = () => {
                 </div>
               </div>
 
-              {/* AI Recommendations */}
-              <div className="bg-indigo-50 rounded-xl p-6 border border-indigo-200">
-                <h3 className="text-lg font-bold text-gray-900 mb-3">
-                  AI Recommendations
-                </h3>
-                <div className="flex items-start gap-3">
-                  <div className="h-6 w-6 rounded-full bg-indigo-200 flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <span className="text-indigo-700 font-bold text-xs">!</span>
+              {/* Behavior Report */}
+              {selectedScore.behaviorReport && (
+                <div className="bg-gray-50 rounded-xl p-6 border border-gray-200">
+                  <h3 className="text-lg font-bold text-gray-900 mb-3">
+                    Behavior Report
+                  </h3>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="text-center p-3 bg-white rounded-lg border border-gray-100">
+                      <p className="text-2xl font-bold text-gray-900">
+                        {selectedScore.behaviorReport.totalEvents || 0}
+                      </p>
+                      <p className="text-xs text-gray-500">Total Events</p>
+                    </div>
+                    <div className="text-center p-3 bg-white rounded-lg border border-gray-100">
+                      <p className="text-2xl font-bold text-gray-900">
+                        {selectedScore.behaviorReport.noFaceCount || 0}
+                      </p>
+                      <p className="text-xs text-gray-500">No Face Detected</p>
+                    </div>
+                    <div className="text-center p-3 bg-white rounded-lg border border-gray-100">
+                      <p className="text-2xl font-bold text-gray-900">
+                        {selectedScore.behaviorReport.multipleFacesCount || 0}
+                      </p>
+                      <p className="text-xs text-gray-500">Multiple Faces</p>
+                    </div>
                   </div>
-                  <p className="text-sm text-gray-800">
-                    {selectedScore.feedback?.recommendations?.[0] ||
-                      "Proceed to next round: Candidate shows strong potential and aligns well with role requirements."}
-                  </p>
+                  {selectedScore.behaviorReport.events?.length > 0 && (
+                    <div className="mt-4 space-y-2">
+                      <p className="text-sm font-semibold text-gray-700">Events:</p>
+                      {selectedScore.behaviorReport.events.map(
+                        (event: any, idx: number) => (
+                          <div
+                            key={idx}
+                            className="text-sm text-gray-600 bg-white p-2 rounded border border-gray-100"
+                          >
+                            {event.type || event.description || JSON.stringify(event)}
+                          </div>
+                        ),
+                      )}
+                    </div>
+                  )}
                 </div>
+              )}
+
+              {/* Verdict Summary */}
+              <div className="bg-blue-50 rounded-xl p-6 border border-blue-100">
+                <h3 className="text-sm font-semibold text-gray-700 mb-2">
+                  Verdict Summary
+                </h3>
+                <p className="text-sm text-gray-800 italic">
+                  "{selectedScore.feedback?.verdictReason || "No summary available"}"
+                </p>
               </div>
+
+              {/* AI Recommendations - All */}
+              {selectedScore.feedback?.recommendations &&
+                selectedScore.feedback.recommendations.length > 0 && (
+                  <div className="bg-indigo-50 rounded-xl p-6 border border-indigo-200">
+                    <h3 className="text-lg font-bold text-gray-900 mb-3">
+                      AI Recommendations
+                    </h3>
+                    <ul className="space-y-2">
+                      {selectedScore.feedback.recommendations.map(
+                        (rec: string, idx: number) => (
+                          <li
+                            key={idx}
+                            className="flex items-start gap-2 text-sm text-gray-700"
+                          >
+                            <div className="h-5 w-5 rounded-full bg-indigo-200 flex items-center justify-center flex-shrink-0 mt-0.5">
+                              <span className="text-indigo-700 font-bold text-xs">
+                                {idx + 1}
+                              </span>
+                            </div>
+                            <span>{rec}</span>
+                          </li>
+                        ),
+                      )}
+                    </ul>
+                  </div>
+                )}
             </div>
           </div>
         </div>
