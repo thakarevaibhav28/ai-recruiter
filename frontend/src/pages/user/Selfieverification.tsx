@@ -715,4 +715,5 @@ const SelfieVerification: React.FC = () => {
   );
 };
 
+
 export default SelfieVerification;
