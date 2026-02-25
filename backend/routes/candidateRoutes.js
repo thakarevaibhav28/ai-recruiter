@@ -13,6 +13,7 @@ import auth from "../middleware/auth.js";
 import { generateSummary } from "../services/aiServiceold.js";
 import { generateScorecardPDFBuffer } from "../services/pdfService.js";
 import { getMCQInterviewById } from "../controllers/adminControllers/AssessmentController.js";
+import { getIO } from "../socket.js";
 
 const router = express.Router();
 
@@ -85,6 +86,15 @@ router.post("/login/:id", async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: "1h" },
     );
+
+    // 🔌 Emit real-time event to admins
+    try {
+      getIO().to("admins").emit("candidate-logged-in", {
+        candidateId: candidateEntry.candidateId._id,
+        candidateName: candidateEntry.candidateId.email,
+        interviewId: id,
+      });
+    } catch (_) {}
 
     res.json({
       token,
@@ -244,6 +254,14 @@ router.get("/interview/:id", auth("candidate"), async (req, res) => {
 
       await interview.save();
 
+      // 🔌 Emit real-time event to admins
+      try {
+        getIO().to("admins").emit("interview-started", {
+          candidateId,
+          interviewId: id,
+        });
+      } catch (_) {}
+
       questions = randomQuestions;
     }
 
@@ -391,6 +409,7 @@ router.post("/interview/:id/submit", auth("candidate"), async (req, res) => {
     let interview = await MCQ_Interview.findById(id);
     let interviewModel = "MCQ_Interview";
 
+
     if (!interview) {
       interview = await AI_Interview.findById(id);
       interviewModel = "AI_Interview";
@@ -404,6 +423,7 @@ router.post("/interview/:id/submit", auth("candidate"), async (req, res) => {
     const candidateEntry = interview.candidates.find(
       (c) => c.candidateId.toString() === candidateId,
     );
+    console.log("candidateEntry",candidateEntry)
 
     if (!candidateEntry) {
       return res.status(403).json({ message: "Not authorized" });
@@ -444,6 +464,10 @@ router.post("/interview/:id/submit", auth("candidate"), async (req, res) => {
 
         scores.push({
           questionId: q._id,
+          questionText: q.questionText || "",
+          options: q.options || [],
+          correctAnswer: q.correctAnswer || "",
+          userAnswer: answer?.answerText || "",
           score,
           feedback: answer?.feedback || "",
         });
@@ -462,6 +486,10 @@ router.post("/interview/:id/submit", auth("candidate"), async (req, res) => {
 
         scores.push({
           questionId: a.questionId,
+          questionText: a.questionText || "",
+          options: a.options || [],
+          correctAnswer: a.correctAnswer || "",
+          userAnswer: a.userAnswer || "",
           score: a.score,
           feedback: a.feedback || "",
         });
@@ -474,7 +502,37 @@ router.post("/interview/:id/submit", auth("candidate"), async (req, res) => {
     // 🔥 5️⃣ Generate summary
     const summary = await generateSummary(scores);
 
-    // 🔥 6️⃣ Save score document
+    // 🔥 6️⃣ Generate PDF BEFORE saving to DB
+    // (Score.create strips extra fields like questionText, options, etc. by reference)
+    const candidate = await Candidate.findById(candidateId);
+
+    const pdfBuffer = await generateScorecardPDFBuffer(
+      candidate,
+      scores,
+      totalScore,
+      summary,
+    );
+
+    // ✅ Upload via stream — most reliable for raw PDFs
+    const uploadResult = await new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder: "scorecards",
+          resource_type: "raw",
+          format: "pdf",
+          public_id: `scorecard-${candidateId}-${Date.now()}`,
+          access_mode: "public",
+        },
+        (error, result) => {
+          if (error) return reject(error);
+          resolve(result);
+        }
+      );
+
+      uploadStream.end(pdfBuffer);
+    });
+
+    // 🔥 7️⃣ Save score document (after PDF is generated)
     const scoreDoc = await Score.create({
       interviewId: interview._id,
       interviewModel,
@@ -484,42 +542,8 @@ router.post("/interview/:id/submit", auth("candidate"), async (req, res) => {
       totalScore,
       maxScore,
       summary,
+      pdfPath: uploadResult.secure_url.replace("/upload/", "/upload/fl_attachment/"),
     });
-
-    // 🔥 7️⃣ Generate PDF
-   // 🔥 7️⃣ Generate PDF
-const candidate = await Candidate.findById(candidateId);
-
-const pdfBuffer = await generateScorecardPDFBuffer(
-  candidate,
-  scores,
-  totalScore,
-  summary,
-);
-
-// ✅ Upload via stream — most reliable for raw PDFs
-const uploadResult = await new Promise((resolve, reject) => {
-  const uploadStream = cloudinary.uploader.upload_stream(
-    {
-      folder: "scorecards",
-      resource_type: "raw",
-      format: "pdf",
-      public_id: `scorecard-${candidateId}-${Date.now()}`,
-      access_mode: "public",
-    },
-    (error, result) => {
-      if (error) return reject(error);
-      resolve(result);
-    }
-  );
-
-  uploadStream.end(pdfBuffer); // ✅ pipe buffer directly — no base64 corruption
-});
-    scoreDoc.pdfPath = uploadResult.secure_url.replace(
-      "/upload/",
-      "/upload/fl_attachment/",
-    );
-    await scoreDoc.save();
 
     // 🔥 8️⃣ Update candidate status
     candidateEntry.status = "completed";
@@ -527,6 +551,17 @@ const uploadResult = await new Promise((resolve, reject) => {
     candidateEntry.submittedAt = new Date();
 
     await interview.save();
+
+    // 🔌 Emit real-time event to admins
+    try {
+      getIO().to("admins").emit("interview-submitted", {
+        candidateId,
+        candidateName: candidate?.name || "Unknown",
+        interviewId: interview._id,
+        totalScore,
+        percentage: Math.round(percentage),
+      });
+    } catch (_) {}
 
     res.json({
       message: "Interview submitted successfully",

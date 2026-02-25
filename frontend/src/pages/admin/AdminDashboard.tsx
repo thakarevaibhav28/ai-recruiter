@@ -5,6 +5,7 @@ import toast from "react-hot-toast";
 import { FaUsers, FaClipboardList, FaFileAlt, FaRobot } from "react-icons/fa";
 import { Plus, UserPlus, Calendar, TrendingUp } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useAdminSocket } from "../../hooks/useAdminSocket";
 
 // Stat Card Component
 const StatCard = ({
@@ -425,6 +426,20 @@ const Dashboard = () => {
   useEffect(() => {
     fetchDashboardData();
   }, []);
+
+  /* ================= SOCKET.IO REAL-TIME ================= */
+  useAdminSocket({
+    "interview-submitted": (data: any) => {
+      toast.success(`${data.candidateName} submitted — ${data.percentage}%`);
+      fetchDashboardData();
+    },
+    "candidate-logged-in": (data: any) => {
+      toast(`Candidate logged in: ${data.candidateName}`, { icon: "👤" });
+    },
+    "interview-started": () => {
+      fetchDashboardData();
+    },
+  });
 
   /* ================= RESCHEDULE ================= */
 

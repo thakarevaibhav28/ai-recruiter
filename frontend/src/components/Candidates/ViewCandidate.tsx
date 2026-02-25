@@ -200,14 +200,13 @@ const ViewCandidateModal: React.FC<ViewCandidateModalProps> = ({
 
                         <td className="px-5 py-4">
                           {interview.pdfPath ? (
-                            <a
-                              href={interview.pdfPath}
-                              download
-                              className="flex w-fit items-center gap-2 px-3 py-1.5 text-xs bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed transition-all"
-                            >
-                              <Download size={14} />
-                              Download
-                            </a>
+                             <a
+                        href={interview.pdfPath}
+                        download
+                        className="px-4 py-2 bg-indigo-600 text-white rounded-lg"
+                      >
+                        Download Scorecard
+                      </a>
                           ) : (
                             <span className="text-gray-400 text-xs">
                               Not Available

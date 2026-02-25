@@ -8,17 +8,17 @@ const candidateSchema = new mongoose.Schema({
   year_of_experience: { type: String, required: true },
   key_Skills: { type: String, require: true },
   description: { type: String ,default:null},
-  status: {
-    type: String,
-     enum: [
-      "new",
-      "scheduled",
-      "in_progress",
-      "completed",
-      "cancelled"
-    ],    //Interview status
-    default: "new",
-  },
+  // status: {
+  //   type: String,
+  //    enum: [
+  //     "new",
+  //     "scheduled",
+  //     "in_progress",
+  //     "completed",
+  //     "cancelled"
+  //   ],    //Interview status
+  //   default: "new",
+  // },
   candidate_status: {
     type: String,
     enum: ["active", "inactive"],
