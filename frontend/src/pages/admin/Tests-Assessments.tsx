@@ -11,6 +11,7 @@ import {
   Users,
 } from "lucide-react";
 import { adminService } from "../../services/service/adminService";
+import { useAdminSocket } from "../../hooks/useAdminSocket";
 
 const EMPTY_FORM = {
   candidates: [],
@@ -63,6 +64,13 @@ console.log("formData",formData)
 
   useEffect(() => { fetchCandidates(); }, []);
   useEffect(() => { if (activeTab === "templates") fetchAssessments(); }, [activeTab]);
+
+  // 🔌 Real-time: refresh assessments when a candidate submits
+  useAdminSocket({
+    "interview-submitted": () => {
+      fetchAssessments();
+    },
+  });
 
   const fetchCandidates = async () => {
     // setCandidatesLoading(true);
@@ -261,7 +269,6 @@ console.log("formData",formData)
 
         setFormData((prev) => ({
           ...prev,
-          jobDescription: file,
           jobDescriptionText: analysis?.fullJobDescription || "",
           testTitle: prev.testTitle || analysis?.jobTitle || "",
           jobDescription: prev.jobDescription || analysis?.jobDescription || "",
@@ -719,7 +726,9 @@ console.log("formData",formData)
                         <div className="flex items-center gap-2">
                           <FileText className="h-4 w-4 text-indigo-600" />
                           <span className="text-sm text-gray-700 truncate max-w-[200px]">
-                            {formData.jobDescription}
+                            {formData.jobDescription instanceof File
+                              ? formData.jobDescription.name
+                              : formData.jobDescription}
                           </span>
                         </div>
                         <button onClick={removeFile} className="text-gray-400 hover:text-red-600 transition-colors"><X className="h-4 w-4" /></button>
