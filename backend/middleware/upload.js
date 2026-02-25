@@ -11,12 +11,7 @@ const fileFilter = (req, file, cb) => {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   ];
 
-  const allowedImages = [
-    "image/jpeg",
-    "image/png",
-    "image/jpg",
-    "image/webp",
-  ];
+  const allowedImages = ["image/jpeg", "image/png", "image/jpg", "image/webp"];
 
   // Job Description
   if (file.fieldname === "jobDescription") {
@@ -28,6 +23,11 @@ const fileFilter = (req, file, cb) => {
   if (file.fieldname === "photo") {
     if (allowedImages.includes(file.mimetype)) return cb(null, true);
     return cb(new Error("Only image files allowed"), false);
+  }
+  // Resume
+  if (file.fieldname === "resume") {
+    if (allowedDocs.includes(file.mimetype)) return cb(null, true);
+    return cb(new Error("Only PDF/DOC/DOCX allowed for Resume"), false);
   }
 
   // Aadhar
@@ -53,6 +53,7 @@ const cloudinaryStorage = new CloudinaryStorage({
 
     if (file.fieldname === "jobDescription") folder = "job-descriptions";
     if (file.fieldname === "aadharCard") folder = "aadharCards";
+    if (file.fieldname === "resume") folder = "resumes";
     if (file.fieldname === "photo") folder = "candidate-photo";
     if (file.fieldname === "scorecard") folder = "scorecards";
 

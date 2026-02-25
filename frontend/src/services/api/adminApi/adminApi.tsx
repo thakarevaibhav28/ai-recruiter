@@ -20,12 +20,14 @@ class AdminApi {
     DELETE_CANDIDATE: "/admin/candidate",
     GET_ME: "/admin/me",
     UPLOAD_JD: "/admin/analyze",
+    UPLOAD_RESUME:"/admin/resume/analyze",
     GENERATE_MCQ: "/admin/generate-mcq",
     TOTAL_SCHEDULE: "/admin/total-schedule",
     RE_SCHEDULE: "/admin/interview",
     CANCLE_INTERVIEW: "/admin/interview",
     TOP_PERFORMANCE: "/admin/top-performance",
-    SCORES:"/admin/student-scores"
+    TOP_AI_PERFORMANCE: "/admin/top-ai-performance",
+    SCORES: "/admin/student-scores",
   };
 
   login = (data: any) => {
@@ -109,6 +111,9 @@ class AdminApi {
   analyzeJD(data: any) {
     return api._postFormData(this._url.UPLOAD_JD, data);
   }
+  analyzeResume(data: any) {
+    return api._postFormData(this._url.UPLOAD_RESUME, data);
+  }
   generateMCQ(data: any, id?: string) {
     return api._post(`${this._url.GENERATE_MCQ}/${id}`, data);
   }
@@ -121,8 +126,14 @@ class AdminApi {
   getTopPerformance(examType: string) {
     return api._get(`${this._url.TOP_PERFORMANCE}?examType=${examType}`);
   }
+
   getScore(examType: string) {
     return api._get(`${this._url.SCORES}?examType=${examType}`);
+  }
+
+    // get top AI performance
+  getTopAIPerformance() {
+    return api._get(`${this._url.TOP_AI_PERFORMANCE}`);
   }
 
   reScheduleInterview(type: string, interviewId: string, data: any) {
