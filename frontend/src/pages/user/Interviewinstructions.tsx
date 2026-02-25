@@ -575,8 +575,6 @@ const InterviewInstructions: React.FC = () => {
               <p className="text-gray-400 text-sm">Please read these instructions carefully before proceeding</p>
             </motion.div>
 
-    
-
             {/* Job Card */}
             <motion.div className="bg-[#0d1535]/80 backdrop-blur-xl rounded-2xl p-5 border border-white/10" {...fadeUp(0.1)}>
               <div className="flex items-center gap-3 mb-3">
@@ -596,7 +594,7 @@ const InterviewInstructions: React.FC = () => {
                   <span className="text-[#2D55FB] text-xs font-medium">Job Description</span>
                 </div>
                 <p className="text-gray-400 text-xs leading-relaxed">
-                  {interview?.jobDescription ?? "No job description provided."}
+                  {interview?.jobDescriptionText ?? "No job description provided."}
                 </p>
               </div>
             </motion.div>
