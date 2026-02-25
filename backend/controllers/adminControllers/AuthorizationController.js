@@ -735,74 +735,65 @@ export const getStudentScores = async (req, res) => {
         message: "examType must be MCQ or AI",
       });
     }
+    if (examType === "AI") {
+      const aiData = await InterviewFeedback.find({
+        examType: "AI",
+      })
+        .populate({
+          path: "interview_id",
+          populate: {
+            path: "candidates.candidateId",
+            model: "Candidate",
+            select: "name email candidate_status",
+          },
+        })
+        .lean();
 
-    // const results = await Score.aggregate([
-    //   {
-    //     $match: { examType },
-    //   },
+      // Compute score for records that don't have it
+      const data = aiData.map((item) => {
+        if (item.score != null) return item;
 
-    //   {
-    //     $lookup: {
-    //       from: "candidates",
-    //       localField: "candidateId",
-    //       foreignField: "_id",
-    //       as: "candidate",
-    //     },
-    //   },
+        const fb = item.feedback || {};
+        const techItems = fb.technicalCompetency || [];
+        const behaviorItems = fb.behavioralInsights || [];
 
-    //   { $unwind: "$candidate" },
+        // Calculate technicalScore if missing
+        let technicalScore = fb.technicalScore;
+        if (technicalScore == null) {
+          const totalTech = techItems.length || 1;
+          const techGood = techItems.filter((i) => i.status === "good").length;
+          const techWarning = techItems.filter((i) => i.status === "warning").length;
+          const techScoreRaw = (techGood * 1 + techWarning * 0.5) / totalTech;
+          const complexityScore = fb.speechPatterns?.complexityScore || 1;
+          technicalScore = Math.min(100, Math.round(techScoreRaw * 60 + (complexityScore / 5) * 40));
+        }
 
-    //   // 🔥 Calculate maxScore dynamically
-    //   {
-    //     $addFields: {
-    //       maxScore: { $size: "$scores" },
-    //     },
-    //   },
+        // Calculate relevanceScore if missing
+        let relevanceScore = fb.relevanceScore;
+        if (relevanceScore == null) {
+          const totalBehavior = behaviorItems.length || 1;
+          const behaviorGood = behaviorItems.filter((i) => i.status === "good").length;
+          const behaviorWarning = behaviorItems.filter((i) => i.status === "warning").length;
+          const behaviorScoreRaw = (behaviorGood * 1 + behaviorWarning * 0.5) / totalBehavior;
+          const clarityScore = fb.speechPatterns?.clarityScore || 0;
+          relevanceScore = Math.min(100, Math.round(behaviorScoreRaw * 50 + clarityScore * 0.5));
+        }
 
-    //   {
-    //     $addFields: {
-    //       percentage: {
-    //         $cond: [
-    //           { $gt: ["$maxScore", 0] },
-    //           {
-    //             $multiply: [
-    //               { $divide: ["$totalScore", "$maxScore"] },
-    //               100,
-    //             ],
-    //           },
-    //           0,
-    //         ],
-    //       },
-    //     },
-    //   },
+        item.score = Math.round(technicalScore * 0.6 + relevanceScore * 0.4);
+        if (!fb.technicalScore) item.feedback.technicalScore = technicalScore;
+        if (!fb.relevanceScore) item.feedback.relevanceScore = relevanceScore;
 
-    //   {
-    //     $group: {
-    //       _id: "$candidate._id",
-    //       candidate: {
-    //         $first: {
-    //           _id: "$candidate._id",
-    //           name: "$candidate.name",
-    //           email: "$candidate.email",
-    //           role: "$candidate.role",
-    //           candidate_status: "$candidate.candidate_status",
-    //         },
-    //       },
-    //       scores: {
-    //         $push: {
-    //           interviewId: "$interviewId",
-    //           totalScore: "$totalScore",
-    //           maxScore: "$maxScore",
-    //           percentage: { $round: ["$percentage", 2] },
-    //           createdAt: "$createdAt",
-    //         },
-    //       },
-    //       totalAttempts: { $sum: 1 },
-    //     },
-    //   },
+        return item;
+      });
 
-    //   { $sort: { "scores.createdAt": -1 } },
-    // ]);
+      return res.status(200).json({
+        success: true,
+        type: "AI",
+        total: data.length,
+        data,
+      });
+    }
+
     const scores = await Score.find({ examType })
       .populate("interviewId")
       .populate("candidateId")
