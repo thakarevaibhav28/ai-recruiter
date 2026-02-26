@@ -473,7 +473,7 @@ const getDefaultDuration = (difficulty: string) => {
     <>
       <AdminLayout
         heading="AI Video Interview"
-        subheading="AI-powered video interviews with HuggingFace"
+        subheading="AI-powered video interviews"
         showSearch={false}
       >
 

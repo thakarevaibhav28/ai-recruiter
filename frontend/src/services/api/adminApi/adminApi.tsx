@@ -10,6 +10,7 @@ class AdminApi {
     UPDATE_ASESMENT_TEMPLATE: "/admin/assessment/template",
     GET_ASSESMENTS: "/admin/assessment/mcq/list",
     GET_CANDIDATES: "/admin/candidates",
+    GET_CANDIDATES_BY_FILTER: "/admin/candidates/filter",
     GET_CANDIDATE_PROFILE: "/admin/candidate_profile",
     SEND_INVITES: "/admin/assessment/:assessmentId/invite",
     GENERATE_AND_INVITE: "/admin/assessment/send-invites",
@@ -20,7 +21,7 @@ class AdminApi {
     DELETE_CANDIDATE: "/admin/candidate",
     GET_ME: "/admin/me",
     UPLOAD_JD: "/admin/analyze",
-    UPLOAD_RESUME:"/admin/resume/analyze",
+    UPLOAD_RESUME: "/admin/resume/analyze",
     GENERATE_MCQ: "/admin/generate-mcq",
     TOTAL_SCHEDULE: "/admin/total-schedule",
     RE_SCHEDULE: "/admin/interview",
@@ -68,6 +69,12 @@ class AdminApi {
       `${this._url.GET_CANDIDATES}?page=${page}&limit=${limit}&status=${status}`,
     );
   }
+
+  getFilteredCandidates(params: Record<string, string>) {
+    const query = new URLSearchParams(params).toString();
+    return api._get(`${this._url.GET_CANDIDATES_BY_FILTER}?${query}`);
+  }
+
   getCandidateProfile(id: string) {
     return api._get(`${this._url.GET_CANDIDATE_PROFILE}/${id}`);
   }
@@ -131,7 +138,7 @@ class AdminApi {
     return api._get(`${this._url.SCORES}?examType=${examType}`);
   }
 
-    // get top AI performance
+  // get top AI performance
   getTopAIPerformance() {
     return api._get(`${this._url.TOP_AI_PERFORMANCE}`);
   }
