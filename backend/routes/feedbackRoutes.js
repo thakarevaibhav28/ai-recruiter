@@ -7,6 +7,7 @@ import nodemailer from "nodemailer";
 import cloudinary from "../config/cloudinary.js";
 dotenv.config();
 import OpenAI from "openai";
+import AI_Interview from "../models/AI_Interview.js";
 // ─── POST /feedback ─────────────────────────
 
 // ─── Email transporter ────────────────────────────────────────────────────────
@@ -606,6 +607,37 @@ router.post("/feedback", async (req, res) => {
       },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
+    // ==================================================
+    // 6️⃣ Update Candidate Status → completed
+    // ==================================================
+    await AI_Interview.updateOne(
+      {
+        _id: interview_id,
+        "candidates.candidateId": candidateId,
+      },
+      {
+        $set: {
+          "candidates.$.status": "completed",
+        },
+      }
+    );
+
+    console.log("Candidate status updated");
+
+    // ==================================================
+    // 7️⃣ Auto Mark Interview Completed (If All Done)
+    // ==================================================
+    const interview = await AI_Interview.findById(interview_id);
+
+    const allCompleted = interview.candidates.every(
+      (c) => c.status === "completed"
+    );
+
+    if (allCompleted) {
+      interview.status = "completed";
+      await interview.save();
+      console.log("Interview marked as completed");
+    }
 
     return res.json({
       success: true,
