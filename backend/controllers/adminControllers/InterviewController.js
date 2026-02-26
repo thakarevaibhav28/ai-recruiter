@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import AI_Interview from "../../models/AI_Interview.js";
 import MCQ_Interview from "../../models/MCQ_Interview.js";
 import Candidate from "../../models/Candidate.js";
+import Score from "../../models/Score.js";
 import { sendAIInterviewLink } from "../../services/emailService.js";
 import mongoose from "mongoose";
 
@@ -92,6 +93,78 @@ export const CreateAITemplate = async (req, res) => {
     });
   }
 };
+// export const GetAllAIInterview = async (req, res) => {
+//   try {
+//     const adminId = req.user.id;
+//     const { id } = req.query;
+
+//     /* ================= GET SINGLE INTERVIEW ================= */
+//     if (id) {
+//       // Validate ObjectId
+//       if (!mongoose.Types.ObjectId.isValid(id)) {
+//         return res.status(400).json({
+//           success: false,
+//           message: "Invalid interview ID",
+//         });
+//       }
+
+//       const interview = await AI_Interview.findOne({
+//         _id: id,
+//         createdBy: adminId,
+//       }).populate({
+//   path: "candidates.candidateId",
+//   select: "name email mobile",
+// });
+
+//       // console.log("interview",interview)
+//       if (!interview) {
+//         return res.status(404).json({
+//           success: false,
+//           message: "Interview not found",
+//         });
+//       }
+
+//       return res.status(200).json({
+//         success: true,
+//         data: interview,
+//       });
+//     }
+
+//     /* ================= GET ALL DRAFT INTERVIEWS ================= */
+
+//     const drafts = await AI_Interview.find({
+//       createdBy: adminId,
+//     }).sort({ createdAt: -1 });
+    
+
+//     const formattedDrafts = drafts.map((item) => ({
+//       jobId: item._id,
+//       _id: item._id,
+//       position: item.position,
+//       difficulty: item.difficulty,
+//       duration: item.duration,
+//       skills: item.skills,
+//       passingScore: item.passingScore,
+//       numberOfQuestions: item.numberOfQuestions,
+//       description: item.description,
+//       status: item.status,
+//       createdAt: item.createdAt,
+//     }));
+
+//     return res.status(200).json({
+//       success: true,
+//       totalDrafts: formattedDrafts.length,
+//       drafts: formattedDrafts,
+//     });
+//   } catch (error) {
+//     console.error("Get AI Interview Error:", error);
+//     return res.status(500).json({
+//       success: false,
+//       message: "Server error",
+//       error: error.message,
+//     });
+//   }
+// };
 export const GetAllAIInterview = async (req, res) => {
   try {
     const adminId = req.user.id;
@@ -99,7 +172,6 @@ export const GetAllAIInterview = async (req, res) => {
 
     /* ================= GET SINGLE INTERVIEW ================= */
     if (id) {
-      // Validate ObjectId
       if (!mongoose.Types.ObjectId.isValid(id)) {
         return res.status(400).json({
           success: false,
@@ -111,17 +183,39 @@ export const GetAllAIInterview = async (req, res) => {
         _id: id,
         createdBy: adminId,
       }).populate({
-  path: "candidates.candidateId",
-  select: "name email mobile",
-});
+        path: "candidates.candidateId",
+        select: "name email mobile",
+      });
 
-      // console.log("interview",interview)
       if (!interview) {
         return res.status(404).json({
           success: false,
           message: "Interview not found",
         });
       }
+
+      // ✅ ADD THIS ONLY
+      const scores = await Score.find({
+        interviewId: id,
+        interviewModel: "AI_Interview",
+        examType: "AI",
+      });
+
+      const updatedCandidates = interview.candidates.map((candidate) => {
+        const candidateScore = scores.find(
+          (s) =>
+            s.candidateId.toString() ===
+            candidate.candidateId._id.toString()
+        );
+
+        return {
+          ...candidate.toObject(),
+          scoreDetails: candidateScore || null,
+        };
+      });
+
+      interview.candidates = updatedCandidates;
+      // ✅ END HERE
 
       return res.status(200).json({
         success: true,
@@ -134,7 +228,6 @@ export const GetAllAIInterview = async (req, res) => {
     const drafts = await AI_Interview.find({
       createdBy: adminId,
     }).sort({ createdAt: -1 });
-    
 
     const formattedDrafts = drafts.map((item) => ({
       jobId: item._id,
@@ -164,6 +257,7 @@ export const GetAllAIInterview = async (req, res) => {
     });
   }
 };
+
 export const AIInterviewInvitation = async (req, res) => {
   try {
     const { jobId, candidateIds, messageBody, startDate, endDate, testTitle } =
@@ -198,41 +292,9 @@ export const AIInterviewInvitation = async (req, res) => {
       });
     }
 
-    interview.candidates = [];
-    const cooldownCandidates = [];
-
-    // 7-day cooldown threshold
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+   
 
     for (const candidate of candidates) {
-      // 🔒 7-day cooldown check across MCQ and AI interviews
-      const mcqCooldown = await MCQ_Interview.findOne({
-        candidates: {
-          $elemMatch: {
-            candidateId: candidate._id,
-            start_Date: { $gte: sevenDaysAgo },
-          },
-        },
-      });
-
-      const aiCooldown = await AI_Interview.findOne({
-        candidates: {
-          $elemMatch: {
-            candidateId: candidate._id,
-            scheduledStartDate: { $gte: sevenDaysAgo },
-          },
-        },
-      });
-
-      if (mcqCooldown || aiCooldown) {
-        cooldownCandidates.push({
-          candidate: candidate.email,
-          reason: "Candidate was recently invited to an interview. Please wait 7 days.",
-        });
-        continue;
-      }
-
       const interviewLink = `${process.env.FRONTEND_URL || "http://localhost:5173"}/user/login/${interview._id}`;
       const username = `user_${Math.random().toString(36).substring(2, 10)}`;
       const password = randomUUID().slice(0, 8);
@@ -267,8 +329,7 @@ export const AIInterviewInvitation = async (req, res) => {
 
     res.status(200).json({
       message: "Invitations sent successfully",
-      totalCandidates: interview.candidates.length,
-      cooldownCandidates,
+      totalCandidates: candidates.length,
     });
   } catch (error) {
     console.error("Error sending invitations:", error);

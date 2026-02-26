@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { adminService } from "../../services/service/adminService";
 import { useAdminSocket } from "../../hooks/useAdminSocket";
+import ViewAssignedCandidate from "../../components/admin/TestAssessgnment/ViewAssignedCandidate";
 
 const EMPTY_FORM = {
   candidates: [],
@@ -52,7 +53,6 @@ const TestsAssessments = () => {
   const [candidatesLoading, setCandidatesLoading] = useState(false);
   const [editLoading, setEditLoading] = useState(null); // stores item._id being edited
   const candidateDropdownRef = useRef(null);
-console.log("formData",formData)
   useEffect(() => {
     const handler = (e: any) => {
       if (candidateDropdownRef.current && !candidateDropdownRef.current.contains(e.target))
@@ -484,7 +484,7 @@ console.log("formData",formData)
     setSelectedAssessment(null);
   };
 
-  console.log(selectedAssessment)
+  // console.log(selectedAssessment)
   return (
     <AdminLayout
       heading="Tests & Assessments"
@@ -878,177 +878,145 @@ console.log("formData",formData)
               <p className="text-gray-400 text-sm mt-1">Create an assessment and save it as a template</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {assessments.map((item: any) => (
-                <div key={item._id} className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-lg transition-shadow">
-                  <div className="flex justify-between items-center mb-4">
-                    <span className="px-3 py-1 bg-gray-100 text-gray-700 text-xs font-medium rounded-full">{item.passing_score}%</span>
-                    <span className={`px-3 py-1 text-xs font-medium rounded-full ${item.difficulty === "Advanced" ? "bg-orange-100 text-orange-600" : item.difficulty === "Easy" ? "bg-green-100 text-green-600" : "bg-blue-100 text-blue-600"}`}>
-                      {item.difficulty}
-                    </span>
-                  </div>
-                  <div className="mb-4">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-1">{item.test_title}</h3>
-                    <p className="text-sm text-gray-500">{item.primary_skill}</p>
-                  </div>
-                  <div className="space-y-2 mb-4 text-sm text-gray-600">
-                    {item.secondary_skill && <div className="flex items-center gap-2"><FileText className="h-4 w-4" /><span>{item.secondary_skill}</span></div>}
-                    <div className="flex items-center gap-4">
-                      <div className="flex items-center gap-1"><Clock className="h-4 w-4" /><span>{item.duration}</span></div>
-                      <div className="flex items-center gap-1"><CalendarIcon className="h-4 w-4" /><span>{item.no_of_questions} questions</span></div>
-                    </div>
-                    {item.createdAt && <p className="text-xs text-gray-400">Created {new Date(item.createdAt).toLocaleDateString()}</p>}
-                  </div>
-                  <div className="flex gap-3 pt-4">
-                    <button onClick={() => handleUseTemplate(item)} className="flex-1 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors">
-                      Use
-                    </button>
-                    <button onClick={() => handleViewCandidates(item)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors" title="View Candidates">
-                      <Users className="h-4 w-4" />
-                    </button>
-                    {/* NEW: spinner on the edit button while that specific item is loading */}
-                    <button onClick={() => handleEditTemplate(item)} disabled={editLoading === item._id}
-                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center min-w-[42px]">
-                      {editLoading === item._id ? (
-                        <div className="h-4 w-4 border-2 border-gray-500 border-t-transparent rounded-full animate-spin" />
-                      ) : (
-                        "📄"
-                      )}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+  {assessments.map((item: any) => {
+    const primarySkills = item.primary_skill
+      ? item.primary_skill.split(",").map((s: string) => s.trim()).filter(Boolean)
+      : [];
+    const secondarySkills = item.secondary_skill
+      ? item.secondary_skill.split(",").map((s: string) => s.trim()).filter(Boolean)
+      : [];
+    const allSkills = [...primarySkills, ...secondarySkills];
+    const MAX_VISIBLE = 6;
+    const visibleSkills = allSkills.slice(0, MAX_VISIBLE);
+    const remainingCount = allSkills.length - MAX_VISIBLE;
+
+    const difficultyStyles: Record<string, string> = {
+      Advanced: "bg-orange-50 text-orange-600 border-orange-200",
+      Easy:     "bg-emerald-50 text-emerald-600 border-emerald-200",
+      Medium:   "bg-sky-50 text-sky-600 border-sky-200",
+    };
+    const diffStyle = difficultyStyles[item.difficulty] ?? difficultyStyles["Medium"];
+
+    return (
+      <div
+        key={item._id}
+        className="bg-white rounded-xl border border-gray-200 hover:border-indigo-300 hover:shadow-lg transition-all duration-200 flex flex-col h-full"
+      >
+        {/* ── Header ── */}
+        <div className="px-5 pt-5 pb-4 border-b border-gray-100">
+          {/* Badges row */}
+          <div className="flex items-center justify-between mb-3">
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100">
+              {item.examType ?? "MCQ"}
+            </span>
+            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold border ${diffStyle}`}>
+              {item.difficulty}
+            </span>
+          </div>
+
+          {/* Title */}
+          <h3 className="text-base font-semibold text-gray-900 leading-snug line-clamp-2 mb-3">
+            {item.test_title}
+          </h3>
+
+          {/* Meta pills */}
+          <div className="flex flex-wrap gap-2 text-xs text-gray-500">
+            <span className="flex items-center gap-1 bg-gray-50 border border-gray-200 px-2.5 py-1 rounded-full">
+              <Clock className="h-3 w-3 text-gray-400" />
+              {item.duration}
+            </span>
+            <span className="flex items-center gap-1 bg-gray-50 border border-gray-200 px-2.5 py-1 rounded-full">
+              <FileText className="h-3 w-3 text-gray-400" />
+              {item.no_of_questions} Questions
+            </span>
+            <span className="flex items-center gap-1 bg-gray-50 border border-gray-200 px-2.5 py-1 rounded-full">
+              <CheckCircle2 className="h-3 w-3 text-gray-400" />
+              Pass: {item.passing_score}%
+            </span>
+          </div>
+        </div>
+
+        {/* ── Skills ── flex-1 keeps all cards equal height */}
+        <div className="px-5 py-4 flex-1">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2.5">
+            Skills
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {visibleSkills.map((skill: string, i: number) => (
+              <span
+                key={i}
+                className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${
+                  i < primarySkills.length
+                    ? "bg-violet-50 text-violet-700 border-violet-200"   // primary
+                    : "bg-slate-50 text-slate-600 border-slate-200"      // secondary
+                }`}
+              >
+                {skill}
+              </span>
+            ))}
+            {remainingCount > 0 && (
+              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500 border border-gray-200">
+                +{remainingCount} more
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* ── Footer ── */}
+        <div className="px-5 pb-5 pt-3 border-t border-gray-100">
+          {item.createdAt && (
+            <p className="text-xs text-gray-400 mb-3">
+              Created{" "}
+              {new Date(item.createdAt).toLocaleDateString("en-US", {
+                month: "short", day: "numeric", year: "numeric",
+              })}
+            </p>
+          )}
+          <div className="flex gap-2">
+            <button
+              onClick={() => handleUseTemplate(item)}
+              className="flex-1 px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 active:scale-95 transition-all duration-150"
+            >
+              Use Template
+            </button>
+            <button
+              onClick={() => handleViewCandidates(item)}
+              className="px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-all duration-150"
+              title="View Candidates"
+            >
+              <Users className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => handleEditTemplate(item)}
+              disabled={editLoading === item._id}
+              className="px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-w-[42px]"
+            >
+              {editLoading === item._id ? (
+                <div className="h-4 w-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <FileText className="h-4 w-4" />
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  })}
+</div>
+
           )}
         </div>
       )}
 
       {/* Candidate Details Modal */}
-      {showCandidateModal && selectedAssessment && (
-        <div
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-          onClick={closeCandidateModal}
-        >
-          <div
-            className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
-              <div>
-                <h3 className="text-xl font-semibold text-gray-900">{selectedAssessment.test_title}</h3>
-                <p className="text-sm text-gray-500 mt-1">Candidate Details</p>
-              </div>
-              <button onClick={closeCandidateModal} className="text-gray-400 hover:text-gray-600 transition-colors">
-                <X className="h-6 w-6" />
-              </button>
-            </div>
-
-            <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
-              {selectedAssessment.candidates && selectedAssessment.candidates.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-gray-200 bg-gray-50">
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
-                          S.No
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
-                          UserName
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
-                          Email
-                        </th>
-                        {/* <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Password</th> */}
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
-                          Start Date
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
-                          End Date
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
-                          Status
-                        </th>
-                        {/* <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Interview Link</th> */}
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {selectedAssessment.candidates.map(
-                        (candidate: any, index: number) => (
-                          <tr
-                            key={candidate._id || index}
-                            className="hover:bg-gray-50"
-                          >
-                            <td className="px-4 py-3 text-sm text-gray-900">
-                              {index + 1}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-gray-600 font-medium">
-                              {candidate.candidateId.name}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-gray-600 font-medium">
-                              {candidate.candidateId.email}
-                            </td>
-                            {/* <td className="px-4 py-3 text-sm text-gray-900 font-mono">{candidate.password}</td> */}
-                            <td className="px-4 py-3 text-sm text-gray-600">
-                              {new Date(
-                                candidate.start_Date,
-                              ).toLocaleDateString("en-US", {
-                                month: "short",
-                                day: "numeric",
-                                year: "numeric",
-                              })}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-gray-600">
-                              {new Date(candidate.end_Date).toLocaleDateString(
-                                "en-US",
-                                {
-                                  month: "short",
-                                  day: "numeric",
-                                  year: "numeric",
-                                },
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-sm">
-                              <span
-                                className={`px-2 py-1 text-xs font-medium rounded-full ${
-                                  candidate.status === "completed"
-                                    ? "bg-green-100 text-green-700"
-                                    : candidate.status === "in_progress"
-                                      ? "bg-blue-100 text-blue-700"
-                                      : "bg-yellow-100 text-yellow-700"
-                                }`}
-                              >
-                                {candidate.status.charAt(0).toUpperCase() +
-                                  candidate.status.slice(1)}
-                              </span>
-                            </td>
-                            {/* <td className="px-4 py-3 text-sm">
-                            <a href={candidate.interviewLink} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:text-indigo-800 underline">
-                              Open Link
-                            </a>
-                          </td> */}
-                          </tr>
-                        ),
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <Users className="h-12 w-12 text-gray-300 mb-3" />
-                  <p className="text-gray-500 font-medium">No candidates assigned</p>
-                  <p className="text-gray-400 text-sm mt-1">Candidates will appear here once they are invited</p>
-                </div>
-              )}
-            </div>
-
-            {/* <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
-              <button onClick={closeCandidateModal} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
-                Close
-              </button>
-            </div> */}
-          </div>
-        </div>
-      )}
+ {showCandidateModal && selectedAssessment && (
+  <ViewAssignedCandidate
+    isOpen={showCandidateModal}
+    onClose={closeCandidateModal}
+    assessmentData={selectedAssessment}  // ✅ Pass full assessment object
+  />
+)}
     </AdminLayout>
   );
 };
