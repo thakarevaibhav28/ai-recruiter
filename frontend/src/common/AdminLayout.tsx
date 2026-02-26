@@ -1,11 +1,11 @@
-import React, { ReactNode } from 'react';
-import Sidebar from './AdminSidebar';
-import Header from './AdminHeader';
+import React, { ReactNode, useState } from "react";
+import Sidebar from "./AdminSidebar";
+import Header from "./AdminHeader";
 
 interface AdminLayoutProps {
   children: ReactNode;
   heading?: string;
-  subheading?: string;  // Added this
+  subheading?: string;
   showSearch?: boolean;
   userName?: string;
   userInitial?: string;
@@ -16,24 +16,28 @@ interface AdminLayoutProps {
 const AdminLayout: React.FC<AdminLayoutProps> = ({
   children,
   heading = "Hi, John",
-  subheading,  // Added this
-  showSearch = true,
+  subheading,
   userName = "John",
-  userInitial = "H",
+  userInitial = "A",
 }) => {
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
   return (
-    <div className="flex min-h-screen w-full bg-[#F4F7FE] ">
-      <Sidebar       />
-      
-      <div className="flex flex-1 flex-col ml-60 pt-14">
-        <Header 
+    <div className="flex min-h-screen w-full bg-[#F4F7FE]">
+      <Sidebar open={sidebarOpen} onToggle={() => setSidebarOpen((v) => !v)} />
+
+      {/* Shift content using CSS transition — no framer-motion */}
+      <div
+        style={{ marginLeft: sidebarOpen ? 240 : 68 }}
+        className="flex flex-1 flex-col pt-14 transition-[margin-left] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
+      >
+        <Header
           heading={heading}
-          subheading={subheading}  // Added this
-          showSearch={showSearch}
+          subheading={subheading}
           userName={userName}
           userInitial={userInitial}
         />
-        
+
         <main className="flex-1 overflow-auto px-8 py-6">
           {children}
         </main>

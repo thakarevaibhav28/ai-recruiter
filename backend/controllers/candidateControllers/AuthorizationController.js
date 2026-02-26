@@ -111,6 +111,100 @@ export const CreateCandidate = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
+export const GetFilteredCandidates = async (req, res) => {
+  try {
+    const page   = Math.max(parseInt(req.query.page)  || 1,  1);
+    const limit  = Math.max(parseInt(req.query.limit) || 10, 1);
+    const skip   = (page - 1) * limit;
+
+    const status     = (req.query.status     || "all").toLowerCase();
+    const search     = (req.query.search     || "").trim();
+    const role       = (req.query.role       || "").trim();
+    const experience = (req.query.experience || "").trim();
+    const skillsRaw  = (req.query.skills     || "").trim();
+
+    // ── Build Query ─────────────────────────────────────────
+    let query = {};
+
+    // 1. Status filter
+    if (status !== "all" && ["active", "inactive"].includes(status)) {
+      query.candidate_status = status;
+    }
+
+    // 2. Full-text search on name / email / mobile
+    if (search) {
+      const regex = new RegExp(search, "i");
+      query.$or = [
+        { name:   regex },
+        { email:  regex },
+        { mobile: regex },
+      ];
+    }
+
+    // 3. Role filter (partial, case-insensitive)
+    if (role) {
+      query.role = new RegExp(role, "i");
+    }
+
+    // 4. Experience filter
+    //    Stored as strings like "1-2", "3-5", "5-10", "10+"
+    if (experience) {
+      query.year_of_experience = new RegExp(experience, "i");
+    }
+
+    // 5. Skills filter (comma-separated → each must appear in key_Skills)
+    if (skillsRaw) {
+      const skillList = skillsRaw
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      if (skillList.length > 0) {
+        // AND logic: every requested skill must appear somewhere in key_Skills
+        query.$and = skillList.map((skill) => ({
+          key_Skills: new RegExp(skill, "i"),
+        }));
+      }
+    }
+
+    // ── Execute ──────────────────────────────────────────────
+    const [totalRecords, candidates] = await Promise.all([
+      Candidate.countDocuments(query),
+      Candidate.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+    ]);
+
+    // ── Derive distinct roles & experience values for dropdowns
+    // (Only fetched when no role/exp filter is applied — lightweight helper)
+    let meta = {};
+    if (!role && !experience) {
+      const [roles, experiences] = await Promise.all([
+        Candidate.distinct("role"),
+        Candidate.distinct("year_of_experience"),
+      ]);
+      meta = { roles, experiences };
+    }
+
+    return res.status(200).json({
+      success:     true,
+      data:        candidates,
+      totalPages:  Math.ceil(totalRecords / limit),
+      totalRecords,
+      currentPage: page,
+      meta,        // roles + experience options for filter dropdowns
+    });
+
+  } catch (error) {
+    console.error("Error fetching filtered candidates:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch candidates",
+    });
+  }
+};
+
 
 export const GetCandidate = async (req, res) => {
   try {

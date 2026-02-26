@@ -33,6 +33,10 @@ class AdminService {
     return adminApi.getAllCandidate(page, limit, status);
   }
 
+  getFilteredCandidates(params: Record<string, string>) {
+    return adminApi.getFilteredCandidates(params);
+  }
+
   getCandidateProfile(id: string) {
     return adminApi.getCandidateProfile(id);
   }
@@ -85,16 +89,16 @@ class AdminService {
     return adminApi.cancleInterview(type, interviewId, data);
   }
 
-  getTopPerformance(examType:string){
-    return adminApi.getTopPerformance(examType)
+  getTopPerformance(examType: string) {
+    return adminApi.getTopPerformance(examType);
   }
-  getScore(examType:string){
-    return adminApi.getScore(examType)
+  getScore(examType: string) {
+    return adminApi.getScore(examType);
   }
 
   // get top AI performance
   getTopAIPerformance() {
-    return adminApi.getTopAIPerformance();    
+    return adminApi.getTopAIPerformance();
   }
 }
 

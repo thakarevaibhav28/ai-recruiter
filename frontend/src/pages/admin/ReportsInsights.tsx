@@ -52,7 +52,7 @@ interface ScoreType {
   scores?: any[];
 }
 
-const TableSkeleton =()=>{
+const TableSkeleton = () => {
   return (
     <>
       {[...Array(5)].map((_, i) => (
@@ -86,9 +86,15 @@ const ReportsInsights = () => {
     endDate: "",
   });
 
-  const filteredScores = scores.filter((row) => {
-    if (row.examType !== "MCQ" && activeTab === "MCQ") return false;
+  const [aiFilters, setAiFilters] = useState({
+    search: "",
+    verdict: "",
+    minScore: "",
+    startDate: "",
+    endDate: "",
+  });
 
+  const filteredScores = scores.filter((row) => {
     const percentage = Math.round((row.totalScore / row.maxScore) * 100);
 
     const matchesName =
@@ -113,6 +119,30 @@ const ReportsInsights = () => {
     return (
       matchesName && matchesMin && matchesMax && matchesStart && matchesEnd
     );
+  });
+  const filteredAIScores = scores.filter((row) => {
+    const nameMatch =
+      !aiFilters.search ||
+      row.feedback?.candidateName
+        ?.toLowerCase()
+        .includes(aiFilters.search.toLowerCase());
+
+    const verdictMatch =
+      !aiFilters.verdict || row.feedback?.overallVerdict === aiFilters.verdict;
+
+    const scoreMatch =
+      !aiFilters.minScore || (row.score || 0) >= Number(aiFilters.minScore);
+
+    const rowDate = new Date(row.completedAt || row.createdAt).getTime();
+
+    const startMatch =
+      !aiFilters.startDate ||
+      rowDate >= new Date(aiFilters.startDate).getTime();
+
+    const endMatch =
+      !aiFilters.endDate || rowDate <= new Date(aiFilters.endDate).getTime();
+
+    return nameMatch && verdictMatch && scoreMatch && startMatch && endMatch;
   });
 
   const fetchScores = async (type: "AI" | "MCQ") => {
@@ -151,13 +181,16 @@ const ReportsInsights = () => {
   }, [scores, activeTab]);
 
   // AI pagination computed values
-  const aiTotalPages = Math.ceil(scores.length / aiItemsPerPage);
-  const aiPaginatedScores = activeTab === "AI"
-    ? scores.slice(
-        (aiCurrentPage - 1) * aiItemsPerPage,
-        aiCurrentPage * aiItemsPerPage,
-      )
-    : [];
+  // AI pagination computed values
+  const aiTotalPages = Math.ceil(filteredAIScores.length / aiItemsPerPage);
+
+  const aiPaginatedScores =
+    activeTab === "AI"
+      ? filteredAIScores.slice(
+          (aiCurrentPage - 1) * aiItemsPerPage,
+          aiCurrentPage * aiItemsPerPage,
+        )
+      : [];
 
   // Auto-expand first card on page change
   useEffect(() => {
@@ -196,12 +229,74 @@ const ReportsInsights = () => {
     setSelectedScore(result);
     setShowAIAnalysis(true);
   };
-
+  useEffect(() => {
+    setAiCurrentPage(1);
+  }, [aiFilters]);
   // Compute stats dynamically from scores
   const stats = useMemo(() => {
     const total = scores.length;
 
-    // Average AI Score
+    if (activeTab === "MCQ") {
+      // MCQ-specific stats
+      const avgPercent =
+        total > 0
+          ? (
+              scores.reduce(
+                (sum, s) => sum + Math.round((s.totalScore / s.maxScore) * 100),
+                0,
+              ) / total
+            ).toFixed(1)
+          : "0.0";
+
+      const passCount = scores.filter(
+        (s) =>
+          Math.round((s.totalScore / s.maxScore) * 100) >=
+          (s.interviewId?.passing_score || 60),
+      ).length;
+      const passRate = total > 0 ? Math.round((passCount / total) * 100) : 0;
+
+      const failCount = total - passCount;
+      const failRate = total > 0 ? Math.round((failCount / total) * 100) : 0;
+
+      const avgDuration =
+        total > 0
+          ? scores.map((s) => s.interviewId?.duration || "N/A").find(Boolean) ||
+            "N/A"
+          : "N/A";
+
+      return [
+        {
+          title: "Average MCQ Score",
+          value: `${avgPercent}%`,
+          icon: TrendingUp,
+          color: "text-green-600",
+          bgColor: "bg-green-50",
+        },
+        {
+          title: "MCQ Pass Rate",
+          value: `${passRate}%`,
+          icon: Users,
+          color: "text-purple-600",
+          bgColor: "bg-purple-50",
+        },
+        {
+          title: "MCQ Tests Completed",
+          value: String(total),
+          icon: CheckCircle,
+          color: "text-pink-600",
+          bgColor: "bg-pink-50",
+        },
+        {
+          title: "Fail Rate",
+          value: `${failRate}%`,
+          icon: TrendingUp,
+          color: "text-orange-600",
+          bgColor: "bg-orange-50",
+        },
+      ];
+    }
+
+    // AI tab stats (original logic)
     const avgScore =
       total > 0
         ? (scores.reduce((sum, s) => sum + (s.score || 0), 0) / total).toFixed(
@@ -209,24 +304,18 @@ const ReportsInsights = () => {
           )
         : "0.0";
 
-    // L1 Pass Rate: candidates whose score >= passingScore
     const passCount =
       total > 0
         ? scores.filter(
-            (s) =>
-              (s.score || 0) >=
-              (s.interview_id?.passingScore || 70),
+            (s) => (s.score || 0) >= (s.interview_id?.passingScore || 70),
           ).length
         : 0;
-    const passRate =
-      total > 0 ? Math.round((passCount / total) * 100) : 0;
+    const passRate = total > 0 ? Math.round((passCount / total) * 100) : 0;
 
-    // Rejection rate
     const rejectCount = scores.filter(
       (s) => s.feedback?.overallVerdict === "reject",
     ).length;
-    const rejectRate =
-      total > 0 ? Math.round((rejectCount / total) * 100) : 0;
+    const rejectRate = total > 0 ? Math.round((rejectCount / total) * 100) : 0;
 
     return [
       {
@@ -237,7 +326,7 @@ const ReportsInsights = () => {
         bgColor: "bg-green-50",
       },
       {
-        title: "L1 Pass Rate",
+        title: "AI Pass Rate",
         value: `${passRate}%`,
         icon: Users,
         color: "text-purple-600",
@@ -258,7 +347,7 @@ const ReportsInsights = () => {
         bgColor: "bg-orange-50",
       },
     ];
-  }, [scores]);
+  }, [scores, activeTab]);
 
   return (
     <AdminLayout
@@ -328,26 +417,71 @@ const ReportsInsights = () => {
             </h2>
             <div className="text-sm text-gray-500">
               Showing{" "}
-              {scores.length === 0
+              {filteredAIScores.length === 0
                 ? "0"
                 : `${(aiCurrentPage - 1) * aiItemsPerPage + 1}-${Math.min(aiCurrentPage * aiItemsPerPage, scores.length)}`}{" "}
-              of {scores.length} candidates
+              of {filteredAIScores.length} candidates
             </div>
           </div>
 
           {/* Search and Filter */}
-          <div className="flex justify-end gap-3">
+          <div className="flex flex-wrap gap-3">
+            {/* Search */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <input
-                placeholder="Search"
-                className="pl-9 pr-4 py-2 w-64 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-600 focus:border-transparent outline-none"
+                placeholder="Search candidate..."
+                value={aiFilters.search}
+                onChange={(e) =>
+                  setAiFilters((f) => ({ ...f, search: e.target.value }))
+                }
+                className="pl-9 pr-4 py-2 w-56 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-600"
               />
             </div>
-            <button className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-              <SlidersHorizontal className="h-4 w-4" />
-              Status
-            </button>
+
+            {/* Verdict Filter */}
+            <select
+              value={aiFilters.verdict}
+              onChange={(e) =>
+                setAiFilters((f) => ({ ...f, verdict: e.target.value }))
+              }
+              className="px-3 py-2 text-sm border border-gray-200 rounded-lg"
+            >
+              <option value="">All Status</option>
+              <option value="hire">Hire</option>
+              <option value="consider">Consider</option>
+              <option value="rejected">Rejected</option>
+            </select>
+
+            {/* Min Score */}
+            <input
+              type="number"
+              placeholder="Min Score %"
+              value={aiFilters.minScore}
+              onChange={(e) =>
+                setAiFilters((f) => ({ ...f, minScore: e.target.value }))
+              }
+              className="px-3 py-2 text-sm border border-gray-200 rounded-lg w-32"
+            />
+
+            {/* Date Range */}
+            <input
+              type="date"
+              value={aiFilters.startDate}
+              onChange={(e) =>
+                setAiFilters((f) => ({ ...f, startDate: e.target.value }))
+              }
+              className="px-3 py-2 text-sm border border-gray-200 rounded-lg"
+            />
+
+            <input
+              type="date"
+              value={aiFilters.endDate}
+              onChange={(e) =>
+                setAiFilters((f) => ({ ...f, endDate: e.target.value }))
+              }
+              className="px-3 py-2 text-sm border border-gray-200 rounded-lg"
+            />
           </div>
 
           {/* Loading State */}
@@ -358,7 +492,7 @@ const ReportsInsights = () => {
           )}
 
           {/* No Data State */}
-          {!loading && scores.length === 0 && (
+          {!loading && filteredAIScores.length === 0 && (
             <div className="w-full flex items-center justify-center py-12 text-gray-500">
               No Data Available
             </div>
@@ -384,51 +518,35 @@ const ReportsInsights = () => {
                     <div
                       className="flex items-center justify-between p-5 cursor-pointer select-none"
                       onClick={() =>
-                        setExpandedCardId(
-                          isExpanded ? null : result._id,
-                        )
+                        setExpandedCardId(isExpanded ? null : result._id)
                       }
                     >
                       <div className="flex items-center gap-4">
                         <div className="h-12 w-12 rounded-full bg-gradient-to-br from-indigo-400 to-indigo-600 flex items-center justify-center text-white font-semibold">
-                          {getInitials(
-                            feedback?.candidateName || "NA",
-                          )}
+                          {getInitials(feedback?.candidateName || "NA")}
                         </div>
                         <div>
                           <h3 className="text-lg font-bold text-gray-900">
-                            {feedback?.candidateName ||
-                              "Unknown Candidate"}
+                            {feedback?.candidateName || "Unknown Candidate"}
                           </h3>
                           <div className="flex items-center gap-2 text-sm text-gray-500 mt-0.5">
-                            <span>
-                              {feedback?.role || "N/A"}
-                            </span>
-                            <span className="text-gray-300">
-                              ·
-                            </span>
+                            <span>{feedback?.role || "N/A"}</span>
+                            <span className="text-gray-300">·</span>
                             <span className="flex items-center gap-1">
                               <Calendar className="h-3.5 w-3.5" />
                               {formatDate(
-                                result.completedAt ||
-                                  result.createdAt,
+                                result.completedAt || result.createdAt,
                               )}
                             </span>
-                            <span className="text-gray-300">
-                              ·
-                            </span>
+                            <span className="text-gray-300">·</span>
                             <span className="flex items-center gap-1">
                               <Clock className="h-3.5 w-3.5" />
-                              {result.interview_id?.duration ||
-                                "N/A"}
+                              {result.interview_id?.duration || "N/A"}
                             </span>
-                            <span className="text-gray-300">
-                              ·
-                            </span>
+                            <span className="text-gray-300">·</span>
                             <span className="flex items-center gap-1">
                               <MessageSquare className="h-3.5 w-3.5" />
-                              {result.transcript?.length || 0}{" "}
-                              responses
+                              {result.transcript?.length || 0} responses
                             </span>
                           </div>
                         </div>
@@ -437,12 +555,10 @@ const ReportsInsights = () => {
                       <div className="flex items-center gap-3">
                         <span
                           className={`px-3 py-1 rounded-full text-xs font-semibold capitalize ${
-                            feedback?.overallVerdict ===
-                              "accept" ||
+                            feedback?.overallVerdict === "accept" ||
                             feedback?.overallVerdict === "hire"
                               ? "bg-green-100 text-green-700"
-                              : feedback?.overallVerdict ===
-                                  "reject"
+                              : feedback?.overallVerdict === "reject"
                                 ? "bg-red-100 text-red-700"
                                 : "bg-yellow-100 text-yellow-700"
                           }`}
@@ -478,8 +594,7 @@ const ReportsInsights = () => {
                               Communication
                             </p>
                             <p className="text-2xl font-bold text-gray-900">
-                              {feedback?.speechPatterns
-                                ?.clarityScore || 0}%
+                              {feedback?.speechPatterns?.clarityScore || 0}%
                             </p>
                           </div>
                           <div className="bg-gray-50 rounded-lg p-4 text-center border border-gray-100">
@@ -499,8 +614,7 @@ const ReportsInsights = () => {
                                     : "text-red-600"
                               }`}
                             >
-                              {feedback?.confidenceLabel ||
-                                "N/A"}
+                              {feedback?.confidenceLabel || "N/A"}
                             </p>
                           </div>
                           <div className="bg-gray-50 rounded-lg p-4 text-center border border-gray-100">
@@ -519,9 +633,7 @@ const ReportsInsights = () => {
                             Assessment summary
                           </p>
                           <p className="text-sm text-gray-800 italic">
-                            "
-                            {feedback?.verdictReason ||
-                              "No summary available"}
+                            "{feedback?.verdictReason || "No summary available"}
                             "
                           </p>
                         </div>
@@ -531,9 +643,7 @@ const ReportsInsights = () => {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleViewDetailedScorecard(
-                                result,
-                              );
+                              handleViewDetailedScorecard(result);
                             }}
                             className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition-colors"
                           >
@@ -559,16 +669,14 @@ const ReportsInsights = () => {
           </div>
 
           {/* Pagination */}
-          {!loading && scores.length > aiItemsPerPage && (
+          {!loading && filteredAIScores.length > aiItemsPerPage && (
             <div className="flex items-center justify-between pt-2">
               <p className="text-sm text-gray-500">
                 Page {aiCurrentPage} of {aiTotalPages}
               </p>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() =>
-                    setAiCurrentPage((p) => Math.max(1, p - 1))
-                  }
+                  onClick={() => setAiCurrentPage((p) => Math.max(1, p - 1))}
                   disabled={aiCurrentPage === 1}
                   className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
@@ -592,9 +700,7 @@ const ReportsInsights = () => {
                 )}
                 <button
                   onClick={() =>
-                    setAiCurrentPage((p) =>
-                      Math.min(aiTotalPages, p + 1),
-                    )
+                    setAiCurrentPage((p) => Math.min(aiTotalPages, p + 1))
                   }
                   disabled={aiCurrentPage === aiTotalPages}
                   className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
@@ -963,8 +1069,11 @@ const ReportsInsights = () => {
                   Detailed Scorecard
                 </h2>
                 <p className="text-sm text-gray-500 mt-1">
-                  {selectedScore.feedback?.candidateName || "Candidate"} &middot;{" "}
-                  {selectedScore.feedback?.role || selectedScore.interview_id?.position || "N/A"}
+                  {selectedScore.feedback?.candidateName || "Candidate"}{" "}
+                  &middot;{" "}
+                  {selectedScore.feedback?.role ||
+                    selectedScore.interview_id?.position ||
+                    "N/A"}
                 </p>
               </div>
               <button
@@ -1010,12 +1119,14 @@ const ReportsInsights = () => {
                           selectedScore.feedback?.overallVerdict === "accept" ||
                           selectedScore.feedback?.overallVerdict === "hire"
                             ? "bg-green-100 text-green-700"
-                            : selectedScore.feedback?.overallVerdict === "reject"
+                            : selectedScore.feedback?.overallVerdict ===
+                                "reject"
                               ? "bg-red-100 text-red-700"
                               : "bg-yellow-100 text-yellow-700"
                         }`}
                       >
-                        Verdict: {selectedScore.feedback?.overallVerdict || "N/A"}
+                        Verdict:{" "}
+                        {selectedScore.feedback?.overallVerdict || "N/A"}
                       </span>
                     </div>
                   </div>
@@ -1062,16 +1173,20 @@ const ReportsInsights = () => {
               {/* Skills Tags */}
               {selectedScore.interview_id?.skills?.length > 0 && (
                 <div>
-                  <p className="text-sm font-semibold text-gray-700 mb-2">Skills Evaluated</p>
+                  <p className="text-sm font-semibold text-gray-700 mb-2">
+                    Skills Evaluated
+                  </p>
                   <div className="flex flex-wrap gap-2">
-                    {selectedScore.interview_id.skills.map((skill: string, idx: number) => (
-                      <span
-                        key={idx}
-                        className="px-3 py-1 bg-indigo-50 text-indigo-700 text-xs font-medium rounded-full border border-indigo-200"
-                      >
-                        {skill}
-                      </span>
-                    ))}
+                    {selectedScore.interview_id.skills.map(
+                      (skill: string, idx: number) => (
+                        <span
+                          key={idx}
+                          className="px-3 py-1 bg-indigo-50 text-indigo-700 text-xs font-medium rounded-full border border-indigo-200"
+                        >
+                          {skill}
+                        </span>
+                      ),
+                    )}
                   </div>
                 </div>
               )}
@@ -1133,9 +1248,13 @@ const ReportsInsights = () => {
                   <div className="space-y-4">
                     <div>
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm text-gray-700">Clarity Score</span>
+                        <span className="text-sm text-gray-700">
+                          Clarity Score
+                        </span>
                         <span className="text-sm font-semibold text-gray-900">
-                          {selectedScore.feedback?.speechPatterns?.clarityScore || 0}%
+                          {selectedScore.feedback?.speechPatterns
+                            ?.clarityScore || 0}
+                          %
                         </span>
                       </div>
                       <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
@@ -1149,9 +1268,13 @@ const ReportsInsights = () => {
                     </div>
                     <div>
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm text-gray-700">Confidence Level</span>
+                        <span className="text-sm text-gray-700">
+                          Confidence Level
+                        </span>
                         <span className="text-sm font-semibold text-gray-900">
-                          {selectedScore.feedback?.speechPatterns?.confidenceLevel || 0}%
+                          {selectedScore.feedback?.speechPatterns
+                            ?.confidenceLevel || 0}
+                          %
                         </span>
                       </div>
                       <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
@@ -1166,15 +1289,21 @@ const ReportsInsights = () => {
                     <div className="grid grid-cols-2 gap-3 mt-2">
                       <div className="bg-gray-50 rounded-lg p-3 text-center border border-gray-100">
                         <p className="text-lg font-bold text-gray-900">
-                          {selectedScore.feedback?.speechPatterns?.avgResponseTime || "N/A"}
+                          {selectedScore.feedback?.speechPatterns
+                            ?.avgResponseTime || "N/A"}
                         </p>
-                        <p className="text-xs text-gray-500">Avg Response Time</p>
+                        <p className="text-xs text-gray-500">
+                          Avg Response Time
+                        </p>
                       </div>
                       <div className="bg-gray-50 rounded-lg p-3 text-center border border-gray-100">
                         <p className="text-lg font-bold text-gray-900">
-                          {selectedScore.feedback?.speechPatterns?.complexityScore || 0}
+                          {selectedScore.feedback?.speechPatterns
+                            ?.complexityScore || 0}
                         </p>
-                        <p className="text-xs text-gray-500">Complexity Score</p>
+                        <p className="text-xs text-gray-500">
+                          Complexity Score
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -1224,7 +1353,10 @@ const ReportsInsights = () => {
                   Assessment Summary
                 </h3>
                 <p className="text-sm text-gray-800 italic">
-                  "{selectedScore.feedback?.verdictReason || "No summary available"}"
+                  "
+                  {selectedScore.feedback?.verdictReason ||
+                    "No summary available"}
+                  "
                 </p>
               </div>
 
@@ -1283,8 +1415,11 @@ const ReportsInsights = () => {
                   AI Analysis Details
                 </h2>
                 <p className="text-sm text-gray-500 mt-1">
-                  {selectedScore.feedback?.candidateName || "Candidate"} &middot;{" "}
-                  {selectedScore.feedback?.role || selectedScore.interview_id?.position || "N/A"}
+                  {selectedScore.feedback?.candidateName || "Candidate"}{" "}
+                  &middot;{" "}
+                  {selectedScore.feedback?.role ||
+                    selectedScore.interview_id?.position ||
+                    "N/A"}
                 </p>
               </div>
               <button
@@ -1422,7 +1557,9 @@ const ReportsInsights = () => {
                 <div className="grid grid-cols-4 gap-4">
                   <div className="text-center p-4 bg-blue-50 rounded-xl border border-blue-200">
                     <div className="text-3xl font-bold text-blue-600">
-                      {selectedScore.feedback?.speechPatterns?.clarityScore || 0}%
+                      {selectedScore.feedback?.speechPatterns?.clarityScore ||
+                        0}
+                      %
                     </div>
                     <div className="text-xs text-gray-600 mt-1">
                       Clarity Score
@@ -1430,7 +1567,8 @@ const ReportsInsights = () => {
                   </div>
                   <div className="text-center p-4 bg-green-50 rounded-xl border border-green-200">
                     <div className="text-3xl font-bold text-green-600">
-                      {selectedScore.feedback?.speechPatterns?.avgResponseTime || "N/A"}
+                      {selectedScore.feedback?.speechPatterns
+                        ?.avgResponseTime || "N/A"}
                     </div>
                     <div className="text-xs text-gray-600 mt-1">
                       Avg Response Time
@@ -1438,7 +1576,9 @@ const ReportsInsights = () => {
                   </div>
                   <div className="text-center p-4 bg-purple-50 rounded-xl border border-purple-200">
                     <div className="text-3xl font-bold text-purple-600">
-                      {selectedScore.feedback?.speechPatterns?.confidenceLevel || 0}%
+                      {selectedScore.feedback?.speechPatterns
+                        ?.confidenceLevel || 0}
+                      %
                     </div>
                     <div className="text-xs text-gray-600 mt-1">
                       Confidence Level
@@ -1446,7 +1586,8 @@ const ReportsInsights = () => {
                   </div>
                   <div className="text-center p-4 bg-orange-50 rounded-xl border border-orange-200">
                     <div className="text-3xl font-bold text-orange-600">
-                      {selectedScore.feedback?.speechPatterns?.complexityScore || 0}
+                      {selectedScore.feedback?.speechPatterns
+                        ?.complexityScore || 0}
                     </div>
                     <div className="text-xs text-gray-600 mt-1">
                       Complexity Score
@@ -1483,14 +1624,18 @@ const ReportsInsights = () => {
                   </div>
                   {selectedScore.behaviorReport.events?.length > 0 && (
                     <div className="mt-4 space-y-2">
-                      <p className="text-sm font-semibold text-gray-700">Events:</p>
+                      <p className="text-sm font-semibold text-gray-700">
+                        Events:
+                      </p>
                       {selectedScore.behaviorReport.events.map(
                         (event: any, idx: number) => (
                           <div
                             key={idx}
                             className="text-sm text-gray-600 bg-white p-2 rounded border border-gray-100"
                           >
-                            {event.type || event.description || JSON.stringify(event)}
+                            {event.type ||
+                              event.description ||
+                              JSON.stringify(event)}
                           </div>
                         ),
                       )}
@@ -1505,7 +1650,10 @@ const ReportsInsights = () => {
                   Verdict Summary
                 </h3>
                 <p className="text-sm text-gray-800 italic">
-                  "{selectedScore.feedback?.verdictReason || "No summary available"}"
+                  "
+                  {selectedScore.feedback?.verdictReason ||
+                    "No summary available"}
+                  "
                 </p>
               </div>
 
