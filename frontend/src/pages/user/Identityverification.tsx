@@ -693,7 +693,6 @@
 
 // export default IdentityVerification;
 
-
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -707,7 +706,6 @@ import {
   Shield,
   CreditCard,
   BookOpen,
-  Hash,
   Loader2,
   Eye,
   Sun,
@@ -715,6 +713,8 @@ import {
   ZoomIn,
   Smile,
   XCircle,
+  ScanLine,
+  FlipHorizontal,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { userService } from "../../services/service/userService";
@@ -745,7 +745,7 @@ const fileToDataUrl = (file: File): Promise<string | null> =>
     reader.readAsDataURL(file);
   });
 
-// ─── Aadhaar OCR validation ───────────────────────────────────────────────────
+// ─── Aadhaar OCR validation (uploaded file) ───────────────────────────────────
 const validateAadhaarWithOCR = async (
   file: File
 ): Promise<{ isValid: boolean; reason: string }> => {
@@ -770,6 +770,33 @@ const validateAadhaarWithOCR = async (
     return {
       isValid: false,
       reason: `Could not confirm this is an Aadhaar card. Missing: ${missing.join(", ")}. Please upload a clear, unobstructed photo of your Aadhaar card.`,
+    };
+  } catch {
+    return { isValid: true, reason: "OCR check skipped due to an error" };
+  }
+};
+
+// ─── Aadhaar OCR validation (dataUrl — camera capture) ───────────────────────
+const validateAadhaarDataUrl = async (
+  dataUrl: string
+): Promise<{ isValid: boolean; reason: string }> => {
+  try {
+    const { data: { text } } = await Tesseract.recognize(dataUrl, "eng", { logger: () => {} });
+    const upper = text.toUpperCase();
+    const hasAadhaarKeyword = /AADHAAR|AADHAR|UIDAI/.test(upper) || /\bUID\b/.test(upper);
+    const has12Digit =
+      /\d{4}[\s\-]?\d{4}[\s\-]?\d{4}/.test(upper) ||
+      /[X\d]{4}[\s\-]?[X\d]{4}[\s\-]?[X\d]{4}/i.test(upper);
+    const hasGovt = /GOVERNMENT\s+OF\s+INDIA|GOVT\.?\s+OF\s+INDIA/.test(upper);
+    const passed = [hasAadhaarKeyword, has12Digit, hasGovt].filter(Boolean).length;
+    if (passed >= 2) return { isValid: true, reason: "Aadhaar card detected via OCR" };
+    const missing: string[] = [];
+    if (!hasAadhaarKeyword) missing.push("Aadhaar/UIDAI text");
+    if (!has12Digit) missing.push("12-digit number");
+    if (!hasGovt) missing.push('"Govt of India" text');
+    return {
+      isValid: false,
+      reason: `Could not verify as Aadhaar card. Missing: ${missing.join(", ")}. Ensure the entire card is visible, well-lit, and held steady.`,
     };
   } catch {
     return { isValid: true, reason: "OCR check skipped due to an error" };
@@ -806,17 +833,9 @@ const validatePassportWithOCR = async (
   }
 };
 
-// ─── Aadhaar number validation ────────────────────────────────────────────────
-const validateAadhaarNumber = (num: string): boolean => {
-  const cleaned = num.replace(/\s|-/g, "");
-  return /^\d{12}$/.test(cleaned) && cleaned !== "000000000000";
-};
-
 // ═══════════════════════════════════════════════════════════════════════════════
-// ─── ENHANCED FACE / SELFIE LOGIC ─────────────────────────────────────────────
+// ─── SELFIE FACE LOGIC ────────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
-
-/** Eye Aspect Ratio (Soukupová & Čech, 2016) — < 0.20 = eye closed */
 const ptDist = (a: faceapi.Point, b: faceapi.Point) =>
   Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
 
@@ -938,7 +957,6 @@ const validateCapturedImage = async (
     if (detection.score < 0.55)
       return { isValid: false, reason: "Face not clearly detected. Please improve lighting and ensure your face fills the frame." };
 
-    // EAR eye-open check
     const earL = eyeAspectRatio(landmarks.getLeftEye());
     const earR = eyeAspectRatio(landmarks.getRightEye());
     if (earL < EAR_THRESHOLD || earR < EAR_THRESHOLD)
@@ -947,10 +965,10 @@ const validateCapturedImage = async (
     if (!landmarks.getLeftEye()?.length || !landmarks.getRightEye()?.length)
       return { isValid: false, reason: "Eyes not clearly visible. Please remove sunglasses or any obstruction and try again." };
 
-    const nose = landmarks.getNose(), jaw = landmarks.getJawOutline();
-    if (nose?.length && jaw?.length) {
-      const jawW = jaw[jaw.length - 1].x - jaw[0].x;
-      if (jawW > 0 && Math.abs(nose[nose.length - 1].x - (jaw[0].x + jawW / 2)) / jawW > 0.28)
+    const nose2 = landmarks.getNose(), jaw2 = landmarks.getJawOutline();
+    if (nose2?.length && jaw2?.length) {
+      const jawW = jaw2[jaw2.length - 1].x - jaw2[0].x;
+      if (jawW > 0 && Math.abs(nose2[nose2.length - 1].x - (jaw2[0].x + jawW / 2)) / jawW > 0.28)
         return { isValid: false, reason: "Please face the camera directly. Your face appears to be turned to the side." };
     }
 
@@ -973,9 +991,18 @@ const CHECK_PILLS: { key: string; label: string; icon: React.ReactNode; pass: (c
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Step = "document" | "selfie";
 type DocType = "aadhaar" | "passport";
-type AadhaarMode = "upload" | "number";
+// "number" tab replaced with "camera" — physical card shown to webcam
+type AadhaarMode = "upload" | "camera";
 type UploadStatus = "idle" | "uploading" | "verified" | "error";
 type CameraStatus = "idle" | "active" | "validating" | "processing" | "completed";
+
+// States for the card-camera flow
+type CardCamStatus =
+  | "idle"      // not started yet
+  | "active"    // camera running, live preview
+  | "scanning"  // Tesseract OCR running on frozen frame
+  | "verified"  // OCR passed
+  | "error";    // OCR failed — show retake
 
 // ─── Component ────────────────────────────────────────────────────────────────
 const IdentityVerification: React.FC = () => {
@@ -986,25 +1013,29 @@ const IdentityVerification: React.FC = () => {
   const [docType, setDocType] = useState<DocType>("aadhaar");
   const [aadhaarMode, setAadhaarMode] = useState<AadhaarMode>("upload");
 
+  // ── document upload state ────────────────────────────────────────────────────
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>("idle");
   const [uploadedFile, setUploadedFile] = useState<{ name: string; size: string; file: File } | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [aadhaarNumber, setAadhaarNumber] = useState("");
-  const [aadhaarNumberError, setAadhaarNumberError] = useState("");
-  const [aadhaarNumberStatus, setAadhaarNumberStatus] = useState<UploadStatus>("idle");
-
+  // ── selfie camera state ──────────────────────────────────────────────────────
   const [cameraStatus, setCameraStatus] = useState<CameraStatus>("idle");
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [scanLinePos, setScanLinePos] = useState(0);
-
-  // Enhanced selfie state
   const [liveChecks, setLiveChecks] = useState<LiveChecks>(DEFAULT_CHECKS);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [faceValidationError, setFaceValidationError] = useState<string | null>(null);
   const [modelsReady, setModelsReady] = useState(false);
 
+  // ── card-camera state (new) ──────────────────────────────────────────────────
+  const [cardCamStatus, setCardCamStatus] = useState<CardCamStatus>("idle");
+  const [cardCamError, setCardCamError] = useState<string | null>(null);
+  const [cardScanProgress, setCardScanProgress] = useState(0);
+  const [cardScanLinePos, setCardScanLinePos] = useState(0);
+  const [cardFrozenFrame, setCardFrozenFrame] = useState<string | null>(null);
+
+  // ── refs: selfie ─────────────────────────────────────────────────────────────
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const liveCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -1017,6 +1048,14 @@ const IdentityVerification: React.FC = () => {
   const isCaptureScheduled = useRef(false);
   const readyToCaptureRef = useRef(false);
 
+  // ── refs: card camera (new) ──────────────────────────────────────────────────
+  const cardVideoRef = useRef<HTMLVideoElement>(null);
+  const cardCanvasRef = useRef<HTMLCanvasElement>(null);
+  const cardStreamRef = useRef<MediaStream | null>(null);
+  const cardScanRafRef = useRef<number | null>(null);
+  const cardScanDirRef = useRef(1);
+  const cardScanPosRef = useRef(0);
+
   useEffect(() => {
     loadFaceModels().then(() => setModelsReady(true)).catch(console.error);
   }, []);
@@ -1026,15 +1065,166 @@ const IdentityVerification: React.FC = () => {
   const formatFileSize = (bytes: number) =>
     bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(2)} KB` : `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 
-  const isDocumentVerified = uploadStatus === "verified" || aadhaarNumberStatus === "verified";
+  // document is verified if either upload passed OR card-cam OCR passed
+  const isDocumentVerified = uploadStatus === "verified" || cardCamStatus === "verified";
 
   const resetDocState = () => {
-    setUploadStatus("idle"); setUploadedFile(null);
-    setAadhaarNumber(""); setAadhaarNumberError(""); setAadhaarNumberStatus("idle");
+    setUploadStatus("idle");
+    setUploadedFile(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
+    stopCardCamera();
+    setCardCamStatus("idle");
+    setCardCamError(null);
+    setCardScanProgress(0);
+    setCardFrozenFrame(null);
   };
 
-  // ── Document upload ──────────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ─── CARD CAMERA HELPERS ──────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  const stopCardCamera = useCallback(() => {
+    if (cardStreamRef.current) {
+      cardStreamRef.current.getTracks().forEach((t) => t.stop());
+      cardStreamRef.current = null;
+    }
+    if (cardScanRafRef.current) {
+      cancelAnimationFrame(cardScanRafRef.current);
+      cardScanRafRef.current = null;
+    }
+  }, []);
+
+  const runCardScanLine = useCallback(() => {
+    const tick = () => {
+      cardScanPosRef.current += cardScanDirRef.current * 1.3;
+      if (cardScanPosRef.current >= 100) cardScanDirRef.current = -1;
+      if (cardScanPosRef.current <= 0)   cardScanDirRef.current = 1;
+      setCardScanLinePos(cardScanPosRef.current);
+      cardScanRafRef.current = requestAnimationFrame(tick);
+    };
+    cardScanRafRef.current = requestAnimationFrame(tick);
+  }, []);
+
+  const startCardCamera = useCallback(async () => {
+    setCardCamError(null);
+    setCardFrozenFrame(null);
+    setCardCamStatus("idle");
+    setCardScanProgress(0);
+    cardScanPosRef.current = 0;
+    cardScanDirRef.current = 1;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: "environment" }, // rear cam on mobile is better for cards
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+      });
+      cardStreamRef.current = stream;
+      if (cardVideoRef.current) {
+        cardVideoRef.current.srcObject = stream;
+        await cardVideoRef.current.play();
+      }
+      setCardCamStatus("active");
+      runCardScanLine();
+    } catch {
+      toast.error("Camera access denied. Please allow camera permission and try again.");
+    }
+  }, [runCardScanLine]);
+
+  /**
+   * Freeze current frame, stop stream, run Tesseract OCR on captured image.
+   * If OCR passes → upload to backend + mark verified.
+   * If OCR fails → show error + allow retake.
+   */
+  const captureAndVerifyCard = useCallback(async () => {
+    const video = cardVideoRef.current;
+    const canvas = cardCanvasRef.current;
+    if (!video || !canvas) return;
+
+    // stop scan line animation
+    if (cardScanRafRef.current) {
+      cancelAnimationFrame(cardScanRafRef.current);
+      cardScanRafRef.current = null;
+    }
+
+    // draw frozen frame
+    canvas.width  = video.videoWidth  || 1280;
+    canvas.height = video.videoHeight || 720;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+
+    // stop live stream — user sees frozen frame via <img>
+    stopCardCamera();
+    setCardFrozenFrame(dataUrl);
+    setCardCamStatus("scanning");
+    setCardCamError(null);
+    setCardScanProgress(0);
+
+    try {
+      const result = await Tesseract.recognize(dataUrl, "eng", {
+        logger: (m: any) => {
+          if (m.status === "recognizing text" && m.progress != null)
+            setCardScanProgress(Math.round(m.progress * 100));
+        },
+      });
+
+      const upper = result.data.text.toUpperCase();
+      const hasAadhaarKeyword = /AADHAAR|AADHAR|UIDAI/.test(upper) || /\bUID\b/.test(upper);
+      const has12Digit =
+        /\d{4}[\s\-]?\d{4}[\s\-]?\d{4}/.test(upper) ||
+        /[X\d]{4}[\s\-]?[X\d]{4}[\s\-]?[X\d]{4}/i.test(upper);
+      const hasGovt = /GOVERNMENT\s+OF\s+INDIA|GOVT\.?\s+OF\s+INDIA/.test(upper);
+      const passed = [hasAadhaarKeyword, has12Digit, hasGovt].filter(Boolean).length;
+
+      if (passed >= 2) {
+        setCardCamStatus("verified");
+        toast.success("Aadhaar card detected and verified!");
+        // upload captured image to backend
+        try {
+          const blob = await (await fetch(dataUrl)).blob();
+          const file = new File([blob], "aadhaar_card_cam.jpg", { type: "image/jpeg" });
+          const userId = getInterviewId();
+          if (userId) await userService.adharVerification(userId, file);
+        } catch {
+          console.warn("Backend upload failed for card image — OCR already passed");
+        }
+      } else {
+        const missing: string[] = [];
+        if (!hasAadhaarKeyword) missing.push("Aadhaar/UIDAI text");
+        if (!has12Digit)         missing.push("12-digit number");
+        if (!hasGovt)            missing.push('"Govt of India" text');
+        setCardCamError(
+          `Could not verify as Aadhaar card. Missing: ${missing.join(", ")}. ` +
+          `Make sure the full card is visible, text is sharp, and lighting is good.`
+        );
+        setCardCamStatus("error");
+        setCardScanProgress(0);
+      }
+    } catch {
+      setCardCamError("OCR scan failed. Please retake with better lighting.");
+      setCardCamStatus("error");
+      setCardScanProgress(0);
+    }
+  }, [stopCardCamera]);
+
+  /** Reset card-camera so user can try again */
+  const retakeCard = useCallback(() => {
+    stopCardCamera();
+    setCardCamStatus("idle");
+    setCardCamError(null);
+    setCardScanProgress(0);
+    setCardFrozenFrame(null);
+    cardScanPosRef.current = 0;
+    cardScanDirRef.current = 1;
+  }, [stopCardCamera]);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ─── DOCUMENT UPLOAD HELPERS ──────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+
   const handleFile = async (file: File) => {
     const validTypes = ["image/jpeg", "image/png", "image/jpg", "application/pdf"];
     if (!validTypes.includes(file.type)) { toast.error("Invalid file type. Please upload JPG, PNG, or PDF"); return; }
@@ -1052,7 +1242,7 @@ const IdentityVerification: React.FC = () => {
     try {
       const userId = getInterviewId();
       if (!userId) { toast.error("User not authenticated"); setUploadStatus("error"); return; }
-      const response = await userService.adharVerification(userId, file); // swap for passportVerification when ready
+      const response = await userService.adharVerification(userId, file);
       if (response.status === 200 || response.data?.success) {
         setUploadStatus("verified");
         toast.success(docType === "aadhaar" ? "Aadhaar verified successfully!" : "Passport verified successfully!");
@@ -1079,39 +1269,10 @@ const IdentityVerification: React.FC = () => {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  // ── Aadhaar number ───────────────────────────────────────────────────────────
-  const formatAadhaarInput = (value: string) => {
-    const digits = value.replace(/\D/g, "").slice(0, 12);
-    return digits.replace(/(\d{4})(?=\d)/g, "$1 ").trim();
-  };
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ─── SELFIE CAMERA HELPERS (unchanged) ────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
 
-  const handleAadhaarNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const formatted = formatAadhaarInput(e.target.value);
-    setAadhaarNumber(formatted);
-    if (aadhaarNumberError) setAadhaarNumberError("");
-    if (aadhaarNumberStatus !== "idle") setAadhaarNumberStatus("idle");
-  };
-
-  const handleAadhaarNumberSubmit = async () => {
-    const cleaned = aadhaarNumber.replace(/\s/g, "");
-    if (!validateAadhaarNumber(cleaned)) { setAadhaarNumberError("Please enter a valid 12-digit Aadhaar number."); return; }
-    setAadhaarNumberStatus("uploading"); setAadhaarNumberError("");
-    try {
-      const userId = getInterviewId();
-      if (!userId) { toast.error("User not authenticated"); setAadhaarNumberStatus("error"); return; }
-      const response = await userService.adharVerificationByNumber(userId, cleaned);
-      if (response.status === 200 || response.data?.success) {
-        setAadhaarNumberStatus("verified"); toast.success("Aadhaar number verified successfully!");
-      } else {
-        setAadhaarNumberStatus("error"); toast.error(response.data?.message ?? "Aadhaar number verification failed.");
-      }
-    } catch (error: any) {
-      setAadhaarNumberStatus("error");
-      toast.error(error.response?.data?.message ?? "Aadhaar number verification failed. Please try again.");
-    }
-  };
-
-  // ─── Camera helpers ───────────────────────────────────────────────────────────
   const stopScan = () => { if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current); };
 
   const startScanAnimation = () => {
@@ -1177,7 +1338,6 @@ const IdentityVerification: React.FC = () => {
       return;
     }
 
-    // Upload in background
     (async () => {
       try {
         const blob = await (await fetch(img)).blob();
@@ -1242,7 +1402,7 @@ const IdentityVerification: React.FC = () => {
   const handleComplete = () => navigate(`/user/${interviewId}/interview-instruction`, { replace: true });
 
   useEffect(() => {
-    return () => { stopStream(); stopLiveAnalysis(); stopCountdown(); stopScan(); };
+    return () => { stopStream(); stopLiveAnalysis(); stopCountdown(); stopScan(); stopCardCamera(); };
   }, []);
 
   // ─── Derived UI values ────────────────────────────────────────────────────────
@@ -1268,10 +1428,8 @@ const IdentityVerification: React.FC = () => {
 
   // ─── Render ──────────────────────────────────────────────────────────────────
   return (
-    // ── ORIGINAL background ──
     <div className="min-h-screen relative overflow-hidden bg-[#050A24] bg-[radial-gradient(circle_at_100%_0%,rgba(45,85,251,0.45),transparent_50%),radial-gradient(circle_at_0%_100%,rgba(45,85,251,0.35),transparent_50%)]">
 
-      {/* Original animated orbs */}
       <motion.div
         className="absolute -top-20 -right-20 w-[200px] h-[200px] bg-[#2D55FB] rounded-full mix-blend-multiply filter blur-3xl opacity-30"
         animate={{ x: [0,30,-20,0], y: [0,-50,20,0], scale: [1,1.1,0.9,1] }}
@@ -1286,15 +1444,13 @@ const IdentityVerification: React.FC = () => {
       {/* Hidden canvases */}
       <canvas ref={canvasRef} className="hidden" />
       <canvas ref={liveCanvasRef} className="hidden" />
+      <canvas ref={cardCanvasRef} className="hidden" />
 
       <div className="relative z-10 min-h-screen">
 
-        {/* ── ORIGINAL Header ── */}
+        {/* ── Header ── */}
         <div className="flex items-center justify-between p-4 bg-[#0a1342]/30 backdrop-blur-sm">
-          <button
-            onClick={handleBack}
-            className="flex items-center gap-2 text-white hover:text-gray-300 transition-colors"
-          >
+          <button onClick={handleBack} className="flex items-center gap-2 text-white hover:text-gray-300 transition-colors">
             <ArrowLeft className="h-5 w-5" />
             <span className="text-sm sm:text-base">Identity Verification</span>
           </button>
@@ -1303,9 +1459,8 @@ const IdentityVerification: React.FC = () => {
           </div>
         </div>
 
-        {/* ── ORIGINAL Step Indicator ── */}
+        {/* ── Step Indicator ── */}
         <div className="flex items-center justify-center gap-4 pt-6 pb-2 px-4">
-          {/* Step 1 */}
           <div className="flex items-center gap-2">
             <AnimatePresence mode="wait">
               {isDocumentVerified ? (
@@ -1323,7 +1478,6 @@ const IdentityVerification: React.FC = () => {
             </div>
           </div>
 
-          {/* Connector */}
           <div className="w-12 sm:w-20 h-px bg-gray-700 relative overflow-hidden">
             <motion.div
               className="absolute top-0 left-0 h-full bg-gradient-to-r from-green-500 to-[#2D55FB]"
@@ -1333,7 +1487,6 @@ const IdentityVerification: React.FC = () => {
             />
           </div>
 
-          {/* Step 2 */}
           <div className="flex items-center gap-2">
             <AnimatePresence mode="wait">
               {cameraStatus === "completed" ? (
@@ -1364,9 +1517,10 @@ const IdentityVerification: React.FC = () => {
                   <p className="text-gray-400 text-sm sm:text-base">Please upload your document for secure identity verification</p>
                 </div>
 
-                {/* ── Document type selector ── */}
                 <div className="bg-[#0d1535]/80 backdrop-blur-xl rounded-2xl p-5 sm:p-6 border border-white/10 shadow-2xl mb-4">
                   <h2 className="text-white font-semibold text-sm sm:text-base mb-3">Select Document Type</h2>
+
+                  {/* Doc type selector */}
                   <div className="grid grid-cols-2 gap-3 mb-5">
                     {([
                       { type: "aadhaar" as DocType, icon: CreditCard, label: "Aadhaar Card", desc: "12-digit national identity" },
@@ -1376,9 +1530,7 @@ const IdentityVerification: React.FC = () => {
                         key={type}
                         onClick={() => { setDocType(type); resetDocState(); }}
                         className={`flex items-center gap-3 p-3 rounded-xl border text-left transition-all duration-200 ${
-                          docType === type
-                            ? "border-[#2D55FB] bg-[#2D55FB]/15"
-                            : "border-white/10 hover:border-white/20"
+                          docType === type ? "border-[#2D55FB] bg-[#2D55FB]/15" : "border-white/10 hover:border-white/20"
                         }`}
                       >
                         <div className={`p-2 rounded-lg ${docType === type ? "bg-[#2D55FB]/25 text-[#2D55FB]" : "bg-white/5 text-gray-400"}`}>
@@ -1392,12 +1544,12 @@ const IdentityVerification: React.FC = () => {
                     ))}
                   </div>
 
-                  {/* Aadhaar mode tabs */}
+                  {/* ── Aadhaar mode tabs: Upload | Show to Camera ── */}
                   {docType === "aadhaar" && (
                     <div className="flex gap-1 mb-4 bg-[#0a0f1e] rounded-lg p-1 w-fit">
                       {([
                         { mode: "upload" as AadhaarMode, icon: Upload, label: "Upload File" },
-                        { mode: "number" as AadhaarMode, icon: Hash, label: "Enter Number" },
+                        { mode: "camera" as AadhaarMode, icon: Camera, label: "Show to Camera" },
                       ] as const).map(({ mode, icon: Icon, label }) => (
                         <button
                           key={mode}
@@ -1412,59 +1564,9 @@ const IdentityVerification: React.FC = () => {
                     </div>
                   )}
 
-                  {/* ── Aadhaar number input ── */}
-                  {docType === "aadhaar" && aadhaarMode === "number" && (
-                    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
-                      <p className="text-gray-500 text-xs mb-3">Enter the 12-digit number printed on your Aadhaar card.</p>
-                      <div className="relative mb-3">
-                        <input
-                          type="text" inputMode="numeric" placeholder="XXXX XXXX XXXX"
-                          value={aadhaarNumber} onChange={handleAadhaarNumberChange}
-                          disabled={aadhaarNumberStatus === "verified"} maxLength={14}
-                          className={`w-full bg-[#0a0f1e] border rounded-xl px-4 py-3 text-white text-lg tracking-widest font-mono placeholder-gray-600 outline-none transition-all ${
-                            aadhaarNumberError ? "border-red-500/60" :
-                            aadhaarNumberStatus === "verified" ? "border-green-500/60" :
-                            "border-white/10 focus:border-[#2D55FB]/60"
-                          }`}
-                        />
-                        {aadhaarNumberStatus === "verified" && (
-                          <CheckCircle size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-green-400" />
-                        )}
-                      </div>
-                      {aadhaarNumberError && (
-                        <p className="text-xs text-red-400 mb-3 flex items-center gap-1"><AlertTriangle size={11} />{aadhaarNumberError}</p>
-                      )}
-                      {aadhaarNumberStatus === "verified" && (
-                        <div className="flex items-center gap-2 text-green-400 text-xs font-medium mb-2">
-                          <CheckCircle size={13} />Aadhaar number verified successfully!
-                        </div>
-                      )}
-                      {aadhaarNumberStatus === "error" && (
-                        <div className="flex items-center gap-2 text-red-400 text-xs mb-3">
-                          <AlertTriangle size={12} />Verification failed.
-                          <button onClick={() => { setAadhaarNumberStatus("idle"); setAadhaarNumber(""); }} className="text-[#2D55FB] underline ml-1">Reset</button>
-                        </div>
-                      )}
-                      {aadhaarNumberStatus !== "verified" && (
-                        <motion.button
-                          onClick={handleAadhaarNumberSubmit}
-                          disabled={aadhaarNumber.replace(/\s/g, "").length < 12 || aadhaarNumberStatus === "uploading"}
-                          whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                          className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-all ${
-                            aadhaarNumber.replace(/\s/g, "").length === 12 && aadhaarNumberStatus !== "uploading"
-                              ? "bg-[#2D55FB] text-white hover:bg-[#1e3fd4]"
-                              : "bg-gray-700/50 text-gray-400 cursor-not-allowed"
-                          }`}
-                        >
-                          {aadhaarNumberStatus === "uploading"
-                            ? <><Loader2 size={13} className="animate-spin" />Verifying...</>
-                            : <><Shield size={13} />Verify Aadhaar Number</>}
-                        </motion.button>
-                      )}
-                    </motion.div>
-                  )}
-
-                  {/* ── File upload dropzone ── */}
+                  {/* ════════════════════════════════════════════════════════
+                      MODE: File Upload  (aadhaar upload OR passport)
+                  ════════════════════════════════════════════════════════ */}
                   {(docType === "passport" || (docType === "aadhaar" && aadhaarMode === "upload")) && (
                     <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
                       <p className="text-gray-500 text-xs mb-3">
@@ -1539,6 +1641,229 @@ const IdentityVerification: React.FC = () => {
                       </AnimatePresence>
                     </motion.div>
                   )}
+
+                  {/* ════════════════════════════════════════════════════════
+                      MODE: Show Aadhaar Card to Camera  (REPLACES "Enter Number")
+                      Flow:
+                        idle     → user clicks "Open Camera"
+                        active   → live preview + animated scan line overlay + card guide corners
+                                   user aligns card, clicks "Capture & Verify"
+                        scanning → frozen frame shown, Tesseract runs, progress bar
+                        verified → green overlay, "Proceed" unlocked
+                        error    → red overlay with reason, "Try Again" retake button
+                  ════════════════════════════════════════════════════════ */}
+                  {docType === "aadhaar" && aadhaarMode === "camera" && (
+                    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
+                      <p className="text-gray-500 text-xs mb-3">
+                        Hold your physical Aadhaar card up to the camera so all four corners and text are fully visible, then tap <strong className="text-white">Capture &amp; Verify</strong>.
+                      </p>
+
+                      {/* Camera viewport */}
+                      <div
+                        className="relative bg-[#070d24] rounded-xl overflow-hidden border border-white/8"
+                        style={{ minHeight: 220 }}
+                      >
+                        {/* Live video */}
+                        <video
+                          ref={cardVideoRef}
+                          muted
+                          playsInline
+                          className={`w-full rounded-xl object-cover ${cardCamStatus === "active" ? "block" : "hidden"}`}
+                          style={{ maxHeight: 270, minHeight: 220 }}
+                        />
+
+                        {/* Frozen frame (shown during scanning, error, verified) */}
+                        {cardFrozenFrame && cardCamStatus !== "active" && (
+                          <img
+                            src={cardFrozenFrame}
+                            alt="Captured card"
+                            className="w-full rounded-xl object-cover"
+                            style={{ maxHeight: 270, minHeight: 220, display: "block" }}
+                          />
+                        )}
+
+                        {/* ── IDLE: placeholder with card outline + Open Camera button ── */}
+                        {cardCamStatus === "idle" && (
+                          <div className="absolute inset-0 flex flex-col items-center justify-center gap-5">
+                            {/* Card shape guide */}
+                            <div className="relative w-52 h-32 flex items-center justify-center">
+                              {/* dashed border */}
+                              <div className="absolute inset-0 rounded-lg border-2 border-dashed border-[#2D55FB]/40" />
+                              {/* corner brackets */}
+                              <div className="absolute top-0 left-0 w-5 h-5 border-t-2 border-l-2 border-[#2D55FB] rounded-tl" />
+                              <div className="absolute top-0 right-0 w-5 h-5 border-t-2 border-r-2 border-[#2D55FB] rounded-tr" />
+                              <div className="absolute bottom-0 left-0 w-5 h-5 border-b-2 border-l-2 border-[#2D55FB] rounded-bl" />
+                              <div className="absolute bottom-0 right-0 w-5 h-5 border-b-2 border-r-2 border-[#2D55FB] rounded-br" />
+                              <CreditCard className="h-10 w-10 text-gray-600" />
+                            </div>
+                            <motion.button
+                              onClick={startCardCamera}
+                              className="flex items-center gap-2 px-5 py-2.5 bg-[#2D55FB] text-white text-sm font-medium rounded-xl shadow-lg shadow-[#2D55FB]/25 hover:bg-[#1e3fd4] transition-colors"
+                              whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                            >
+                              <Camera className="h-4 w-4" />
+                              Open Camera
+                            </motion.button>
+                          </div>
+                        )}
+
+                        {/* ── ACTIVE: card guide overlay + animated scan line ── */}
+                        {cardCamStatus === "active" && (
+                          <>
+                            {/* Dim vignette outside card zone */}
+                            <div className="absolute inset-0 z-10 pointer-events-none flex items-center justify-center">
+                              <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                                <defs>
+                                  <mask id="cardMask">
+                                    <rect width="100" height="100" fill="white"/>
+                                    <rect x="7" y="19" width="86" height="62" rx="2" fill="black"/>
+                                  </mask>
+                                </defs>
+                                <rect width="100" height="100" fill="rgba(0,0,0,0.42)" mask="url(#cardMask)"/>
+                              </svg>
+                              {/* card border + corner ticks */}
+                              <svg
+                                className="absolute"
+                                style={{ left: "7%", top: "19%", width: "86%", height: "62%" }}
+                                viewBox="0 0 100 73"
+                                preserveAspectRatio="none"
+                              >
+                                <rect x="1" y="1" width="98" height="71" rx="2" fill="none" stroke="#2D55FB" strokeWidth="1.2" strokeDasharray="5 3"/>
+                                {/* corner accents */}
+                                <path d="M1,13 L1,1 L13,1"  fill="none" stroke="#2D55FB" strokeWidth="3" strokeLinecap="round"/>
+                                <path d="M87,1 L99,1 L99,13" fill="none" stroke="#2D55FB" strokeWidth="3" strokeLinecap="round"/>
+                                <path d="M1,60 L1,72 L13,72"  fill="none" stroke="#2D55FB" strokeWidth="3" strokeLinecap="round"/>
+                                <path d="M87,72 L99,72 L99,60" fill="none" stroke="#2D55FB" strokeWidth="3" strokeLinecap="round"/>
+                              </svg>
+                            </div>
+
+                            {/* Scan line moving within card zone */}
+                            <div
+                              className="absolute z-20 pointer-events-none"
+                              style={{
+                                left: "8%",
+                                right: "8%",
+                                top: `calc(19% + ${cardScanLinePos / 100 * 62}%)`,
+                                height: "1.5px",
+                                background: "linear-gradient(to right, transparent, #2D55FB 25%, #93c5fd 50%, #2D55FB 75%, transparent)",
+                                boxShadow: "0 0 10px 3px rgba(45,85,251,0.55)",
+                              }}
+                            />
+
+                            {/* Bottom label */}
+                            <div className="absolute bottom-0 left-0 right-0 z-20 bg-black/55 backdrop-blur-sm px-4 py-2 flex items-center justify-center gap-2">
+                              <motion.div
+                                className="w-2 h-2 rounded-full bg-[#2D55FB] shrink-0"
+                                animate={{ opacity: [1, 0.3, 1] }}
+                                transition={{ duration: 1.2, repeat: Infinity }}
+                              />
+                              <span className="text-white/80 text-xs font-medium">Align all four corners inside the guide, then capture</span>
+                            </div>
+                          </>
+                        )}
+
+                        {/* ── SCANNING: progress overlay on frozen frame ── */}
+                        {cardCamStatus === "scanning" && (
+                          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/65 backdrop-blur-sm rounded-xl gap-4">
+                            <motion.div
+                              animate={{ rotate: 360 }}
+                              transition={{ duration: 1.1, repeat: Infinity, ease: "linear" }}
+                            >
+                              <ScanLine className="h-9 w-9 text-[#2D55FB]" />
+                            </motion.div>
+                            <p className="text-white text-sm font-semibold">Reading Aadhaar card text…</p>
+                            {/* progress bar */}
+                            <div className="w-44 h-2 bg-white/10 rounded-full overflow-hidden">
+                              <motion.div
+                                className="h-full rounded-full bg-gradient-to-r from-[#2D55FB] to-blue-400"
+                                style={{ width: `${cardScanProgress}%` }}
+                                transition={{ duration: 0.08 }}
+                              />
+                            </div>
+                            <p className="text-gray-400 text-xs">{cardScanProgress}% complete</p>
+                          </div>
+                        )}
+
+                        {/* ── VERIFIED: green success overlay ── */}
+                        {cardCamStatus === "verified" && (
+                          <motion.div
+                            className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-green-950/80 backdrop-blur-sm rounded-xl gap-3"
+                            initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                          >
+                            <motion.div
+                              initial={{ scale: 0 }} animate={{ scale: 1 }}
+                              transition={{ type: "spring", stiffness: 200, delay: 0.1 }}
+                            >
+                              <CheckCircle className="h-14 w-14 text-green-400" />
+                            </motion.div>
+                            <p className="text-green-300 font-bold text-base">Aadhaar Verified!</p>
+                            <p className="text-green-500/70 text-xs">Card text confirmed via OCR</p>
+                            <button
+                              onClick={retakeCard}
+                              className="text-xs text-gray-400 hover:text-white underline transition-colors mt-1"
+                            >
+                              Re-capture
+                            </button>
+                          </motion.div>
+                        )}
+
+                        {/* ── ERROR: red failure overlay ── */}
+                        {cardCamStatus === "error" && (
+                          <motion.div
+                            className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-red-950/85 backdrop-blur-sm rounded-xl gap-3 px-5"
+                            initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                          >
+                            <XCircle className="h-12 w-12 text-red-400" />
+                            <p className="text-red-300 font-bold text-sm text-center">Verification Failed</p>
+                            {cardCamError && (
+                              <p className="text-red-400/80 text-xs text-center leading-relaxed">{cardCamError}</p>
+                            )}
+                            <motion.button
+                              onClick={retakeCard}
+                              className="flex items-center gap-2 px-5 py-2 bg-[#2D55FB] text-white text-xs font-semibold rounded-lg hover:bg-[#1e3fd4] transition-colors mt-1 shadow-lg"
+                              whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                            >
+                              <RefreshCw className="h-3.5 w-3.5" />
+                              Try Again
+                            </motion.button>
+                          </motion.div>
+                        )}
+                      </div>
+
+                      {/* Capture button — only when camera is live */}
+                      <AnimatePresence>
+                        {cardCamStatus === "active" && (
+                          <motion.div
+                            className="flex justify-center mt-4"
+                            initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 4 }}
+                          >
+                            <motion.button
+                              onClick={captureAndVerifyCard}
+                              className="flex items-center gap-2 px-7 py-2.5 bg-[#2D55FB] text-white text-sm font-semibold rounded-xl shadow-lg shadow-[#2D55FB]/30 hover:bg-[#1e3fd4] transition-colors"
+                              whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+                            >
+                              <ScanLine className="h-4 w-4" />
+                              Capture &amp; Verify
+                            </motion.button>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+
+                      {/* Tips row */}
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        {[
+                          "Hold card flat and steady",
+                          "All 4 corners visible",
+                          "No shadows on text",
+                          "Text must be readable",
+                        ].map((tip) => (
+                          <span key={tip} className="text-[10px] text-gray-500 bg-white/5 border border-white/8 px-2 py-0.5 rounded-full">
+                            {tip}
+                          </span>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
                 </div>
 
                 {/* Guidelines card */}
@@ -1600,7 +1925,6 @@ const IdentityVerification: React.FC = () => {
                   )}
                 </div>
 
-                {/* Face validation error banner */}
                 <AnimatePresence>
                   {faceValidationError && (
                     <motion.div
@@ -1616,11 +1940,9 @@ const IdentityVerification: React.FC = () => {
                   )}
                 </AnimatePresence>
 
-                {/* ── ORIGINAL Camera card ── */}
                 <div className="bg-[#0d1535]/80 backdrop-blur-xl rounded-2xl p-5 sm:p-6 border border-white/10 shadow-2xl mb-4">
                   <div className="flex items-center justify-between mb-1">
                     <h2 className="text-white font-semibold text-sm sm:text-base">Live Camera Feed</h2>
-                    {/* Original status labels */}
                     {cameraStatus === "validating" && (
                       <motion.div className="flex items-center gap-2 text-amber-400 text-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                         <span className="font-medium">Verifying Face</span>
@@ -1641,21 +1963,16 @@ const IdentityVerification: React.FC = () => {
                   </div>
                   <p className="text-gray-500 text-xs mb-4">Position your face in the center of the frame and ensure good lighting</p>
 
-                  {/* ── ORIGINAL viewport ── */}
                   <div className="relative bg-[#0a0f1e] rounded-xl overflow-hidden flex items-center justify-center" style={{ minHeight: "260px" }}>
-
-                    {/* Live video */}
                     <video ref={videoRef} muted playsInline
                       className={`w-full object-cover rounded-xl ${cameraStatus === "active" ? "block" : "hidden"}`}
                       style={{ maxHeight: "280px", minHeight: "260px" }} />
 
-                    {/* Captured image */}
                     {(cameraStatus === "validating" || cameraStatus === "processing" || cameraStatus === "completed") && capturedImage && (
                       <motion.img src={capturedImage} alt="Captured Photo" className="w-full object-cover rounded-xl"
                         style={{ maxHeight: "280px", minHeight: "260px" }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4 }} />
                     )}
 
-                    {/* Placeholder when no image yet */}
                     {(cameraStatus === "validating" || cameraStatus === "processing" || cameraStatus === "completed") && !capturedImage && (
                       <motion.div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-[#1a2540] to-[#0d1535]"
                         initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
@@ -1665,7 +1982,6 @@ const IdentityVerification: React.FC = () => {
                       </motion.div>
                     )}
 
-                    {/* ── ORIGINAL Idle state with corner brackets ── */}
                     {cameraStatus === "idle" && (
                       <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
                         <div className="absolute inset-6 pointer-events-none">
@@ -1685,7 +2001,6 @@ const IdentityVerification: React.FC = () => {
                       </div>
                     )}
 
-                    {/* ── ORIGINAL corner brackets when camera active ── */}
                     {cameraStatus !== "idle" && (
                       <div className="absolute inset-0 pointer-events-none z-10">
                         <div className="absolute inset-6">
@@ -1697,13 +2012,11 @@ const IdentityVerification: React.FC = () => {
                       </div>
                     )}
 
-                    {/* ── ORIGINAL scan line ── */}
                     {cameraStatus === "processing" && (
                       <div className="absolute left-6 right-6 h-0.5 bg-gradient-to-r from-transparent via-[#2D55FB] to-transparent pointer-events-none z-20"
                         style={{ top: `${scanLinePos}%` }} />
                     )}
 
-                    {/* ── NEW: Oval guide over live video ── */}
                     {cameraStatus === "active" && (
                       <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-20">
                         <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
@@ -1724,7 +2037,6 @@ const IdentityVerification: React.FC = () => {
                       </div>
                     )}
 
-                    {/* ── NEW: Auto-capture countdown ── */}
                     <AnimatePresence>
                       {cameraStatus === "active" && countdown !== null && (
                         <motion.div key={countdown}
@@ -1738,7 +2050,6 @@ const IdentityVerification: React.FC = () => {
                       )}
                     </AnimatePresence>
 
-                    {/* ── ORIGINAL active pulse dot + NEW guidance text ── */}
                     {cameraStatus === "active" && (
                       <motion.div className="absolute bottom-0 left-0 right-0 z-10 bg-black/60 backdrop-blur-sm px-4 py-2 flex items-center justify-center gap-2"
                         initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}>
@@ -1748,7 +2059,6 @@ const IdentityVerification: React.FC = () => {
                       </motion.div>
                     )}
 
-                    {/* ── ORIGINAL validating pill ── */}
                     {cameraStatus === "validating" && (
                       <motion.div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
                         <div className="flex items-center gap-2 px-4 py-1.5 bg-black/60 backdrop-blur rounded-full text-amber-400 text-xs">
@@ -1758,7 +2068,6 @@ const IdentityVerification: React.FC = () => {
                       </motion.div>
                     )}
 
-                    {/* ── ORIGINAL retake button ── */}
                     {cameraStatus === "completed" && (
                       <motion.div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                         <button onClick={handleRetake}
@@ -1769,13 +2078,9 @@ const IdentityVerification: React.FC = () => {
                     )}
                   </div>
 
-                  {/* ── NEW: Live check pills ── */}
                   <AnimatePresence>
                     {cameraStatus === "active" && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                        className="flex flex-wrap gap-1.5 mt-3"
-                      >
+                      <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex flex-wrap gap-1.5 mt-3">
                         {CHECK_PILLS.map((pill) => {
                           const passVal = pill.pass(liveChecks);
                           const isPassed = passVal === true;
@@ -1798,7 +2103,6 @@ const IdentityVerification: React.FC = () => {
                   </AnimatePresence>
                 </div>
 
-                {/* ── ORIGINAL Guidelines card ── */}
                 <div className="bg-[#0d1535]/80 backdrop-blur-xl rounded-2xl p-5 border border-white/10 mb-6">
                   <div className="flex items-center gap-2 mb-4">
                     <Shield className="h-4 w-4 text-[#2D55FB]" />
@@ -1826,7 +2130,6 @@ const IdentityVerification: React.FC = () => {
                   </div>
                 </div>
 
-                {/* ── ORIGINAL navigation ── */}
                 <div className="flex justify-between">
                   <button onClick={() => setCurrentStep("document")}
                     className="flex items-center gap-2 px-4 py-2.5 border border-gray-600 text-gray-400 text-sm rounded-lg hover:border-gray-500 hover:text-gray-300 transition-colors">
