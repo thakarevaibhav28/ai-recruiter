@@ -594,7 +594,7 @@ const InterviewInstructions: React.FC = () => {
                   <span className="text-[#2D55FB] text-xs font-medium">Job Description</span>
                 </div>
                 <p className="text-gray-400 text-xs leading-relaxed">
-                  {interview?.jobDescriptionText ?? "No job description provided."}
+                  {(interview?.jobDescriptionText || interview?.description) ?? "No job description provided."}
                 </p>
               </div>
             </motion.div>
