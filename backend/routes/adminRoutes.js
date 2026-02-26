@@ -40,6 +40,7 @@ import {
   getCandidateProfile,
   UpdateCandidate,
   BulkAddCandidates,
+  GetFilteredCandidates
 } from "../controllers/candidateControllers/AuthorizationController.js";
 
 const router = express.Router();
@@ -105,7 +106,9 @@ router.get("/interviews/list", auth("admin"), GetAllAIInterview);
 // Create Candidate
 router.post("/create/candidate", auth("admin"), CreateCandidate);
 
+
 router.get("/candidates", auth("admin"), GetCandidate);
+router.get("/candidates/filter", auth("admin"), GetFilteredCandidates);
 
 router.get("/candidate_profile/:id", auth("admin"), getCandidateProfile);
 

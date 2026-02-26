@@ -299,7 +299,6 @@ const TopPerformance = () => {
 //   );
 // };
 
-// Upcoming Interviews Component
 const UpcomingInterviews = ({
   interviews,
   onReschedule,
@@ -310,7 +309,11 @@ const UpcomingInterviews = ({
   onCancel: (interview: any) => void;
 }) => {
   const formatDate = (dateString: string) =>
-    new Date(dateString).toLocaleDateString("en-US");
+    new Date(dateString).toLocaleDateString("en-US", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
 
   const formatTime = (dateString: string) =>
     new Date(dateString).toLocaleTimeString("en-US", {
@@ -319,51 +322,73 @@ const UpcomingInterviews = ({
       hour12: true,
     });
 
+  const getInitials = (name: string) =>
+    name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
+
   return (
-    <div className="flex w-full bg-white flex-col px-5 gap-3 py-3 border-b border-gray-200">
-      <h3 className="text-sm font-semibold mb-4">Upcoming Interviews</h3>
+    <div className="flex w-full bg-white flex-col px-5 gap-3 py-4 border-b border-gray-200">
+      <h3 className="text-sm font-semibold">Upcoming Interviews</h3>
 
       {interviews.length === 0 ? (
         <p className="text-sm text-gray-500 text-center py-6">
           No upcoming interviews scheduled
         </p>
       ) : (
-        interviews.slice(0, 3).map((interview, i) => (
+        interviews.map((interview, i) => (
           <div
             key={i}
-            className="flex justify-between items-center py-3 border-b  border-gray-200"
+            className="flex justify-between items-center px-4 py-3 rounded-lg border-2 border-gray-100"
           >
-            <div>
-              <div className="flex items-center gap-5">
-                <p className="font-medium">
-                  {interview?.candidate?.name || "Unknown"}
-                </p>
-                <p className="text-xs text-gray-500">{interview.title}</p>
+            {/* Left: Avatar + Info */}
+            <div className="flex items-center gap-3">
+              {/* Avatar circle with initials */}
+              <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-sm font-semibold text-gray-600 flex-shrink-0 overflow-hidden">
+                {getInitials(interview?.candidate?.name || "?")}
               </div>
-              <div className="flex items-center gap-5">
-                <p className="text-xs font-medium">
+
+              {/* Name, role, time, date */}
+              <div className="flex flex-col gap-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-gray-800">
+                    {interview?.candidate?.name || "Unknown"}
+                  </span>
+                  <span className="text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded-full font-medium">
+                    Upcoming
+                  </span>
+                </div>
+                <span className="text-xs text-gray-500">
+                  {interview?.candidate?.role || interview.title}
+                </span>
+                <span className="text-xs font-semibold text-gray-800 mt-1">
                   {formatTime(interview.startDate)}
-                </p>
-                <p className="text-xs text-gray-400">
-                  {formatDate(interview.startDate)}
-                </p>
+                </span>
               </div>
             </div>
 
-            <div className="flex gap-2">
-              <button
-                onClick={() => onReschedule(interview)}
-                className="px-3 py-1 text-xs border rounded cursor-pointer  border-gray-400"
-              >
-                Reschedule
-              </button>
-
-              <button
-                onClick={() => onCancel(interview)}
-                className="px-3 py-1 text-xs border cursor-pointer border-red-300 text-red-600 rounded"
-              >
-                Cancel
-              </button>
+            {/* Right: Buttons + Date */}
+            <div className="flex flex-col items-end gap-2">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => onReschedule(interview)}
+                  className="px-4 py-1.5 text-xs border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 cursor-pointer transition-colors"
+                >
+                  Reschedule
+                </button>
+                <button
+                  onClick={() => onCancel(interview)}
+                  className="px-4 py-1.5 text-xs border  border-gray-300 rounded-md text-gray-700 bg-white hover:bg-purple-50 cursor-pointer transition-colors"
+                >
+                  Cancel Interview
+                </button>
+              </div>
+              <span className="text-xs text-gray-500">
+                {formatDate(interview.startDate)}
+              </span>
             </div>
           </div>
         ))

@@ -50,7 +50,7 @@ const InterviewFeedbackSchema = new mongoose.Schema(
       },
 
       recommendations: [String],
-      overallVerdict: { type: String, enum: ["hire", "consider", "reject"] },
+      overallVerdict: { type: String, enum: ["hire", "consider", "rejected"] },
       verdictReason: String,
     },
 

@@ -12,7 +12,6 @@ interface HeaderProps {
 const Header: React.FC<HeaderProps> = ({
   heading = "Hi, John",
   subheading,
-  showSearch = true,
   userInitial = "H",
 }) => {
   return (
@@ -25,17 +24,7 @@ const Header: React.FC<HeaderProps> = ({
       </div>
 
       <div className="flex items-center gap-3 bg-[#FFFFFF] p-2 rounded-3xl">
-        {/* Search */}
-        {showSearch && (
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
-            <input
-              placeholder="Search"
-              className="h-9 w-48 rounded-full bg-[#F4F7FE] border border-gray-200 pl-9 pr-4 text-[13px] text-gray-900 placeholder:text-[#8F9BBA] outline-none focus:ring-1 focus:ring-indigo-600"
-            />
-          </div>
-        )}
-
+      
         {/* Bell Icon */}
         <button className="relative rounded-full p-2 text-gray-600 hover:text-gray-900 transition-colors">
           <Bell className="h-4.5 w-4.5" />

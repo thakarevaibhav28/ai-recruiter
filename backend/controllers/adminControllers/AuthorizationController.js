@@ -439,7 +439,11 @@ export const GetAllSchedule = async (req, res) => {
     const now = new Date();
 
     //  MCQ INTERVIEWS
+    const MCQ = await MCQ_Interview.find()
+      .populate("candidates.candidateId")
+      .lean();
 
+    console.log(JSON.stringify(MCQ, null, 2));
     const mcqData = await MCQ_Interview.aggregate([
       { $unwind: "$candidates" },
       {
@@ -483,7 +487,6 @@ export const GetAllSchedule = async (req, res) => {
     ]);
 
     //  AI INTERVIEWS
-
     const aiData = await AI_Interview.aggregate([
       { $unwind: "$candidates" },
       {
@@ -563,14 +566,21 @@ export const GetAllSchedule = async (req, res) => {
 
       const end = new Date(item.endDate);
 
-      // 🔥 If interview not finished → upcoming
-      if (end >= now) {
+      // ✅ Rule 1: If completed → always past
+      if (item.interviewStatus === "completed") {
+        past.push(item);
+      }
+
+      // ✅ Rule 2: Not completed & still valid → upcoming
+      else if (end >= now) {
         upcoming.push(item);
-      } else {
+      }
+
+      // ✅ Rule 3: Not completed but date passed → past
+      else {
         past.push(item);
       }
     });
-
     // 🔥 Sort upcoming by nearest first (today first, then tomorrow)
     upcoming.sort((a, b) => {
       return new Date(a.startDate) - new Date(b.startDate);
@@ -762,21 +772,34 @@ export const getStudentScores = async (req, res) => {
         if (technicalScore == null) {
           const totalTech = techItems.length || 1;
           const techGood = techItems.filter((i) => i.status === "good").length;
-          const techWarning = techItems.filter((i) => i.status === "warning").length;
+          const techWarning = techItems.filter(
+            (i) => i.status === "warning",
+          ).length;
           const techScoreRaw = (techGood * 1 + techWarning * 0.5) / totalTech;
           const complexityScore = fb.speechPatterns?.complexityScore || 1;
-          technicalScore = Math.min(100, Math.round(techScoreRaw * 60 + (complexityScore / 5) * 40));
+          technicalScore = Math.min(
+            100,
+            Math.round(techScoreRaw * 60 + (complexityScore / 5) * 40),
+          );
         }
 
         // Calculate relevanceScore if missing
         let relevanceScore = fb.relevanceScore;
         if (relevanceScore == null) {
           const totalBehavior = behaviorItems.length || 1;
-          const behaviorGood = behaviorItems.filter((i) => i.status === "good").length;
-          const behaviorWarning = behaviorItems.filter((i) => i.status === "warning").length;
-          const behaviorScoreRaw = (behaviorGood * 1 + behaviorWarning * 0.5) / totalBehavior;
+          const behaviorGood = behaviorItems.filter(
+            (i) => i.status === "good",
+          ).length;
+          const behaviorWarning = behaviorItems.filter(
+            (i) => i.status === "warning",
+          ).length;
+          const behaviorScoreRaw =
+            (behaviorGood * 1 + behaviorWarning * 0.5) / totalBehavior;
           const clarityScore = fb.speechPatterns?.clarityScore || 0;
-          relevanceScore = Math.min(100, Math.round(behaviorScoreRaw * 50 + clarityScore * 0.5));
+          relevanceScore = Math.min(
+            100,
+            Math.round(behaviorScoreRaw * 50 + clarityScore * 0.5),
+          );
         }
 
         item.score = Math.round(technicalScore * 0.6 + relevanceScore * 0.4);

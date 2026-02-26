@@ -38,11 +38,11 @@ const aiInterviewSchema = new mongoose.Schema(
         scheduledEndDate: Date,
         emailSubject: String,
         emailBody: String,
-        status: {
-      type: String,
-      enum: ["scheduled", "in_progress", "completed", "cancelled"],
-      default: "scheduled",
-    },
+         status: {
+          type: String,
+          enum: ["scheduled", "in_progress", "completed", "cancelled","expired","pending"],
+          default: "scheduled",
+        },
       },
     ],
   },
