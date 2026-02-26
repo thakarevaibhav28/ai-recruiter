@@ -75,7 +75,7 @@ console.log("formData",formData)
   const fetchCandidates = async () => {
     // setCandidatesLoading(true);
     try {
-      const response = await adminService.getAllCandidate();
+      const response = await adminService.getAllCandidate(1, 100, "all");
       setCandidatesList(response.data?.data || response.data || []);
     } catch (err) { console.error("Error fetching candidates:", err); }
     finally { setCandidatesLoading(false); }
