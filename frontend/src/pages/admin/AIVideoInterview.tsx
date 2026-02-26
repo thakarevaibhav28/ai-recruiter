@@ -261,7 +261,7 @@ export default function InterviewSetup() {
 
   const fetchCandidates = async () => {
     try {
-      const res: any = await adminService.getAllCandidate();
+      const res: any = await adminService.getAllCandidate(1, 100, "all");
       setCandidates(res.data);
       setFilteredCandidates(res.data);
     } catch (error) {
