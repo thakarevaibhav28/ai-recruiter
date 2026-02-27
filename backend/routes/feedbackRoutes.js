@@ -5,6 +5,7 @@ import dotenv from "dotenv";
 import PDFDocument from "pdfkit";
 import nodemailer from "nodemailer";
 import cloudinary from "../config/cloudinary.js";
+import mongoose from "mongoose";
 dotenv.config();
 import OpenAI from "openai";
 import AI_Interview from "../models/AI_Interview.js";
@@ -177,9 +178,9 @@ function generatePDF(data) {
 
     const sp = speechPatterns || {};
     const metrics = [
-      { label: "Clarity Score",     value: sp.clarityScore    != null ? `${Math.round(sp.clarityScore * 20)}%` : "N/A", color: C.accent },
+      { label: "Clarity Score",     value: sp.clarityScore    != null ? `${Math.round(sp.clarityScore)}%` : "N/A", color: C.accent },
       { label: "Avg Response Time", value: sp.avgResponseTime || "N/A",                                                  color: C.teal   },
-      { label: "Confidence Level",  value: sp.confidenceLevel != null ? `${Math.round(sp.confidenceLevel * 20)}%` : "N/A", color: C.blue },
+      { label: "Confidence Level",  value: sp.confidenceLevel != null ? `${Math.round(sp.confidenceLevel)}%` : "N/A", color: C.blue },
       { label: "Complexity Score",  value: sp.complexityScore != null ? String(sp.complexityScore) : "N/A",              color: C.orange },
     ];
 
@@ -465,6 +466,7 @@ router.post("/feedback", async (req, res) => {
   try {
     const {
       interview_id,
+      candidateId,
       userName,
       userEmail,
       feedback,
@@ -473,32 +475,43 @@ router.post("/feedback", async (req, res) => {
       completedAt,
     } = req.body;
 
-    if (!interview_id) {
+    // ===============================
+    // 1️⃣ Basic Validation
+    // ===============================
+    if (!interview_id || !candidateId) {
       return res.status(400).json({
         success: false,
-        message: "interview_id is required",
+        message: "interview_id and candidateId are required",
+      });
+    }
+
+    if (
+      !mongoose.Types.ObjectId.isValid(interview_id) ||
+      !mongoose.Types.ObjectId.isValid(candidateId)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid interview_id or candidateId",
       });
     }
 
     console.log("Generating feedback for:", interview_id);
 
-    // ==================================================
-    // 🔥 Calculate Technical & Relevance Scores
-    // ==================================================
-    const { technicalScore, relevanceScore } = calculateScores(feedback);
+    // ===============================
+    // 2️⃣ Calculate Scores
+    // ===============================
+    const { technicalScore, relevanceScore } =
+      calculateScores(feedback);
 
     feedback.technicalScore = technicalScore;
     feedback.relevanceScore = relevanceScore;
 
-    // ==================================================
-    // 🔥 Calculate Total Score (NEW)
-    // ==================================================
     const totalScore = Math.round(
-      (technicalScore * 0.6) + (relevanceScore * 0.4)
+      technicalScore * 0.6 + relevanceScore * 0.4
     );
 
     // ===============================
-    // 1️⃣ Generate PDF Buffer
+    // 3️⃣ Generate PDF
     // ===============================
     const pdfBuffer = await generatePDF({
       feedback,
@@ -506,24 +519,12 @@ router.post("/feedback", async (req, res) => {
       role: feedback?.role,
     });
 
-    const candidateName =
-      feedback?.candidateName || userName || "Candidate";
-
-    const role = feedback?.role || "Interview";
-    const verdict = (feedback?.overallVerdict || "consider").toUpperCase();
-    const score = feedback?.confidenceScore ?? "N/A";
-
-    // ===============================
-    // 2️⃣ Upload PDF to Cloudinary
-    // ===============================
     const uploadResult = await new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
         {
           folder: "scorecards",
           resource_type: "raw",
-          public_id: `feedback-${Date.now()}`,
           format: "pdf",
-          access_mode: "public",
         },
         (error, result) => {
           if (error) return reject(error);
@@ -534,86 +535,48 @@ router.post("/feedback", async (req, res) => {
       uploadStream.end(pdfBuffer);
     });
 
-    console.log("Cloudinary upload success:", uploadResult.secure_url);
+    console.log("PDF uploaded:", uploadResult.secure_url);
 
     // ===============================
-    // 3️⃣ Send Email
-    // ===============================
-    await transporter.sendMail({
-      from: `"Vitric IQ" <${process.env.SMTP_USER}>`,
-      to: "vaibhav@vitric.in",
-      subject: `[${verdict}] Interview Report — ${candidateName} | ${role}`,
-      html: `
-        <div style="font-family:sans-serif;max-width:520px;margin:0 auto">
-          <div style="background:#1E1B4B;padding:24px 28px;border-radius:10px 10px 0 0">
-            <p style="color:#A5B4FC;margin:0 0 4px;font-size:11px;letter-spacing:2px">VITRIC IQ</p>
-            <h2 style="color:#fff;margin:0;font-size:20px">New Interview Report</h2>
-          </div>
-          <div style="background:#F9FAFB;padding:24px 28px;border:1px solid #E5E7EB;border-top:none;border-radius:0 0 10px 10px">
-            <table style="width:100%;border-collapse:collapse">
-              <tr>
-                <td style="color:#6B7280;padding:4px 0;font-size:13px">Candidate</td>
-                <td style="font-weight:600;font-size:13px">${candidateName}</td>
-              </tr>
-              <tr>
-                <td style="color:#6B7280;padding:4px 0;font-size:13px">Role</td>
-                <td style="font-size:13px">${role}</td>
-              </tr>
-              <tr>
-                <td style="color:#6B7280;padding:4px 0;font-size:13px">Confidence Score</td>
-                <td style="font-size:13px">${score}%</td>
-              </tr>
-              <tr>
-                <td style="color:#6B7280;padding:4px 0;font-size:13px">Total Score</td>
-                <td style="font-size:13px">${totalScore}%</td>
-              </tr>
-            </table>
-            <p style="color:#6B7280;font-size:12px;margin-top:20px">
-              Full report attached as PDF.
-            </p>
-          </div>
-        </div>
-      `,
-      attachments: [
-        {
-          filename: `Interview_Report_${candidateName}.pdf`,
-          content: pdfBuffer,
-          contentType: "application/pdf",
-        },
-      ],
-    });
-
-    console.log("Email sent successfully");
-
-    // ===============================
-    // 4️⃣ Save / Update in Database
+    // 4️⃣ Save or Update Feedback
+    //    IMPORTANT: match by interview_id + candidateId
     // ===============================
     const doc = await InterviewFeedback.findOneAndUpdate(
-      { interview_id },
+      {
+        interview_id: interview_id,
+        candidateId: candidateId,
+      },
       {
         $set: {
+          interview_id,
+          candidateId,
           userName,
           userEmail,
           feedback,
           transcript,
-          examType: "AI",
-          score: totalScore, // ✅ Saved in top-level score field
           behaviorReport,
+          score: totalScore,
           pdfPath: uploadResult.secure_url,
+          examType: "AI",
           completedAt: completedAt
             ? new Date(completedAt)
             : new Date(),
         },
       },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
+      {
+        upsert: true,
+        new: true,
+        setDefaultsOnInsert: true,
+      }
     );
-    // ==================================================
-    // 6️⃣ Update Candidate Status → completed
-    // ==================================================
+
+    // ===============================
+    // 5️⃣ Update Candidate Status → completed
+    // ===============================
     await AI_Interview.updateOne(
       {
         _id: interview_id,
-        "candidates.candidateId": candidateId,
+        "candidates._id": candidateId,
       },
       {
         $set: {
@@ -624,14 +587,15 @@ router.post("/feedback", async (req, res) => {
 
     console.log("Candidate status updated");
 
-    // ==================================================
-    // 7️⃣ Auto Mark Interview Completed (If All Done)
-    // ==================================================
+    // ===============================
+    // 6️⃣ Auto Complete Interview If All Done
+    // ===============================
     const interview = await AI_Interview.findById(interview_id);
 
-    const allCompleted = interview.candidates.every(
-      (c) => c.status === "completed"
-    );
+    const allCompleted =
+      interview?.candidates?.every(
+        (c) => c.status === "completed"
+      ) ?? false;
 
     if (allCompleted) {
       interview.status = "completed";
@@ -639,11 +603,11 @@ router.post("/feedback", async (req, res) => {
       console.log("Interview marked as completed");
     }
 
-    return res.json({
+    return res.status(200).json({
       success: true,
       message: "Feedback stored successfully",
       pdfUrl: uploadResult.secure_url,
-      totalScore, // ✅ Also returning directly
+      totalScore,
       data: doc,
     });
 

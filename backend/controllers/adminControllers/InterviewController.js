@@ -5,7 +5,7 @@ import Candidate from "../../models/Candidate.js";
 import Score from "../../models/Score.js";
 import { sendAIInterviewLink } from "../../services/emailService.js";
 import mongoose from "mongoose";
-
+import InterviewFeedback from "../../models/feedback.js";
 export const CreateAITemplate = async (req, res) => {
   try {
     const {
@@ -165,13 +165,14 @@ export const CreateAITemplate = async (req, res) => {
 //     });
 //   }
 // };
+
 export const GetAllAIInterview = async (req, res) => {
   try {
     const adminId = req.user.id;
     const { id } = req.query;
 
-    /* ================= GET SINGLE INTERVIEW ================= */
-    if (id) {
+    /* ================= SINGLE INTERVIEW ================= */
+   if (id) {
       if (!mongoose.Types.ObjectId.isValid(id)) {
         return res.status(400).json({
           success: false,
@@ -182,10 +183,7 @@ export const GetAllAIInterview = async (req, res) => {
       const interview = await AI_Interview.findOne({
         _id: id,
         createdBy: adminId,
-      }).populate({
-        path: "candidates.candidateId",
-        select: "name email mobile",
-      });
+      }).populate("candidates.candidateId", "name email mobile");
 
       if (!interview) {
         return res.status(404).json({
@@ -194,66 +192,94 @@ export const GetAllAIInterview = async (req, res) => {
         });
       }
 
-      // ✅ ADD THIS ONLY
-      const scores = await Score.find({
-        interviewId: id,
-        interviewModel: "AI_Interview",
-        examType: "AI",
+      // ✅ Fetch feedbacks using proper ObjectId
+      const feedbacks = await InterviewFeedback.find({
+        interview_id: new mongoose.Types.ObjectId(id),
       });
+// console.log("Feedbacks for interview:", feedbacks);
+      
+ // 🔥 Create proper Map
+const feedbackMap = new Map();
 
+feedbacks.forEach((f) => {
+  feedbackMap.set(f.candidateId.toString(), f);
+});
+
+// 🔥 Attach feedback
+const updatedCandidates = interview.candidates.map((candidate) => {
+  const subDocId = candidate._id.toString();
+// console.log(`Looking for feedback with key: ${subDocId}`);
+  const matchedFeedback = feedbackMap.get(subDocId) || null;
+// console.log(`Matched feedback for candidate ${candidate.candidateId}:`, matchedFeedback);
+  return {
+    ...candidate.toObject(),
+    feedback: matchedFeedback,
+    score: matchedFeedback?.score ?? null,
+    verdict: matchedFeedback?.feedback?.overallVerdict ?? null,
+  };
+});
+const interviewObj = interview.toObject();
+
+interviewObj.candidates = updatedCandidates;
+
+return res.status(200).json({
+  success: true,
+  data: interviewObj,
+});
+    }
+
+    /* ================= GET ALL INTERVIEWS ================= */
+
+    const interviews = await AI_Interview.find({
+      createdBy: adminId,
+    })
+      .sort({ createdAt: -1 })
+      .populate("candidates.candidateId", "name email mobile");
+
+    const interviewIds = interviews.map((i) => i._id);
+
+    const feedbacks = await InterviewFeedback.find({
+      interview_id: { $in: interviewIds },
+    });
+
+    // 🔥 Create Map with interview + candidate
+    const feedbackMap = {};
+
+    feedbacks.forEach((f) => {
+      const key = `${String(f.interview_id)}_${String(f.candidateId)}`;
+      feedbackMap[key] = f;
+    });
+
+    const updatedInterviews = interviews.map((interview) => {
       const updatedCandidates = interview.candidates.map((candidate) => {
-        const candidateScore = scores.find(
-          (s) =>
-            s.candidateId.toString() ===
-            candidate.candidateId._id.toString()
+        const candidateId = String(
+          candidate?._id || candidate.candidateId
         );
+
+        const key = `${String(interview._id)}_${candidateId}`;
 
         return {
           ...candidate.toObject(),
-          scoreDetails: candidateScore || null,
+          feedback: feedbackMap[key] || null,
         };
       });
 
-      interview.candidates = updatedCandidates;
-      // ✅ END HERE
-
-      return res.status(200).json({
-        success: true,
-        data: interview,
-      });
-    }
-
-    /* ================= GET ALL DRAFT INTERVIEWS ================= */
-
-    const drafts = await AI_Interview.find({
-      createdBy: adminId,
-    }).sort({ createdAt: -1 });
-
-    const formattedDrafts = drafts.map((item) => ({
-      jobId: item._id,
-      _id: item._id,
-      position: item.position,
-      difficulty: item.difficulty,
-      duration: item.duration,
-      skills: item.skills,
-      passingScore: item.passingScore,
-      numberOfQuestions: item.numberOfQuestions,
-      description: item.description,
-      status: item.status,
-      createdAt: item.createdAt,
-    }));
+      return {
+        ...interview.toObject(),
+        candidates: updatedCandidates,
+      };
+    });
 
     return res.status(200).json({
       success: true,
-      totalDrafts: formattedDrafts.length,
-      drafts: formattedDrafts,
+      totalInterviews: updatedInterviews.length,
+      interviews: updatedInterviews,
     });
   } catch (error) {
     console.error("Get AI Interview Error:", error);
     return res.status(500).json({
       success: false,
       message: "Server error",
-      error: error.message,
     });
   }
 };
@@ -536,7 +562,7 @@ export const GetAllAiInterviewSchedule = async (req, res) => {
     return res.json({ totalSchedules: total });
   } catch (err) {
     console.error("Error counting schedules:", err.message);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({error});
   }
 };
 export const rescheduleAiInterview = async (req, res) => {

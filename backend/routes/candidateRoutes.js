@@ -103,7 +103,7 @@ router.post("/login/:id", async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({error});
   }
 });
 
@@ -169,7 +169,7 @@ router.put(
         aadharCard: candidate.aadharCard,
       });
     } catch (error) {
-      res.status(500).json(error);
+      res.status(500).json({error});
     }
   },
 );
@@ -198,7 +198,7 @@ router.put(
         photo: candidate.photo,
       });
     } catch (error) {
-      res.status(500).json({ message: "Server error" });
+      res.status(500).json({error});
     }
   },
 );
@@ -268,7 +268,7 @@ router.get("/interview/:id", auth("candidate"), async (req, res) => {
     res.json({ interview, questions });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({error});
   }
 });
 
@@ -280,7 +280,7 @@ router.get("/interview/:id/questions", auth("candidate"), async (req, res) => {
     console.log("Questions fetched for interview", questions);
     res.json({ questions });
   } catch (error) {
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({error});
   }
 });
 
@@ -333,7 +333,7 @@ router.get("/interview/:id/questions", auth("candidate"), async (req, res) => {
 //     res.json({ message: "Answer submitted", evaluation });
 //   } catch (error) {
 //     console.log(error);
-//     res.status(500).json({ message: "Server error" });
+//     res.status(500).json({error});
 //   }
 // });
 
@@ -394,7 +394,7 @@ router.post("/interview/:id/answer", auth("candidate"), async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json(error);
+    res.status(500).json({error});
   }
 });
 

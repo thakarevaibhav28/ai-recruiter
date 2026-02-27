@@ -13,7 +13,7 @@ const adminSchema = new mongoose.Schema(
     },
     userName: {
       type: String,
-      required: true,
+  
     },
     refreshToken: {
       type: String,

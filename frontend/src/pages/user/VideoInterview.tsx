@@ -2363,7 +2363,6 @@
 
 // export default VideoInterview;
 
-
 // import React, {
 //   useEffect, useState, useRef, useCallback,
 // } from "react";
@@ -3425,16 +3424,27 @@
 
 // export default VideoInterview;
 
-
-import React, {
-  useEffect, useState, useRef, useCallback,
-} from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Vapi from "@vapi-ai/web";
 import {
-  Mic, MicOff, Video, VideoOff, PhoneOff, LayoutGrid, MonitorUp,
-  User, Loader2, ShieldAlert, AlertTriangle, Volume2, X, Maximize,
-  Wifi, CheckCircle2, Eye,
+  Mic,
+  MicOff,
+  Video,
+  VideoOff,
+  PhoneOff,
+  LayoutGrid,
+  MonitorUp,
+  User,
+  Loader2,
+  ShieldAlert,
+  AlertTriangle,
+  Volume2,
+  X,
+  Maximize,
+  Wifi,
+  CheckCircle2,
+  Eye,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../../context/context";
@@ -3442,7 +3452,8 @@ import { userService } from "../../services/service/userService";
 import * as faceapi from "@vladmandic/face-api";
 
 // ─── FACE-API MODEL LOADING ────────────────────────────────────────────────
-const FACE_MODEL_URL = "https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model";
+const FACE_MODEL_URL =
+  "https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model";
 let faceModelsLoaded = false;
 async function loadFaceModels() {
   if (faceModelsLoaded) return;
@@ -3468,28 +3479,51 @@ const AVATAR_CONFIG = {
     baseUrl: "https://api.gan.ai",
   },
 };
-const USE_HEYGEN = !!AVATAR_CONFIG.heygen.apiKey && !!AVATAR_CONFIG.heygen.avatarId;
-const USE_GANAI  = !USE_HEYGEN && !!AVATAR_CONFIG.ganai.apiKey && !!AVATAR_CONFIG.ganai.avatarId;
+const USE_HEYGEN =
+  !!AVATAR_CONFIG.heygen.apiKey && !!AVATAR_CONFIG.heygen.avatarId;
+const USE_GANAI =
+  !USE_HEYGEN && !!AVATAR_CONFIG.ganai.apiKey && !!AVATAR_CONFIG.ganai.avatarId;
 
 const ganAi = {
   async generate(script: string): Promise<string | null> {
     try {
-      const body: any = { avatar_id: AVATAR_CONFIG.ganai.avatarId, script, background: { type:"color", value:"#0d1535" } };
-      if (AVATAR_CONFIG.ganai.voiceId) body.voice_id = AVATAR_CONFIG.ganai.voiceId;
-      const r = await fetch(`${AVATAR_CONFIG.ganai.baseUrl}/v2/avatar/generate`, { method:"POST", headers:{"Content-Type":"application/json","x-api-key":AVATAR_CONFIG.ganai.apiKey}, body:JSON.stringify(body) });
+      const body: any = {
+        avatar_id: AVATAR_CONFIG.ganai.avatarId,
+        script,
+        background: { type: "color", value: "#0d1535" },
+      };
+      if (AVATAR_CONFIG.ganai.voiceId)
+        body.voice_id = AVATAR_CONFIG.ganai.voiceId;
+      const r = await fetch(
+        `${AVATAR_CONFIG.ganai.baseUrl}/v2/avatar/generate`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": AVATAR_CONFIG.ganai.apiKey,
+          },
+          body: JSON.stringify(body),
+        },
+      );
       if (!r.ok) return null;
-      const d = await r.json(); return d?.render_id ?? d?.id ?? null;
-    } catch { return null; }
+      const d = await r.json();
+      return d?.render_id ?? d?.id ?? null;
+    } catch {
+      return null;
+    }
   },
   async poll(renderId: string): Promise<string | null> {
-    for (let i=0;i<45;i++) {
-      await new Promise(r=>setTimeout(r,4000));
+    for (let i = 0; i < 45; i++) {
+      await new Promise((r) => setTimeout(r, 4000));
       try {
-        const r = await fetch(`${AVATAR_CONFIG.ganai.baseUrl}/v2/renders/${renderId}`,{headers:{"x-api-key":AVATAR_CONFIG.ganai.apiKey}});
+        const r = await fetch(
+          `${AVATAR_CONFIG.ganai.baseUrl}/v2/renders/${renderId}`,
+          { headers: { "x-api-key": AVATAR_CONFIG.ganai.apiKey } },
+        );
         if (!r.ok) continue;
         const d = await r.json();
-        if (d?.status==="completed"&&d?.video_url) return d.video_url;
-        if (d?.status==="failed") return null;
+        if (d?.status === "completed" && d?.video_url) return d.video_url;
+        if (d?.status === "failed") return null;
       } catch {}
     }
     return null;
@@ -3497,691 +3531,1668 @@ const ganAi = {
 };
 
 class HeyGenService {
-  private avatar: any=null; private sessionData: any=null;
+  private avatar: any = null;
+  private sessionData: any = null;
   private videoRef: React.RefObject<HTMLVideoElement>;
-  onStateChange?: (speaking:boolean)=>void; onStreamReady?: ()=>void;
-  constructor(v: React.RefObject<HTMLVideoElement>) { this.videoRef=v; }
+  onStateChange?: (speaking: boolean) => void;
+  onStreamReady?: () => void;
+  constructor(v: React.RefObject<HTMLVideoElement>) {
+    this.videoRef = v;
+  }
   async init(): Promise<boolean> {
     try {
       const mod = await import("@heygen/streaming-avatar" as any);
-      const SA = mod.StreamingAvatar??(mod as any).default?.StreamingAvatar??(mod as any).default;
-      const SE = mod.StreamingEvents??(mod as any).default?.StreamingEvents;
-      if (typeof SA!=="function") throw new Error("not a constructor");
-      this.avatar = new SA({token:await this.getToken()});
-      this.avatar.on(SE.AVATAR_START_TALKING,()=>this.onStateChange?.(true));
-      this.avatar.on(SE.AVATAR_STOP_TALKING,()=>this.onStateChange?.(false));
-      this.avatar.on(SE.STREAM_READY,(ev:any)=>{
-        if (this.videoRef.current&&ev.detail) { this.videoRef.current.srcObject=ev.detail; this.videoRef.current.play().catch(()=>{}).then(()=>this.onStreamReady?.()); }
+      const SA =
+        mod.StreamingAvatar ??
+        (mod as any).default?.StreamingAvatar ??
+        (mod as any).default;
+      const SE = mod.StreamingEvents ?? (mod as any).default?.StreamingEvents;
+      if (typeof SA !== "function") throw new Error("not a constructor");
+      this.avatar = new SA({ token: await this.getToken() });
+      this.avatar.on(SE.AVATAR_START_TALKING, () => this.onStateChange?.(true));
+      this.avatar.on(SE.AVATAR_STOP_TALKING, () => this.onStateChange?.(false));
+      this.avatar.on(SE.STREAM_READY, (ev: any) => {
+        if (this.videoRef.current && ev.detail) {
+          this.videoRef.current.srcObject = ev.detail;
+          this.videoRef.current
+            .play()
+            .catch(() => {})
+            .then(() => this.onStreamReady?.());
+        }
       });
-      this.sessionData = await this.avatar.createStartAvatar({ avatarName:AVATAR_CONFIG.heygen.avatarId, quality:AVATAR_CONFIG.heygen.quality, voice:AVATAR_CONFIG.heygen.voiceId?{voiceId:AVATAR_CONFIG.heygen.voiceId}:undefined });
+      this.sessionData = await this.avatar.createStartAvatar({
+        avatarName: AVATAR_CONFIG.heygen.avatarId,
+        quality: AVATAR_CONFIG.heygen.quality,
+        voice: AVATAR_CONFIG.heygen.voiceId
+          ? { voiceId: AVATAR_CONFIG.heygen.voiceId }
+          : undefined,
+      });
       return true;
-    } catch(e) { console.error("HeyGen:",e); return false; }
+    } catch (e) {
+      console.error("HeyGen:", e);
+      return false;
+    }
   }
   private async getToken(): Promise<string> {
-    const r=await fetch("https://api.heygen.com/v1/streaming.create_token",{method:"POST",headers:{"x-api-key":AVATAR_CONFIG.heygen.apiKey}});
-    return (await r.json())?.data?.token??"";
+    const r = await fetch("https://api.heygen.com/v1/streaming.create_token", {
+      method: "POST",
+      headers: { "x-api-key": AVATAR_CONFIG.heygen.apiKey },
+    });
+    return (await r.json())?.data?.token ?? "";
   }
-  async speak(text:string) {
-    if (!this.avatar||!this.sessionData) return;
-    try { const mod=await import("@heygen/streaming-avatar" as any); const TT=mod.TaskType??(mod as any).default?.TaskType; await this.avatar.speak({sessionId:this.sessionData.session_id,text,task_type:TT?.REPEAT??"repeat"}); } catch {}
+  async speak(text: string) {
+    if (!this.avatar || !this.sessionData) return;
+    try {
+      const mod = await import("@heygen/streaming-avatar" as any);
+      const TT = mod.TaskType ?? (mod as any).default?.TaskType;
+      await this.avatar.speak({
+        sessionId: this.sessionData.session_id,
+        text,
+        task_type: TT?.REPEAT ?? "repeat",
+      });
+    } catch {}
   }
-  async destroy() { try { await this.avatar?.stopAvatar(); } catch {} this.avatar=null; this.sessionData=null; }
+  async destroy() {
+    try {
+      await this.avatar?.stopAvatar();
+    } catch {}
+    this.avatar = null;
+    this.sessionData = null;
+  }
 }
 
 // ─── TYPES ──────────────────────────────────────────────────────────────────
-type Screen     = "lobby"|"connecting"|"spotlight"|"grid";
-type AvatarMode = "heygen"|"ganai"|"animated";
-type AvatarState= "idle"|"thinking"|"speaking";
-interface AlertState { type:string; count:number; title:string; body:string; }
+type Screen = "lobby" | "connecting" | "spotlight" | "grid";
+type AvatarMode = "heygen" | "ganai" | "animated";
+type AvatarState = "idle" | "thinking" | "speaking";
+interface AlertState {
+  type: string;
+  count: number;
+  title: string;
+  body: string;
+}
 
 // ─── CONSTANTS ───────────────────────────────────────────────────────────────
-const MAX_VIOLATIONS        = 3;
+const MAX_VIOLATIONS = 3;
 const SILENCE_THRESHOLD_SEC = 30;
-const MAX_SILENCE_WARNINGS  = 5;
-const TICK_MS               = 1000;
-const HARD_TICKS            = 3;
-const MULTI_TICKS           = 2;
-const EAR_HARD              = 0.22;
-const GAZE_HARD             = 0.22;
-const MULTI_CONFIDENCE      = 0.28;
+const MAX_SILENCE_WARNINGS = 5;
+const TICK_MS = 1000;
+const HARD_TICKS = 3;
+const MULTI_TICKS = 2;
+const EAR_HARD = 0.22;
+const GAZE_HARD = 0.22;
+const MULTI_CONFIDENCE = 0.28;
 const VIOLATION_COOLDOWN_MS = 12000;
-const POST_CLOSE_LOCK_MS    = 6000;
+const POST_CLOSE_LOCK_MS = 6000;
 
 // Minimum transcript length to count as a real answer (filters out "okay", "yes", "hmm" etc.)
 const MIN_ANSWER_LENGTH = 15;
 
-const VIOLATION_MSGS: Record<string,{title:string;body:(r:number)=>string;spoken:string}> = {
-  "tab-switch":      {title:"Tab Switch Detected",       body:r=>`You navigated away. ${r} warning(s) remaining.`,                spoken:"I noticed you switched tabs. Please stay on the interview window."},
-  "camera-off":      {title:"Camera Turned Off",         body:r=>`Keep camera on. ${r} warning(s) remaining.`,                    spoken:"Please turn your camera back on. Camera must remain on throughout the interview."},
-  "no-face":         {title:"Face Not Detected",         body:r=>`Sit in front of the camera. ${r} warning(s) remaining.`,        spoken:"I can't see your face. Please sit directly in front of the camera."},
-  "multiple-faces":  {title:"Multiple People Detected",  body:r=>`Only the candidate should be visible. ${r} warning(s) remaining.`,spoken:"Multiple people detected. Only the candidate should be visible."},
-  "looking-away":    {title:"Looking Away Detected",     body:r=>`Please look at the screen. ${r} warning(s) remaining.`,          spoken:"Please look at the screen and face the camera."},
-  "eyes-closed":     {title:"Eyes Closed / Drowsy",      body:r=>`Please stay attentive. ${r} warning(s) remaining.`,              spoken:"Your eyes appear closed. Please stay attentive."},
-  "fullscreen-exit": {title:"Fullscreen Exited",         body:r=>`Stay in fullscreen. ${r} warning(s) remaining.`,                spoken:"Please keep the interview in fullscreen mode."},
+const VIOLATION_MSGS: Record<
+  string,
+  { title: string; body: (r: number) => string; spoken: string }
+> = {
+  "tab-switch": {
+    title: "Tab Switch Detected",
+    body: (r) => `You navigated away. ${r} warning(s) remaining.`,
+    spoken: "I noticed you switched tabs. Please stay on the interview window.",
+  },
+  "camera-off": {
+    title: "Camera Turned Off",
+    body: (r) => `Keep camera on. ${r} warning(s) remaining.`,
+    spoken:
+      "Please turn your camera back on. Camera must remain on throughout the interview.",
+  },
+  "no-face": {
+    title: "Face Not Detected",
+    body: (r) => `Sit in front of the camera. ${r} warning(s) remaining.`,
+    spoken:
+      "I can't see your face. Please sit directly in front of the camera.",
+  },
+  "multiple-faces": {
+    title: "Multiple People Detected",
+    body: (r) =>
+      `Only the candidate should be visible. ${r} warning(s) remaining.`,
+    spoken: "Multiple people detected. Only the candidate should be visible.",
+  },
+  "looking-away": {
+    title: "Looking Away Detected",
+    body: (r) => `Please look at the screen. ${r} warning(s) remaining.`,
+    spoken: "Please look at the screen and face the camera.",
+  },
+  "eyes-closed": {
+    title: "Eyes Closed / Drowsy",
+    body: (r) => `Please stay attentive. ${r} warning(s) remaining.`,
+    spoken: "Your eyes appear closed. Please stay attentive.",
+  },
+  "fullscreen-exit": {
+    title: "Fullscreen Exited",
+    body: (r) => `Stay in fullscreen. ${r} warning(s) remaining.`,
+    spoken: "Please keep the interview in fullscreen mode.",
+  },
 };
 
 // ─── FULLSCREEN ──────────────────────────────────────────────────────────────
-const isInFS    = ()=>!!(document.fullscreenElement||(document as any).webkitFullscreenElement||(document as any).mozFullScreenElement);
-const tryEnterFS= ()=>{try{if(!isInFS()){const e=document.documentElement as any;(e.requestFullscreen||e.webkitRequestFullscreen||e.mozRequestFullScreen)?.call(e,{navigationUI:"hide"});}}catch{}};
-const tryExitFS = async()=>{try{if(isInFS()){const d=document as any;await(d.exitFullscreen||d.webkitExitFullscreen||d.mozCancelFullScreen)?.call(document);}}catch{}};
+const isInFS = () =>
+  !!(
+    document.fullscreenElement ||
+    (document as any).webkitFullscreenElement ||
+    (document as any).mozFullScreenElement
+  );
+const tryEnterFS = () => {
+  try {
+    if (!isInFS()) {
+      const e = document.documentElement as any;
+      (
+        e.requestFullscreen ||
+        e.webkitRequestFullscreen ||
+        e.mozRequestFullScreen
+      )?.call(e, { navigationUI: "hide" });
+    }
+  } catch {}
+};
+const tryExitFS = async () => {
+  try {
+    if (isInFS()) {
+      const d = document as any;
+      await (
+        d.exitFullscreen ||
+        d.webkitExitFullscreen ||
+        d.mozCancelFullScreen
+      )?.call(document);
+    }
+  } catch {}
+};
 
 // ─── BEHAVIOR TRACKER ────────────────────────────────────────────────────────
 class BehaviorTracker {
-  events:Array<{type:string;timestamp:number}>=[];
-  addEvent(t:string){this.events.push({type:t,timestamp:Date.now()});}
-  getReport(){return {totalEvents:this.events.length, noFaceCount:this.events.filter(e=>e.type==="no_face").length, multipleFacesCount:this.events.filter(e=>e.type==="multiple_faces").length, lookingAwayCount:this.events.filter(e=>e.type==="looking_away").length, eyesClosedCount:this.events.filter(e=>e.type==="eyes_closed").length, events:this.events};}
+  events: Array<{ type: string; timestamp: number }> = [];
+  addEvent(t: string) {
+    this.events.push({ type: t, timestamp: Date.now() });
+  }
+  getReport() {
+    return {
+      totalEvents: this.events.length,
+      noFaceCount: this.events.filter((e) => e.type === "no_face").length,
+      multipleFacesCount: this.events.filter((e) => e.type === "multiple_faces")
+        .length,
+      lookingAwayCount: this.events.filter((e) => e.type === "looking_away")
+        .length,
+      eyesClosedCount: this.events.filter((e) => e.type === "eyes_closed")
+        .length,
+      events: this.events,
+    };
+  }
 }
 
 // ─── EAR ─────────────────────────────────────────────────────────────────────
-const edPt   = (a:faceapi.Point,b:faceapi.Point)=>Math.sqrt((a.x-b.x)**2+(a.y-b.y)**2);
-const earVal = (pts:faceapi.Point[])=>pts.length<6?1:(edPt(pts[1],pts[5])+edPt(pts[2],pts[4]))/(2*edPt(pts[0],pts[3]));
+const edPt = (a: faceapi.Point, b: faceapi.Point) =>
+  Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
+const earVal = (pts: faceapi.Point[]) =>
+  pts.length < 6
+    ? 1
+    : (edPt(pts[1], pts[5]) + edPt(pts[2], pts[4])) /
+      (2 * edPt(pts[0], pts[3]));
 
 // ─── ANIMATED AVATAR ─────────────────────────────────────────────────────────
-const AnimatedAvatar=React.memo(({state}:{state:AvatarState})=>{
-  const [blink,setBlink]=useState(false);
-  const [mouth,setMouth]=useState(0);
-  const [breathe,setBreathe]=useState(false);
-  useEffect(()=>{let t:any;const l=()=>{t=setTimeout(()=>{setBlink(true);setTimeout(()=>setBlink(false),130);l();},2500+Math.random()*2500);};l();return()=>clearTimeout(t);},[]);
-  useEffect(()=>{const t=setInterval(()=>setBreathe(p=>!p),2200);return()=>clearInterval(t);},[]);
-  useEffect(()=>{if(state!=="speaking"){setMouth(0);return;}const t=setInterval(()=>setMouth(p=>(p%4)+1),90);return()=>clearInterval(t);},[state]);
-  const mD=["M 116 218 Q 140 222 164 218","M 116 216 Q 140 228 164 216","M 114 215 Q 140 234 166 215","M 112 213 Q 140 238 168 213","M 114 215 Q 140 232 166 215"][mouth];
-  return(
+const AnimatedAvatar = React.memo(({ state }: { state: AvatarState }) => {
+  const [blink, setBlink] = useState(false);
+  const [mouth, setMouth] = useState(0);
+  const [breathe, setBreathe] = useState(false);
+  useEffect(() => {
+    let t: any;
+    const l = () => {
+      t = setTimeout(
+        () => {
+          setBlink(true);
+          setTimeout(() => setBlink(false), 130);
+          l();
+        },
+        2500 + Math.random() * 2500,
+      );
+    };
+    l();
+    return () => clearTimeout(t);
+  }, []);
+  useEffect(() => {
+    const t = setInterval(() => setBreathe((p) => !p), 2200);
+    return () => clearInterval(t);
+  }, []);
+  useEffect(() => {
+    if (state !== "speaking") {
+      setMouth(0);
+      return;
+    }
+    const t = setInterval(() => setMouth((p) => (p % 4) + 1), 90);
+    return () => clearInterval(t);
+  }, [state]);
+  const mD = [
+    "M 116 218 Q 140 222 164 218",
+    "M 116 216 Q 140 228 164 216",
+    "M 114 215 Q 140 234 166 215",
+    "M 112 213 Q 140 238 168 213",
+    "M 114 215 Q 140 232 166 215",
+  ][mouth];
+  return (
     <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-[#0b1230] via-[#0d1535] to-[#060c22]">
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none"><div className="w-64 h-80 rounded-full opacity-15" style={{background:"radial-gradient(ellipse,#2D55FB 0%,transparent 70%)",filter:"blur(50px)"}}/></div>
-      <motion.div animate={{y:breathe&&state==="idle"?-4:0}} transition={{duration:2.2,ease:"easeInOut"}}>
-        <svg width="210" height="252" viewBox="0 0 280 340" style={{filter:"drop-shadow(0 12px 40px rgba(45,85,251,0.25))"}}>
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div
+          className="w-64 h-80 rounded-full opacity-15"
+          style={{
+            background: "radial-gradient(ellipse,#2D55FB 0%,transparent 70%)",
+            filter: "blur(50px)",
+          }}
+        />
+      </div>
+      <motion.div
+        animate={{ y: breathe && state === "idle" ? -4 : 0 }}
+        transition={{ duration: 2.2, ease: "easeInOut" }}
+      >
+        <svg
+          width="210"
+          height="252"
+          viewBox="0 0 280 340"
+          style={{ filter: "drop-shadow(0 12px 40px rgba(45,85,251,0.25))" }}
+        >
           <defs>
-            <linearGradient id="av_skin" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#f8d5b5"/><stop offset="45%" stopColor="#f0c4a0"/><stop offset="100%" stopColor="#e0a87a"/></linearGradient>
-            <linearGradient id="av_hair" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#3a2c1e"/><stop offset="100%" stopColor="#1a140d"/></linearGradient>
-            <linearGradient id="av_suit" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#162050"/><stop offset="100%" stopColor="#0b1234"/></linearGradient>
-            <radialGradient id="av_iris" cx="38%" cy="32%" r="62%"><stop offset="0%" stopColor="#5b7bbf"/><stop offset="100%" stopColor="#2d4a7a"/></radialGradient>
-            <filter id="av_shadow"><feDropShadow dx="0" dy="6" stdDeviation="8" floodColor="#000" floodOpacity="0.28"/></filter>
+            <linearGradient id="av_skin" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#f8d5b5" />
+              <stop offset="45%" stopColor="#f0c4a0" />
+              <stop offset="100%" stopColor="#e0a87a" />
+            </linearGradient>
+            <linearGradient id="av_hair" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#3a2c1e" />
+              <stop offset="100%" stopColor="#1a140d" />
+            </linearGradient>
+            <linearGradient id="av_suit" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#162050" />
+              <stop offset="100%" stopColor="#0b1234" />
+            </linearGradient>
+            <radialGradient id="av_iris" cx="38%" cy="32%" r="62%">
+              <stop offset="0%" stopColor="#5b7bbf" />
+              <stop offset="100%" stopColor="#2d4a7a" />
+            </radialGradient>
+            <filter id="av_shadow">
+              <feDropShadow
+                dx="0"
+                dy="6"
+                stdDeviation="8"
+                floodColor="#000"
+                floodOpacity="0.28"
+              />
+            </filter>
           </defs>
-          <rect x="122" y="232" width="36" height="45" rx="6" fill="url(#av_skin)"/>
-          <path d="M 48 330 Q 50 268 90 256 L 140 266 L 190 256 Q 230 268 232 330 Z" fill="url(#av_suit)"/>
-          <path d="M 118 258 L 140 278 L 162 258 L 155 250 L 140 268 L 125 250 Z" fill="#f0f4ff"/>
-          <path d="M 134 263 L 140 308 L 146 263 L 140 258 Z" fill="#2D55FB" opacity="0.9"/>
-          <path d="M 90 256 Q 112 245 130 250 L 118 258 Q 78 272 68 292 Z" fill="#101840" opacity="0.65"/>
-          <path d="M 190 256 Q 168 245 150 250 L 162 258 Q 202 272 212 292 Z" fill="#101840" opacity="0.65"/>
-          <ellipse cx="140" cy="146" rx="88" ry="100" fill="url(#av_skin)" filter="url(#av_shadow)"/>
-          <path d="M 56 108 Q 50 48 140 36 Q 230 48 224 108 L 220 128 Q 212 73 140 66 Q 68 73 60 128 Z" fill="url(#av_hair)"/>
-          <path d="M 56 108 Q 52 142 58 165 Q 54 132 60 128 Z" fill="url(#av_hair)"/>
-          <path d="M 224 108 Q 228 142 222 165 Q 226 132 220 128 Z" fill="url(#av_hair)"/>
-          <ellipse cx="52" cy="153" rx="10" ry="14" fill="url(#av_skin)"/>
-          <ellipse cx="228" cy="153" rx="10" ry="14" fill="url(#av_skin)"/>
-          <path d="M 86 106 Q 104 100 120 105" stroke="#3a2c1e" strokeWidth="3.2" fill="none" strokeLinecap="round"/>
-          <ellipse cx="103" cy="126" rx="16" ry={blink?0.8:12} fill="white"/>
-          {!blink&&<><ellipse cx="105" cy="127" rx="9" ry="9" fill="url(#av_iris)"/><ellipse cx="105" cy="127" rx="5" ry="5" fill="#0a0a0a"/><circle cx="102" cy="124" r="2.5" fill="white" opacity="0.9"/></>}
-          <path d={blink?"M 87 126 Q 103 126 119 126":"M 87 118 Q 103 113 119 118"} stroke="#3a2c1e" strokeWidth="1.8" fill="none" strokeLinecap="round"/>
-          <path d="M 160 105 Q 176 100 194 106" stroke="#3a2c1e" strokeWidth="3.2" fill="none" strokeLinecap="round"/>
-          <ellipse cx="177" cy="126" rx="16" ry={blink?0.8:12} fill="white"/>
-          {!blink&&<><ellipse cx="175" cy="127" rx="9" ry="9" fill="url(#av_iris)"/><ellipse cx="175" cy="127" rx="5" ry="5" fill="#0a0a0a"/><circle cx="172" cy="124" r="2.5" fill="white" opacity="0.9"/></>}
-          <path d={blink?"M 161 126 Q 177 126 193 126":"M 161 118 Q 177 113 193 118"} stroke="#3a2c1e" strokeWidth="1.8" fill="none" strokeLinecap="round"/>
-          <path d="M 140 133 L 135 168 Q 140 175 145 168 Z" fill="#d4956a" opacity="0.28"/>
-          <path d="M 130 171 Q 140 177 150 171" stroke="#c4856a" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
-          <path d="M 116 213 Q 128 208 140 210 Q 152 208 164 213" stroke="#c0766a" strokeWidth="1.8" fill="none" strokeLinecap="round"/>
-          <path d={mD} stroke="#a85a5a" strokeWidth="2.5" fill={mouth>1?"#7a3030":"none"} strokeLinecap="round"/>
-          {mouth>1&&<path d="M 120 216 Q 140 228 160 216 L 158 220 Q 140 232 122 220 Z" fill="white" opacity="0.88"/>}
+          <rect
+            x="122"
+            y="232"
+            width="36"
+            height="45"
+            rx="6"
+            fill="url(#av_skin)"
+          />
+          <path
+            d="M 48 330 Q 50 268 90 256 L 140 266 L 190 256 Q 230 268 232 330 Z"
+            fill="url(#av_suit)"
+          />
+          <path
+            d="M 118 258 L 140 278 L 162 258 L 155 250 L 140 268 L 125 250 Z"
+            fill="#f0f4ff"
+          />
+          <path
+            d="M 134 263 L 140 308 L 146 263 L 140 258 Z"
+            fill="#2D55FB"
+            opacity="0.9"
+          />
+          <path
+            d="M 90 256 Q 112 245 130 250 L 118 258 Q 78 272 68 292 Z"
+            fill="#101840"
+            opacity="0.65"
+          />
+          <path
+            d="M 190 256 Q 168 245 150 250 L 162 258 Q 202 272 212 292 Z"
+            fill="#101840"
+            opacity="0.65"
+          />
+          <ellipse
+            cx="140"
+            cy="146"
+            rx="88"
+            ry="100"
+            fill="url(#av_skin)"
+            filter="url(#av_shadow)"
+          />
+          <path
+            d="M 56 108 Q 50 48 140 36 Q 230 48 224 108 L 220 128 Q 212 73 140 66 Q 68 73 60 128 Z"
+            fill="url(#av_hair)"
+          />
+          <path
+            d="M 56 108 Q 52 142 58 165 Q 54 132 60 128 Z"
+            fill="url(#av_hair)"
+          />
+          <path
+            d="M 224 108 Q 228 142 222 165 Q 226 132 220 128 Z"
+            fill="url(#av_hair)"
+          />
+          <ellipse cx="52" cy="153" rx="10" ry="14" fill="url(#av_skin)" />
+          <ellipse cx="228" cy="153" rx="10" ry="14" fill="url(#av_skin)" />
+          <path
+            d="M 86 106 Q 104 100 120 105"
+            stroke="#3a2c1e"
+            strokeWidth="3.2"
+            fill="none"
+            strokeLinecap="round"
+          />
+          <ellipse
+            cx="103"
+            cy="126"
+            rx="16"
+            ry={blink ? 0.8 : 12}
+            fill="white"
+          />
+          {!blink && (
+            <>
+              <ellipse cx="105" cy="127" rx="9" ry="9" fill="url(#av_iris)" />
+              <ellipse cx="105" cy="127" rx="5" ry="5" fill="#0a0a0a" />
+              <circle cx="102" cy="124" r="2.5" fill="white" opacity="0.9" />
+            </>
+          )}
+          <path
+            d={
+              blink
+                ? "M 87 126 Q 103 126 119 126"
+                : "M 87 118 Q 103 113 119 118"
+            }
+            stroke="#3a2c1e"
+            strokeWidth="1.8"
+            fill="none"
+            strokeLinecap="round"
+          />
+          <path
+            d="M 160 105 Q 176 100 194 106"
+            stroke="#3a2c1e"
+            strokeWidth="3.2"
+            fill="none"
+            strokeLinecap="round"
+          />
+          <ellipse
+            cx="177"
+            cy="126"
+            rx="16"
+            ry={blink ? 0.8 : 12}
+            fill="white"
+          />
+          {!blink && (
+            <>
+              <ellipse cx="175" cy="127" rx="9" ry="9" fill="url(#av_iris)" />
+              <ellipse cx="175" cy="127" rx="5" ry="5" fill="#0a0a0a" />
+              <circle cx="172" cy="124" r="2.5" fill="white" opacity="0.9" />
+            </>
+          )}
+          <path
+            d={
+              blink
+                ? "M 161 126 Q 177 126 193 126"
+                : "M 161 118 Q 177 113 193 118"
+            }
+            stroke="#3a2c1e"
+            strokeWidth="1.8"
+            fill="none"
+            strokeLinecap="round"
+          />
+          <path
+            d="M 140 133 L 135 168 Q 140 175 145 168 Z"
+            fill="#d4956a"
+            opacity="0.28"
+          />
+          <path
+            d="M 130 171 Q 140 177 150 171"
+            stroke="#c4856a"
+            strokeWidth="1.5"
+            fill="none"
+            strokeLinecap="round"
+          />
+          <path
+            d="M 116 213 Q 128 208 140 210 Q 152 208 164 213"
+            stroke="#c0766a"
+            strokeWidth="1.8"
+            fill="none"
+            strokeLinecap="round"
+          />
+          <path
+            d={mD}
+            stroke="#a85a5a"
+            strokeWidth="2.5"
+            fill={mouth > 1 ? "#7a3030" : "none"}
+            strokeLinecap="round"
+          />
+          {mouth > 1 && (
+            <path
+              d="M 120 216 Q 140 228 160 216 L 158 220 Q 140 232 122 220 Z"
+              fill="white"
+              opacity="0.88"
+            />
+          )}
         </svg>
       </motion.div>
       <div className="mt-2 h-5 flex items-center justify-center">
-        {state==="thinking"&&<div className="flex gap-1.5 items-center">{[0,0.15,0.3].map((d,i)=><motion.div key={i} className="w-1.5 h-1.5 rounded-full bg-[#2D55FB]" animate={{y:["0px","-6px","0px"],opacity:[0.5,1,0.5]}} transition={{duration:0.7,repeat:Infinity,delay:d}}/>)}<span className="text-white/35 text-[10px] ml-1 font-medium">Thinking…</span></div>}
-        {state==="speaking"&&<div className="flex items-center gap-1">{[0,0.08,0.16,0.24,0.16,0.08].map((d,i)=><motion.div key={i} className="w-0.5 rounded-full bg-[#2D55FB]" animate={{height:["3px",`${6+(i%3)*4}px`,"3px"]}} transition={{duration:0.45,repeat:Infinity,delay:d,ease:"easeInOut"}}/>)}<span className="text-[#2D55FB] text-[10px] ml-1.5 font-semibold">Speaking</span></div>}
+        {state === "thinking" && (
+          <div className="flex gap-1.5 items-center">
+            {[0, 0.15, 0.3].map((d, i) => (
+              <motion.div
+                key={i}
+                className="w-1.5 h-1.5 rounded-full bg-[#2D55FB]"
+                animate={{ y: ["0px", "-6px", "0px"], opacity: [0.5, 1, 0.5] }}
+                transition={{ duration: 0.7, repeat: Infinity, delay: d }}
+              />
+            ))}
+            <span className="text-white/35 text-[10px] ml-1 font-medium">
+              Thinking…
+            </span>
+          </div>
+        )}
+        {state === "speaking" && (
+          <div className="flex items-center gap-1">
+            {[0, 0.08, 0.16, 0.24, 0.16, 0.08].map((d, i) => (
+              <motion.div
+                key={i}
+                className="w-0.5 rounded-full bg-[#2D55FB]"
+                animate={{ height: ["3px", `${6 + (i % 3) * 4}px`, "3px"] }}
+                transition={{
+                  duration: 0.45,
+                  repeat: Infinity,
+                  delay: d,
+                  ease: "easeInOut",
+                }}
+              />
+            ))}
+            <span className="text-[#2D55FB] text-[10px] ml-1.5 font-semibold">
+              Speaking
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );
 });
 
 // ─── AVATAR TILE ─────────────────────────────────────────────────────────────
-interface AvatarTileProps{mode:AvatarMode;state:AvatarState;heygenVideoRef:React.RefObject<HTMLVideoElement>;ganAiVideoUrl:string|null;ganAiLoading:boolean;heygenReady:boolean;}
-const AvatarTile=React.memo(({mode,state,heygenVideoRef,ganAiVideoUrl,ganAiLoading,heygenReady}:AvatarTileProps)=>{
-  const ganRef=useRef<HTMLVideoElement>(null);
-  useEffect(()=>{if(ganAiVideoUrl&&ganRef.current){ganRef.current.src=ganAiVideoUrl;ganRef.current.play().catch(()=>{});}},[ganAiVideoUrl]);
-  return(
-    <div className="absolute inset-0">
-      <AnimatedAvatar state={mode==="heygen"&&heygenReady?"idle":state}/>
-      {mode==="heygen"&&<video ref={heygenVideoRef} playsInline autoPlay className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ${heygenReady?"opacity-100":"opacity-0"}`}/>}
-      {mode==="ganai"&&ganAiVideoUrl&&<video ref={ganRef} playsInline className="absolute inset-0 w-full h-full object-cover" onEnded={()=>{if(ganRef.current)ganRef.current.src="";}}/>}
-      <div className="absolute top-3 left-3 z-20">
-        {mode==="heygen"&&<div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border backdrop-blur-sm text-[9px] font-semibold ${heygenReady?"bg-green-500/15 border-green-500/30 text-green-300":"bg-amber-500/15 border-amber-500/30 text-amber-300"}`}><div className={`w-1.5 h-1.5 rounded-full ${heygenReady?"bg-green-400":"bg-amber-400"} animate-pulse`}/>{heygenReady?"Live Avatar":"Connecting…"}</div>}
-        {mode==="ganai"&&<div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full border backdrop-blur-sm bg-purple-500/15 border-purple-500/30 text-purple-300 text-[9px] font-semibold"><div className={`w-1.5 h-1.5 rounded-full ${ganAiLoading?"bg-amber-400 animate-pulse":"bg-purple-400"}`}/>{ganAiLoading?"Rendering…":"Gan.AI"}</div>}
+interface AvatarTileProps {
+  mode: AvatarMode;
+  state: AvatarState;
+  heygenVideoRef: React.RefObject<HTMLVideoElement>;
+  ganAiVideoUrl: string | null;
+  ganAiLoading: boolean;
+  heygenReady: boolean;
+}
+const AvatarTile = React.memo(
+  ({
+    mode,
+    state,
+    heygenVideoRef,
+    ganAiVideoUrl,
+    ganAiLoading,
+    heygenReady,
+  }: AvatarTileProps) => {
+    const ganRef = useRef<HTMLVideoElement>(null);
+    useEffect(() => {
+      if (ganAiVideoUrl && ganRef.current) {
+        ganRef.current.src = ganAiVideoUrl;
+        ganRef.current.play().catch(() => {});
+      }
+    }, [ganAiVideoUrl]);
+    return (
+      <div className="absolute inset-0">
+        <AnimatedAvatar
+          state={mode === "heygen" && heygenReady ? "idle" : state}
+        />
+        {mode === "heygen" && (
+          <video
+            ref={heygenVideoRef}
+            playsInline
+            autoPlay
+            className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ${heygenReady ? "opacity-100" : "opacity-0"}`}
+          />
+        )}
+        {mode === "ganai" && ganAiVideoUrl && (
+          <video
+            ref={ganRef}
+            playsInline
+            className="absolute inset-0 w-full h-full object-cover"
+            onEnded={() => {
+              if (ganRef.current) ganRef.current.src = "";
+            }}
+          />
+        )}
+        <div className="absolute top-3 left-3 z-20">
+          {mode === "heygen" && (
+            <div
+              className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border backdrop-blur-sm text-[9px] font-semibold ${heygenReady ? "bg-green-500/15 border-green-500/30 text-green-300" : "bg-amber-500/15 border-amber-500/30 text-amber-300"}`}
+            >
+              <div
+                className={`w-1.5 h-1.5 rounded-full ${heygenReady ? "bg-green-400" : "bg-amber-400"} animate-pulse`}
+              />
+              {heygenReady ? "Live Avatar" : "Connecting…"}
+            </div>
+          )}
+          {mode === "ganai" && (
+            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full border backdrop-blur-sm bg-purple-500/15 border-purple-500/30 text-purple-300 text-[9px] font-semibold">
+              <div
+                className={`w-1.5 h-1.5 rounded-full ${ganAiLoading ? "bg-amber-400 animate-pulse" : "bg-purple-400"}`}
+              />
+              {ganAiLoading ? "Rendering…" : "Gan.AI"}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
-  );
-});
+    );
+  },
+);
 
 // ─── CONNECTING SCREEN ────────────────────────────────────────────────────────
-const ConnectingScreen=React.memo(({heygenReady,vapiReady,avatarMode,onBothReady}:{heygenReady:boolean;vapiReady:boolean;avatarMode:AvatarMode;onBothReady:()=>void})=>{
-  const done=avatarMode==="heygen"?heygenReady&&vapiReady:vapiReady;
-  useEffect(()=>{if(done){const t=setTimeout(onBothReady,600);return()=>clearTimeout(t);}},[done,onBothReady]);
-  const items=[{label:"Vapi Voice AI",done:vapiReady,desc:vapiReady?"Voice AI connected":"Connecting…"},...(avatarMode==="heygen"?[{label:"HeyGen Avatar",done:heygenReady,desc:heygenReady?"Live":"Starting…"}]:[])];
-  return(
-    <div className="h-screen bg-[#050A24] flex flex-col items-center justify-center gap-8 px-6">
-      <div className="relative">
-        <div className="w-24 h-24 rounded-full bg-[#2D55FB]/10 border border-[#2D55FB]/20 flex items-center justify-center"><Wifi className="h-10 w-10 text-[#2D55FB]"/></div>
-        {!done&&(<><motion.div className="absolute inset-0 rounded-full border border-[#2D55FB]/40" animate={{scale:[1,1.6],opacity:[0.5,0]}} transition={{duration:1.8,repeat:Infinity,ease:"easeOut"}}/><motion.div className="absolute inset-0 rounded-full border border-[#2D55FB]/25" animate={{scale:[1,2.2],opacity:[0.3,0]}} transition={{duration:1.8,repeat:Infinity,ease:"easeOut",delay:0.4}}/></>)}
-        {done&&<motion.div initial={{scale:0}} animate={{scale:1}} className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-green-500 border-2 border-[#050A24] flex items-center justify-center"><CheckCircle2 className="h-4 w-4 text-white"/></motion.div>}
-      </div>
-      <div className="text-center"><h2 className="text-white text-2xl font-bold mb-2">{done?"All systems ready!":"Setting up your interview…"}</h2><p className="text-white/40 text-sm">{done?"Starting now":"Please wait…"}</p></div>
-      <div className="flex flex-col gap-3 w-full max-w-sm">
-        {items.map(({label,done:d,desc})=>(
-          <div key={label} className={`flex items-center gap-4 px-4 py-3.5 rounded-xl border transition-all duration-500 ${d?"bg-green-500/10 border-green-500/30":"bg-[#0d1535] border-white/8"}`}>
-            <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${d?"bg-green-500/20":"bg-[#2D55FB]/15"}`}>{d?<CheckCircle2 className="h-5 w-5 text-green-400"/>:<Loader2 className="h-5 w-5 text-[#2D55FB] animate-spin"/>}</div>
-            <div className="flex flex-col min-w-0"><span className={`font-semibold text-sm ${d?"text-green-300":"text-white"}`}>{label}</span><span className={`text-xs ${d?"text-green-400/70":"text-white/35"}`}>{desc}</span></div>
-            {d&&<motion.div initial={{scale:0}} animate={{scale:1}} className="ml-auto w-2 h-2 rounded-full bg-green-400"/>}
+const ConnectingScreen = React.memo(
+  ({
+    heygenReady,
+    vapiReady,
+    avatarMode,
+    onBothReady,
+  }: {
+    heygenReady: boolean;
+    vapiReady: boolean;
+    avatarMode: AvatarMode;
+    onBothReady: () => void;
+  }) => {
+    const done = avatarMode === "heygen" ? heygenReady && vapiReady : vapiReady;
+    useEffect(() => {
+      if (done) {
+        const t = setTimeout(onBothReady, 600);
+        return () => clearTimeout(t);
+      }
+    }, [done, onBothReady]);
+    const items = [
+      {
+        label: "Vapi Voice AI",
+        done: vapiReady,
+        desc: vapiReady ? "Voice AI connected" : "Connecting…",
+      },
+      ...(avatarMode === "heygen"
+        ? [
+            {
+              label: "HeyGen Avatar",
+              done: heygenReady,
+              desc: heygenReady ? "Live" : "Starting…",
+            },
+          ]
+        : []),
+    ];
+    return (
+      <div className="h-screen bg-[#050A24] flex flex-col items-center justify-center gap-8 px-6">
+        <div className="relative">
+          <div className="w-24 h-24 rounded-full bg-[#2D55FB]/10 border border-[#2D55FB]/20 flex items-center justify-center">
+            <Wifi className="h-10 w-10 text-[#2D55FB]" />
           </div>
-        ))}
+          {!done && (
+            <>
+              <motion.div
+                className="absolute inset-0 rounded-full border border-[#2D55FB]/40"
+                animate={{ scale: [1, 1.6], opacity: [0.5, 0] }}
+                transition={{
+                  duration: 1.8,
+                  repeat: Infinity,
+                  ease: "easeOut",
+                }}
+              />
+              <motion.div
+                className="absolute inset-0 rounded-full border border-[#2D55FB]/25"
+                animate={{ scale: [1, 2.2], opacity: [0.3, 0] }}
+                transition={{
+                  duration: 1.8,
+                  repeat: Infinity,
+                  ease: "easeOut",
+                  delay: 0.4,
+                }}
+              />
+            </>
+          )}
+          {done && (
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-green-500 border-2 border-[#050A24] flex items-center justify-center"
+            >
+              <CheckCircle2 className="h-4 w-4 text-white" />
+            </motion.div>
+          )}
+        </div>
+        <div className="text-center">
+          <h2 className="text-white text-2xl font-bold mb-2">
+            {done ? "All systems ready!" : "Setting up your interview…"}
+          </h2>
+          <p className="text-white/40 text-sm">
+            {done ? "Starting now" : "Please wait…"}
+          </p>
+        </div>
+        <div className="flex flex-col gap-3 w-full max-w-sm">
+          {items.map(({ label, done: d, desc }) => (
+            <div
+              key={label}
+              className={`flex items-center gap-4 px-4 py-3.5 rounded-xl border transition-all duration-500 ${d ? "bg-green-500/10 border-green-500/30" : "bg-[#0d1535] border-white/8"}`}
+            >
+              <div
+                className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${d ? "bg-green-500/20" : "bg-[#2D55FB]/15"}`}
+              >
+                {d ? (
+                  <CheckCircle2 className="h-5 w-5 text-green-400" />
+                ) : (
+                  <Loader2 className="h-5 w-5 text-[#2D55FB] animate-spin" />
+                )}
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span
+                  className={`font-semibold text-sm ${d ? "text-green-300" : "text-white"}`}
+                >
+                  {label}
+                </span>
+                <span
+                  className={`text-xs ${d ? "text-green-400/70" : "text-white/35"}`}
+                >
+                  {desc}
+                </span>
+              </div>
+              {d && (
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  className="ml-auto w-2 h-2 rounded-full bg-green-400"
+                />
+              )}
+            </div>
+          ))}
+        </div>
       </div>
-    </div>
-  );
-});
+    );
+  },
+);
 
-const WaveBar=({delay,active}:{delay:number;active:boolean})=>(<motion.span className="inline-block w-0.75 rounded-full bg-white/80 mx-[1.5px]" style={{minHeight:3}} animate={active?{height:["3px","14px","5px","18px","3px"]}:{height:"3px"}} transition={{duration:1.15,repeat:Infinity,ease:"easeInOut",delay}}/>);
-const AudioWave=({active=true}:{active?:boolean})=>(<div className={`flex items-center px-2.5 py-1.5 rounded-full shadow-lg transition-all ${active?"bg-[#2D55FB] shadow-[#2D55FB]/40":"bg-white/10"}`}><div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center mr-1.5 shrink-0"><span className="flex gap-0.5"><span className="w-0.75 h-2.25 bg-white rounded-sm block"/><span className="w-0.75 h-2.25 bg-white rounded-sm block"/></span></div>{[0,0.07,0.14,0.21,0.1,0.28,0.05,0.18,0.12,0.24,0.08,0.2,0.16].map((d,i)=><WaveBar key={i} delay={d} active={active}/>)}</div>);
-const MicCircle=({muted}:{muted:boolean})=>(<div className={`w-8 h-8 rounded-full flex items-center justify-center shadow-lg ${muted?"bg-red-500 shadow-red-500/40":"bg-[#2D55FB] shadow-[#2D55FB]/40"}`}>{muted?<MicOff className="h-4 w-4 text-white"/>:<Mic className="h-4 w-4 text-white"/>}</div>);
-const CtrlBtn=({onClick,active=true,danger=false,children}:{onClick?:()=>void;active?:boolean;danger?:boolean;children:React.ReactNode})=>(<motion.button onClick={onClick} whileTap={{scale:0.88}} className={`w-11 h-11 rounded-full flex items-center justify-center shadow-md transition-colors ${danger?"bg-red-500 hover:bg-red-400 text-white shadow-red-500/40":active?"bg-white hover:bg-gray-100 text-gray-800":"bg-white text-red-500"}`}>{children}</motion.button>);
-const UserVideo=React.memo(({camOn,streamReady,username,onVideoMount}:{camOn:boolean;streamReady:boolean;username:string;onVideoMount:(el:HTMLVideoElement|null)=>void})=>(<><video ref={onVideoMount} muted playsInline className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${camOn&&streamReady?"opacity-100":"opacity-0"}`} style={{transform:"scaleX(-1)"}}/>{(!camOn||!streamReady)&&<div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-[#1a2a5e] to-[#060c25]"><div className="w-16 h-16 rounded-full bg-[#2D55FB]/20 border border-[#2D55FB]/30 flex items-center justify-center mb-2">{streamReady?<VideoOff className="h-8 w-8 text-[#2D55FB]/60"/>:<User className="h-8 w-8 text-[#2D55FB]/50"/>}</div><span className="text-white/30 text-xs">{streamReady?"Camera Off":username}</span></div>}</>));
+const WaveBar = ({ delay, active }: { delay: number; active: boolean }) => (
+  <motion.span
+    className="inline-block w-0.75 rounded-full bg-white/80 mx-[1.5px]"
+    style={{ minHeight: 3 }}
+    animate={
+      active
+        ? { height: ["3px", "14px", "5px", "18px", "3px"] }
+        : { height: "3px" }
+    }
+    transition={{ duration: 1.15, repeat: Infinity, ease: "easeInOut", delay }}
+  />
+);
+const AudioWave = ({ active = true }: { active?: boolean }) => (
+  <div
+    className={`flex items-center px-2.5 py-1.5 rounded-full shadow-lg transition-all ${active ? "bg-[#2D55FB] shadow-[#2D55FB]/40" : "bg-white/10"}`}
+  >
+    <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center mr-1.5 shrink-0">
+      <span className="flex gap-0.5">
+        <span className="w-0.75 h-2.25 bg-white rounded-sm block" />
+        <span className="w-0.75 h-2.25 bg-white rounded-sm block" />
+      </span>
+    </div>
+    {[
+      0, 0.07, 0.14, 0.21, 0.1, 0.28, 0.05, 0.18, 0.12, 0.24, 0.08, 0.2, 0.16,
+    ].map((d, i) => (
+      <WaveBar key={i} delay={d} active={active} />
+    ))}
+  </div>
+);
+const MicCircle = ({ muted }: { muted: boolean }) => (
+  <div
+    className={`w-8 h-8 rounded-full flex items-center justify-center shadow-lg ${muted ? "bg-red-500 shadow-red-500/40" : "bg-[#2D55FB] shadow-[#2D55FB]/40"}`}
+  >
+    {muted ? (
+      <MicOff className="h-4 w-4 text-white" />
+    ) : (
+      <Mic className="h-4 w-4 text-white" />
+    )}
+  </div>
+);
+const CtrlBtn = ({
+  onClick,
+  active = true,
+  danger = false,
+  children,
+}: {
+  onClick?: () => void;
+  active?: boolean;
+  danger?: boolean;
+  children: React.ReactNode;
+}) => (
+  <motion.button
+    onClick={onClick}
+    whileTap={{ scale: 0.88 }}
+    className={`w-11 h-11 rounded-full flex items-center justify-center shadow-md transition-colors ${danger ? "bg-red-500 hover:bg-red-400 text-white shadow-red-500/40" : active ? "bg-white hover:bg-gray-100 text-gray-800" : "bg-white text-red-500"}`}
+  >
+    {children}
+  </motion.button>
+);
+const UserVideo = React.memo(
+  ({
+    camOn,
+    streamReady,
+    username,
+    onVideoMount,
+  }: {
+    camOn: boolean;
+    streamReady: boolean;
+    username: string;
+    onVideoMount: (el: HTMLVideoElement | null) => void;
+  }) => (
+    <>
+      <video
+        ref={onVideoMount}
+        muted
+        playsInline
+        className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${camOn && streamReady ? "opacity-100" : "opacity-0"}`}
+        style={{ transform: "scaleX(-1)" }}
+      />
+      {(!camOn || !streamReady) && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-[#1a2a5e] to-[#060c25]">
+          <div className="w-16 h-16 rounded-full bg-[#2D55FB]/20 border border-[#2D55FB]/30 flex items-center justify-center mb-2">
+            {streamReady ? (
+              <VideoOff className="h-8 w-8 text-[#2D55FB]/60" />
+            ) : (
+              <User className="h-8 w-8 text-[#2D55FB]/50" />
+            )}
+          </div>
+          <span className="text-white/30 text-xs">
+            {streamReady ? "Camera Off" : username}
+          </span>
+        </div>
+      )}
+    </>
+  ),
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // VIOLATION MODAL — defined at MODULE LEVEL for stable identity (no remounting)
 // ─────────────────────────────────────────────────────────────────────────────
-const ViolationModal=React.memo(({alert,onClose}:{alert:AlertState;onClose:()=>void})=>{
-  const term=alert.count>=MAX_VIOLATIONS;
-  const firedRef=useRef(false);
-  const safeClose=useCallback(()=>{if(firedRef.current)return;firedRef.current=true;onClose();},[onClose]);
-  useEffect(()=>{if(!term)return;const t=setTimeout(safeClose,4000);return()=>clearTimeout(t);},[term,safeClose]);
-  return(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/75 backdrop-blur-md" onClick={!term?safeClose:undefined}/>
-      <div className={`relative z-10 w-full max-w-sm mx-4 rounded-2xl border p-6 shadow-2xl ${term?"bg-red-950/95 border-red-500/60":"bg-[#0d1836] border-amber-500/50"}`} style={{animation:"violPop 0.25s cubic-bezier(0.34,1.56,0.64,1) both"}}>
-        <style>{`@keyframes violPop{from{opacity:0;transform:scale(0.88) translateY(20px)}to{opacity:1;transform:scale(1) translateY(0)}}`}</style>
-        <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${term?"bg-red-500/25":"bg-amber-500/25"}`}>{term?<ShieldAlert className="h-6 w-6 text-red-400"/>:<AlertTriangle className="h-6 w-6 text-amber-400"/>}</div>
-        <h3 className="text-white font-bold text-lg mb-1">{term?"Interview Terminated":alert.title}</h3>
-        <p className={`text-sm mb-2 ${term?"text-red-400":"text-amber-400"}`}>{term?"Maximum violations reached":`Violation ${alert.count} of ${MAX_VIOLATIONS}`}</p>
-        <p className="text-white/70 text-sm leading-relaxed mb-5">{alert.body}</p>
-        {!term&&<div className="flex gap-1.5 mb-5">{[...Array(MAX_VIOLATIONS)].map((_,i)=><div key={i} className={`flex-1 h-1.5 rounded-full transition-colors ${i<alert.count?"bg-amber-400":"bg-white/10"}`}/>)}</div>}
-        {!term&&<button onClick={safeClose} className="w-full py-2.5 rounded-xl font-semibold text-white text-sm bg-[#2D55FB] hover:bg-[#1e3fd4] transition-colors">I Understand — Continue</button>}
-        {term&&<div className="text-center text-white/40 text-xs">Redirecting to results…</div>}
+const ViolationModal = React.memo(
+  ({ alert, onClose }: { alert: AlertState; onClose: () => void }) => {
+    const term = alert.count >= MAX_VIOLATIONS;
+    const firedRef = useRef(false);
+    const safeClose = useCallback(() => {
+      if (firedRef.current) return;
+      firedRef.current = true;
+      onClose();
+    }, [onClose]);
+    useEffect(() => {
+      if (!term) return;
+      const t = setTimeout(safeClose, 4000);
+      return () => clearTimeout(t);
+    }, [term, safeClose]);
+    return (
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+        <div
+          className="absolute inset-0 bg-black/75 backdrop-blur-md"
+          onClick={!term ? safeClose : undefined}
+        />
+        <div
+          className={`relative z-10 w-full max-w-sm mx-4 rounded-2xl border p-6 shadow-2xl ${term ? "bg-red-950/95 border-red-500/60" : "bg-[#0d1836] border-amber-500/50"}`}
+          style={{
+            animation: "violPop 0.25s cubic-bezier(0.34,1.56,0.64,1) both",
+          }}
+        >
+          <style>{`@keyframes violPop{from{opacity:0;transform:scale(0.88) translateY(20px)}to{opacity:1;transform:scale(1) translateY(0)}}`}</style>
+          <div
+            className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${term ? "bg-red-500/25" : "bg-amber-500/25"}`}
+          >
+            {term ? (
+              <ShieldAlert className="h-6 w-6 text-red-400" />
+            ) : (
+              <AlertTriangle className="h-6 w-6 text-amber-400" />
+            )}
+          </div>
+          <h3 className="text-white font-bold text-lg mb-1">
+            {term ? "Interview Terminated" : alert.title}
+          </h3>
+          <p
+            className={`text-sm mb-2 ${term ? "text-red-400" : "text-amber-400"}`}
+          >
+            {term
+              ? "Maximum violations reached"
+              : `Violation ${alert.count} of ${MAX_VIOLATIONS}`}
+          </p>
+          <p className="text-white/70 text-sm leading-relaxed mb-5">
+            {alert.body}
+          </p>
+          {!term && (
+            <div className="flex gap-1.5 mb-5">
+              {[...Array(MAX_VIOLATIONS)].map((_, i) => (
+                <div
+                  key={i}
+                  className={`flex-1 h-1.5 rounded-full transition-colors ${i < alert.count ? "bg-amber-400" : "bg-white/10"}`}
+                />
+              ))}
+            </div>
+          )}
+          {!term && (
+            <button
+              onClick={safeClose}
+              className="w-full py-2.5 rounded-xl font-semibold text-white text-sm bg-[#2D55FB] hover:bg-[#1e3fd4] transition-colors"
+            >
+              I Understand — Continue
+            </button>
+          )}
+          {term && (
+            <div className="text-center text-white/40 text-xs">
+              Redirecting to results…
+            </div>
+          )}
+        </div>
       </div>
-    </div>
-  );
-});
+    );
+  },
+);
 
 // ═════════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ═════════════════════════════════════════════════════════════════════════════
-const VideoInterview:React.FC=()=>{
-  const {interviewInfo,userData}=useAuth();
-  const {id}=useParams();
-  const navigate=useNavigate();
-  const interview_id=id||"";
+const VideoInterview: React.FC = () => {
+  const { interviewInfo, userData } = useAuth();
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const interview_id = id || "";
 
-  const [screen,setScreen]             =useState<Screen>("lobby");
-  const [micOn,setMicOn]               =useState(true);
-  const [camOn,setCamOn]               =useState(true);
-  const [streamReady,setStreamReady]   =useState(false);
-  const [elapsed,setElapsed]           =useState(0);
-  const [timeLeft,setTimeLeft]         =useState(0);
-  const [now,setNow]                   =useState(new Date());
-  const [loading,setLoading]           =useState(true);
-  const [vapi,setVapi]                 =useState<any>(null);
-  const [isCallActive,setIsCallActive] =useState(false);
-  const [isSpeaking,setIsSpeaking]     =useState(false);
-  const [isListening,setIsListening]   =useState(false);
-  const [isGenFeedback,setIsGenFeedback]=useState(false);
-  const [avatarSub,setAvatarSub]       =useState("Waiting for AI to speak...");
-  const [userSub,setUserSub]           =useState("Your transcript will appear here...");
-  const [resumeData,setResumeData]     =useState<any>(null);
-  const [isResumeInterview,setIsResumeInterview]=useState(false);
-  const [activeAlert,setActiveAlert]   =useState<AlertState|null>(null);
-  const [noiseWarning,setNoiseWarning] =useState(false);
-  const [isFullscreen,setIsFullscreen] =useState(false);
-  const [showFSBanner,setShowFSBanner] =useState(false);
-  const [faceStatus,setFaceStatus]     =useState<"ok"|"warn"|"unknown">("unknown");
-  const [noFaceVisible,setNoFaceVisible]=useState(false);
-  const [vapiReady,setVapiReady]       =useState(false);
-  const [heygenStreamLive,setHeygenStreamLive]=useState(false);
-  const [avatarMode]                   =useState<AvatarMode>(USE_HEYGEN?"heygen":USE_GANAI?"ganai":"animated");
-  const [avatarState,setAvatarState]   =useState<AvatarState>("idle");
-  const [heygenReady,setHeygenReady]   =useState(false);
-  const [ganAiVideoUrl,setGanAiVideoUrl]=useState<string|null>(null);
-  const [ganAiLoading,setGanAiLoading] =useState(false);
+  const [screen, setScreen] = useState<Screen>("lobby");
+  const [micOn, setMicOn] = useState(true);
+  const [camOn, setCamOn] = useState(true);
+  const [streamReady, setStreamReady] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(0);
+  const [now, setNow] = useState(new Date());
+  const [loading, setLoading] = useState(true);
+  const [vapi, setVapi] = useState<any>(null);
+  const [isCallActive, setIsCallActive] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [isGenFeedback, setIsGenFeedback] = useState(false);
+  const [avatarSub, setAvatarSub] = useState("Waiting for AI to speak...");
+  const [userSub, setUserSub] = useState("Your transcript will appear here...");
+  const [resumeData, setResumeData] = useState<any>(null);
+  const [isResumeInterview, setIsResumeInterview] = useState(false);
+  const [activeAlert, setActiveAlert] = useState<AlertState | null>(null);
+  const [noiseWarning, setNoiseWarning] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showFSBanner, setShowFSBanner] = useState(false);
+  const [faceStatus, setFaceStatus] = useState<"ok" | "warn" | "unknown">(
+    "unknown",
+  );
+  const [noFaceVisible, setNoFaceVisible] = useState(false);
+  const [vapiReady, setVapiReady] = useState(false);
+  const [heygenStreamLive, setHeygenStreamLive] = useState(false);
+  const [avatarMode] = useState<AvatarMode>(
+    USE_HEYGEN ? "heygen" : USE_GANAI ? "ganai" : "animated",
+  );
+  const [avatarState, setAvatarState] = useState<AvatarState>("idle");
+  const [heygenReady, setHeygenReady] = useState(false);
+  const [ganAiVideoUrl, setGanAiVideoUrl] = useState<string | null>(null);
+  const [ganAiLoading, setGanAiLoading] = useState(false);
 
   // ── Question progress display ──────────────────────────────────────────
-  const [questionProgress,setQuestionProgress]=useState(0);
+  const [questionProgress, setQuestionProgress] = useState(0);
 
-  const heygenVideoRef =useRef<HTMLVideoElement>(null);
-  const heygenSvcRef   =useRef<HeyGenService|null>(null);
-  const streamRef      =useRef<MediaStream|null>(null);
-  const lobbyVidRef    =useRef<HTMLVideoElement>(null);
-  const spotlightVidRef=useRef<HTMLVideoElement|null>(null);
-  const gridUserVidRef =useRef<HTMLVideoElement|null>(null);
+  const heygenVideoRef = useRef<HTMLVideoElement>(null);
+  const heygenSvcRef = useRef<HeyGenService | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const lobbyVidRef = useRef<HTMLVideoElement>(null);
+  const spotlightVidRef = useRef<HTMLVideoElement | null>(null);
+  const gridUserVidRef = useRef<HTMLVideoElement | null>(null);
 
   // ── Single always-mounted behavior video for proctoring ───────────────
-  const behaviorVidRef=useRef<HTMLVideoElement>(null);
+  const behaviorVidRef = useRef<HTMLVideoElement>(null);
 
-  const conversationRef=useRef<any[]>([]);
-  const aiTranscriptBuf=useRef("");
-  const userTranscriptBuf=useRef("");
-  const detectionRef=useRef<any>(null);
-  const behaviorTracker=useRef(new BehaviorTracker());
-  const audioCtxRef=useRef<AudioContext|null>(null);
-  const analyserRef=useRef<AnalyserNode|null>(null);
-  const audioCheckRef=useRef<any>(null);
-  const noiseEpisodeRef=useRef(false);
-  const noiseSilentRef=useRef(0);
+  const conversationRef = useRef<any[]>([]);
+  const aiTranscriptBuf = useRef("");
+  const userTranscriptBuf = useRef("");
+  const detectionRef = useRef<any>(null);
+  const behaviorTracker = useRef(new BehaviorTracker());
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const audioCheckRef = useRef<any>(null);
+  const noiseEpisodeRef = useRef(false);
+  const noiseSilentRef = useRef(0);
 
-  const alertCountRef=useRef(0);
-  const vapiRef=useRef<any>(null);
-  const isCallActiveRef=useRef(false);
-  const micOnRef=useRef(true);
-  const camAlertRef=useRef(false);
-  const interviewEndedRef=useRef(false);
-  const trigViolRef=useRef<(t:string)=>void>(()=>{});
+  const alertCountRef = useRef(0);
+  const vapiRef = useRef<any>(null);
+  const isCallActiveRef = useRef(false);
+  const micOnRef = useRef(true);
+  const camAlertRef = useRef(false);
+  const interviewEndedRef = useRef(false);
+  const trigViolRef = useRef<(t: string) => void>(() => {});
 
   // ── Violation gate ─────────────────────────────────────────────────────
-  const violLockedRef=useRef(false);
-  const lastViolAt=useRef(0);
+  const violLockedRef = useRef(false);
+  const lastViolAt = useRef(0);
 
   // ── Tick counters ──────────────────────────────────────────────────────
-  const ticks=useRef({noface:0,multi:0,gaze:0,eyes:0});
+  const ticks = useRef({ noface: 0, multi: 0, gaze: 0, eyes: 0 });
 
-  const lastSpeechRef=useRef(Date.now());
-  const silenceRef=useRef<any>(null);
-  const silenceWarnedRef=useRef(false);
-  const silenceWarnCount=useRef(0);
-  const questionCount=useRef(0);
-  const maxQuestions=useRef(0);
-  const questionLimitReached=useRef(false);
-  const preCheckDone=useRef(false);
-  const closingInProgress=useRef(false);
+  const lastSpeechRef = useRef(Date.now());
+  const silenceRef = useRef<any>(null);
+  const silenceWarnedRef = useRef(false);
+  const silenceWarnCount = useRef(0);
+  const questionCount = useRef(0);
+  const maxQuestions = useRef(0);
+  const questionLimitReached = useRef(false);
+  const preCheckDone = useRef(false);
+  const closingInProgress = useRef(false);
 
   // ── Track whether AI is currently speaking (to block answer counting) ──
-  const aiIsSpeakingRef=useRef(false);
+  const aiIsSpeakingRef = useRef(false);
   // ── Track whether candidate has started their current answer ──────────
-  const candidateRespondedRef=useRef(false);
+  const candidateRespondedRef = useRef(false);
 
-  useEffect(()=>{vapiRef.current=vapi;},[vapi]);
-  useEffect(()=>{isCallActiveRef.current=isCallActive;},[isCallActive]);
-  useEffect(()=>{micOnRef.current=micOn;},[micOn]);
+  useEffect(() => {
+    vapiRef.current = vapi;
+  }, [vapi]);
+  useEffect(() => {
+    isCallActiveRef.current = isCallActive;
+  }, [isCallActive]);
+  useEffect(() => {
+    micOnRef.current = micOn;
+  }, [micOn]);
 
   // ── Keyboard lock ──────────────────────────────────────────────────────
-  useEffect(()=>{
-    const blk=(e:KeyboardEvent)=>{if(isCallActiveRef.current){e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();}};
-    const bCtx=(e:MouseEvent)=>{if(isCallActiveRef.current)e.preventDefault();};
-    const bClp=(e:ClipboardEvent)=>{if(isCallActiveRef.current)e.preventDefault();};
-    const opts={capture:true,passive:false};
-    document.addEventListener("keydown",blk,opts); document.addEventListener("keyup",blk,opts); document.addEventListener("keypress",blk,opts);
-    document.addEventListener("contextmenu",bCtx,{capture:true,passive:false});
-    document.addEventListener("copy",bClp,{capture:true}); document.addEventListener("cut",bClp,{capture:true}); document.addEventListener("paste",bClp,{capture:true});
-    return()=>{
-      document.removeEventListener("keydown",blk,{capture:true}as any); document.removeEventListener("keyup",blk,{capture:true}as any); document.removeEventListener("keypress",blk,{capture:true}as any);
-      document.removeEventListener("contextmenu",bCtx,{capture:true}as any);
-      document.removeEventListener("copy",bClp,{capture:true}as any); document.removeEventListener("cut",bClp,{capture:true}as any); document.removeEventListener("paste",bClp,{capture:true}as any);
+  useEffect(() => {
+    const blk = (e: KeyboardEvent) => {
+      if (isCallActiveRef.current) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+      }
     };
-  },[]);
+    const bCtx = (e: MouseEvent) => {
+      if (isCallActiveRef.current) e.preventDefault();
+    };
+    const bClp = (e: ClipboardEvent) => {
+      if (isCallActiveRef.current) e.preventDefault();
+    };
+    const opts = { capture: true, passive: false };
+    document.addEventListener("keydown", blk, opts);
+    document.addEventListener("keyup", blk, opts);
+    document.addEventListener("keypress", blk, opts);
+    document.addEventListener("contextmenu", bCtx, {
+      capture: true,
+      passive: false,
+    });
+    document.addEventListener("copy", bClp, { capture: true });
+    document.addEventListener("cut", bClp, { capture: true });
+    document.addEventListener("paste", bClp, { capture: true });
+    return () => {
+      document.removeEventListener("keydown", blk, { capture: true } as any);
+      document.removeEventListener("keyup", blk, { capture: true } as any);
+      document.removeEventListener("keypress", blk, { capture: true } as any);
+      document.removeEventListener("contextmenu", bCtx, {
+        capture: true,
+      } as any);
+      document.removeEventListener("copy", bClp, { capture: true } as any);
+      document.removeEventListener("cut", bClp, { capture: true } as any);
+      document.removeEventListener("paste", bClp, { capture: true } as any);
+    };
+  }, []);
 
   // ── Fullscreen ─────────────────────────────────────────────────────────
-  useEffect(()=>{
+  useEffect(() => {
     setIsFullscreen(isInFS());
-    const onChange=()=>{ const f=isInFS(); setIsFullscreen(f); if(!f&&isCallActiveRef.current){tryEnterFS();setShowFSBanner(true);trigViolRef.current("fullscreen-exit");}};
-    ["fullscreenchange","webkitfullscreenchange","mozfullscreenchange"].forEach(e=>document.addEventListener(e,onChange));
-    const poll=setInterval(()=>setIsFullscreen(isInFS()),2000);
-    return()=>{ ["fullscreenchange","webkitfullscreenchange","mozfullscreenchange"].forEach(e=>document.removeEventListener(e,onChange)); clearInterval(poll); };
-  },[]);
+    const onChange = () => {
+      const f = isInFS();
+      setIsFullscreen(f);
+      if (!f && isCallActiveRef.current) {
+        tryEnterFS();
+        setShowFSBanner(true);
+        trigViolRef.current("fullscreen-exit");
+      }
+    };
+    [
+      "fullscreenchange",
+      "webkitfullscreenchange",
+      "mozfullscreenchange",
+    ].forEach((e) => document.addEventListener(e, onChange));
+    const poll = setInterval(() => setIsFullscreen(isInFS()), 2000);
+    return () => {
+      [
+        "fullscreenchange",
+        "webkitfullscreenchange",
+        "mozfullscreenchange",
+      ].forEach((e) => document.removeEventListener(e, onChange));
+      clearInterval(poll);
+    };
+  }, []);
 
   // ── Stream attach helpers ──────────────────────────────────────────────
-  const attachStream=useCallback((el:HTMLVideoElement|null)=>{if(el&&streamRef.current){el.srcObject=streamRef.current;el.play().catch(()=>{});}  },[]);
-  const onSpotlightMount=useCallback((el:HTMLVideoElement|null)=>{spotlightVidRef.current=el;attachStream(el);},[attachStream]);
-  const onGridUserMount =useCallback((el:HTMLVideoElement|null)=>{gridUserVidRef.current=el; attachStream(el);},[attachStream]);
-  useEffect(()=>{if(!streamRef.current)return;[spotlightVidRef.current,gridUserVidRef.current].forEach(attachStream);},[streamReady,attachStream]);
+  const attachStream = useCallback((el: HTMLVideoElement | null) => {
+    if (el && streamRef.current) {
+      el.srcObject = streamRef.current;
+      el.play().catch(() => {});
+    }
+  }, []);
+  const onSpotlightMount = useCallback(
+    (el: HTMLVideoElement | null) => {
+      spotlightVidRef.current = el;
+      attachStream(el);
+    },
+    [attachStream],
+  );
+  const onGridUserMount = useCallback(
+    (el: HTMLVideoElement | null) => {
+      gridUserVidRef.current = el;
+      attachStream(el);
+    },
+    [attachStream],
+  );
+  useEffect(() => {
+    if (!streamRef.current) return;
+    [spotlightVidRef.current, gridUserVidRef.current].forEach(attachStream);
+  }, [streamReady, attachStream]);
 
   // ── Camera + Audio init ────────────────────────────────────────────────
-  useEffect(()=>{
-    (async()=>{
-      try{
-        const stream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:1280},height:{ideal:720},facingMode:"user"},audio:true});
-        streamRef.current=stream;
+  useEffect(() => {
+    (async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            facingMode: "user",
+          },
+          audio: true,
+        });
+        streamRef.current = stream;
         setStreamReady(true);
-        if(lobbyVidRef.current){lobbyVidRef.current.srcObject=stream;lobbyVidRef.current.play().catch(()=>{});}
-        if(behaviorVidRef.current){behaviorVidRef.current.srcObject=stream;behaviorVidRef.current.play().catch(()=>{});}
-        try{
-          const ctx=new AudioContext(); const analyser=ctx.createAnalyser(); analyser.fftSize=256;
+        if (lobbyVidRef.current) {
+          lobbyVidRef.current.srcObject = stream;
+          lobbyVidRef.current.play().catch(() => {});
+        }
+        if (behaviorVidRef.current) {
+          behaviorVidRef.current.srcObject = stream;
+          behaviorVidRef.current.play().catch(() => {});
+        }
+        try {
+          const ctx = new AudioContext();
+          const analyser = ctx.createAnalyser();
+          analyser.fftSize = 256;
           ctx.createMediaStreamSource(stream).connect(analyser);
-          audioCtxRef.current=ctx; analyserRef.current=analyser;
-          audioCheckRef.current=setInterval(()=>{
-            if(!isCallActiveRef.current||!analyserRef.current)return;
-            const arr=new Uint8Array(analyserRef.current.frequencyBinCount); analyserRef.current.getByteFrequencyData(arr);
-            const avg=arr.reduce((a,b)=>a+b,0)/arr.length;
-            if(avg>38){noiseSilentRef.current=0;if(!noiseEpisodeRef.current){noiseEpisodeRef.current=true;setNoiseWarning(true);}}
-            else{noiseSilentRef.current++;if(noiseSilentRef.current>=3){noiseEpisodeRef.current=false;noiseSilentRef.current=0;}}
-          },2000);
-        }catch{}
-      }catch(e){console.warn("Camera unavailable:",e);}
+          audioCtxRef.current = ctx;
+          analyserRef.current = analyser;
+          audioCheckRef.current = setInterval(() => {
+            if (!isCallActiveRef.current || !analyserRef.current) return;
+            const arr = new Uint8Array(analyserRef.current.frequencyBinCount);
+            analyserRef.current.getByteFrequencyData(arr);
+            const avg = arr.reduce((a, b) => a + b, 0) / arr.length;
+            if (avg > 38) {
+              noiseSilentRef.current = 0;
+              if (!noiseEpisodeRef.current) {
+                noiseEpisodeRef.current = true;
+                setNoiseWarning(true);
+              }
+            } else {
+              noiseSilentRef.current++;
+              if (noiseSilentRef.current >= 3) {
+                noiseEpisodeRef.current = false;
+                noiseSilentRef.current = 0;
+              }
+            }
+          }, 2000);
+        } catch {}
+      } catch (e) {
+        console.warn("Camera unavailable:", e);
+      }
     })();
-    return()=>{streamRef.current?.getTracks().forEach(t=>t.stop());audioCtxRef.current?.close();if(audioCheckRef.current)clearInterval(audioCheckRef.current);};
-  },[]);
+    return () => {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      audioCtxRef.current?.close();
+      if (audioCheckRef.current) clearInterval(audioCheckRef.current);
+    };
+  }, []);
 
-  useEffect(()=>{if(screen==="lobby")attachStream(lobbyVidRef.current);},[screen,attachStream]);
+  useEffect(() => {
+    if (screen === "lobby") attachStream(lobbyVidRef.current);
+  }, [screen, attachStream]);
 
-  const stopAllProctoring=useCallback(()=>{
-    if(detectionRef.current)clearInterval(detectionRef.current);
-    if(silenceRef.current)clearInterval(silenceRef.current);
-    streamRef.current?.getTracks().forEach(t=>t.stop());
-  },[]);
+  const stopAllProctoring = useCallback(() => {
+    if (detectionRef.current) clearInterval(detectionRef.current);
+    if (silenceRef.current) clearInterval(silenceRef.current);
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+  }, []);
 
-  const endInterview=useCallback(async()=>{
-    if(interviewEndedRef.current)return;
-    interviewEndedRef.current=true;
+  const endInterview = useCallback(async () => {
+    if (interviewEndedRef.current) return;
+    interviewEndedRef.current = true;
     stopAllProctoring();
-    setIsCallActive(false); isCallActiveRef.current=false;
-    setIsSpeaking(false); setAvatarState("idle");
-    try{vapiRef.current?.stop();}catch{}
-    if(heygenSvcRef.current){await heygenSvcRef.current.destroy();heygenSvcRef.current=null;}
+    setIsCallActive(false);
+    isCallActiveRef.current = false;
+    setIsSpeaking(false);
+    setAvatarState("idle");
+    try {
+      vapiRef.current?.stop();
+    } catch {}
+    if (heygenSvcRef.current) {
+      await heygenSvcRef.current.destroy();
+      heygenSvcRef.current = null;
+    }
     await tryExitFS();
-  },[stopAllProctoring]);
+  }, [stopAllProctoring]);
 
-  const speakWarning=useCallback((type:string,isTerminal:boolean)=>{
-    const v=vapiRef.current; if(!v)return;
-    const spoken=isTerminal?"You have exceeded the maximum warnings. This interview has been terminated.":VIOLATION_MSGS[type]?.spoken??"You have received a warning.";
-    try{v.send({type:"add-message",message:{role:"system",content:`[PROCTOR — say immediately in character]: "${spoken}"`}});}catch{}
-  },[]);
+  const speakWarning = useCallback((type: string, isTerminal: boolean) => {
+    const v = vapiRef.current;
+    if (!v) return;
+    const spoken = isTerminal
+      ? "You have exceeded the maximum warnings. This interview has been terminated."
+      : (VIOLATION_MSGS[type]?.spoken ?? "You have received a warning.");
+    try {
+      v.send({
+        type: "add-message",
+        message: {
+          role: "system",
+          content: `[PROCTOR — say immediately in character]: "${spoken}"`,
+        },
+      });
+    } catch {}
+  }, []);
 
   // ─────────────────────────────────────────────────────────────────────────
   // triggerViolation
   // ─────────────────────────────────────────────────────────────────────────
-  const triggerViolation=useCallback((type:string)=>{
-    if(!isCallActiveRef.current)return;
-    if(violLockedRef.current)return;
-    if(Date.now()-lastViolAt.current<VIOLATION_COOLDOWN_MS)return;
+  const triggerViolation = useCallback(
+    (type: string) => {
+      if (!isCallActiveRef.current) return;
+      if (violLockedRef.current) return;
+      if (Date.now() - lastViolAt.current < VIOLATION_COOLDOWN_MS) return;
 
-    violLockedRef.current=true;
-    lastViolAt.current=Date.now();
-    ticks.current={noface:0,multi:0,gaze:0,eyes:0};
+      violLockedRef.current = true;
+      lastViolAt.current = Date.now();
+      ticks.current = { noface: 0, multi: 0, gaze: 0, eyes: 0 };
 
-    alertCountRef.current++;
-    const count=alertCountRef.current;
-    const cfg=VIOLATION_MSGS[type]??{title:"Violation",body:(r:number)=>`${r} warning(s) remaining.`};
-    const isTerminal=count>=MAX_VIOLATIONS;
-    console.warn(`[Proctor] VIOLATION #${count} type=${type} terminal=${isTerminal}`);
-    behaviorTracker.current.addEvent(type.replace(/-/g,"_"));
-    setActiveAlert({type,count,title:cfg.title,body:isTerminal?"You have exceeded the maximum violations. Interview will be terminated.":cfg.body(MAX_VIOLATIONS-count)});
-    speakWarning(type,isTerminal);
-  },[speakWarning]);
+      alertCountRef.current++;
+      const count = alertCountRef.current;
+      const cfg = VIOLATION_MSGS[type] ?? {
+        title: "Violation",
+        body: (r: number) => `${r} warning(s) remaining.`,
+      };
+      const isTerminal = count >= MAX_VIOLATIONS;
+      console.warn(
+        `[Proctor] VIOLATION #${count} type=${type} terminal=${isTerminal}`,
+      );
+      behaviorTracker.current.addEvent(type.replace(/-/g, "_"));
+      setActiveAlert({
+        type,
+        count,
+        title: cfg.title,
+        body: isTerminal
+          ? "You have exceeded the maximum violations. Interview will be terminated."
+          : cfg.body(MAX_VIOLATIONS - count),
+      });
+      speakWarning(type, isTerminal);
+    },
+    [speakWarning],
+  );
 
-  useEffect(()=>{trigViolRef.current=triggerViolation;},[triggerViolation]);
+  useEffect(() => {
+    trigViolRef.current = triggerViolation;
+  }, [triggerViolation]);
 
-  const handleAlertClose=useCallback(()=>{
-    const count=alertCountRef.current;
-    const type=activeAlert?.type;
+  const handleAlertClose = useCallback(() => {
+    const count = alertCountRef.current;
+    const type = activeAlert?.type;
     setActiveAlert(null);
-    setTimeout(()=>{
-      violLockedRef.current=false;
-      ticks.current={noface:0,multi:0,gaze:0,eyes:0};
-    },POST_CLOSE_LOCK_MS);
-    if(count>=MAX_VIOLATIONS)endInterview();
-    else if(type==="fullscreen-exit"){tryEnterFS();setShowFSBanner(false);}
-  },[activeAlert,endInterview]);
+    setTimeout(() => {
+      violLockedRef.current = false;
+      ticks.current = { noface: 0, multi: 0, gaze: 0, eyes: 0 };
+    }, POST_CLOSE_LOCK_MS);
+    if (count >= MAX_VIOLATIONS) endInterview();
+    else if (type === "fullscreen-exit") {
+      tryEnterFS();
+      setShowFSBanner(false);
+    }
+  }, [activeAlert, endInterview]);
 
   // ── Tab-switch ─────────────────────────────────────────────────────────
-  useEffect(()=>{
-    if(!isCallActive)return;
-    const h=()=>{if(document.hidden)triggerViolation("tab-switch");};
-    document.addEventListener("visibilitychange",h);
-    return()=>document.removeEventListener("visibilitychange",h);
-  },[isCallActive,triggerViolation]);
+  useEffect(() => {
+    if (!isCallActive) return;
+    const h = () => {
+      if (document.hidden) triggerViolation("tab-switch");
+    };
+    document.addEventListener("visibilitychange", h);
+    return () => document.removeEventListener("visibilitychange", h);
+  }, [isCallActive, triggerViolation]);
 
   // ── Camera-off ─────────────────────────────────────────────────────────
-  useEffect(()=>{
-    if(!isCallActive)return;
-    if(!camOn){if(!camAlertRef.current){camAlertRef.current=true;triggerViolation("camera-off");}}
-    else camAlertRef.current=false;
-  },[camOn,isCallActive,triggerViolation]);
+  useEffect(() => {
+    if (!isCallActive) return;
+    if (!camOn) {
+      if (!camAlertRef.current) {
+        camAlertRef.current = true;
+        triggerViolation("camera-off");
+      }
+    } else camAlertRef.current = false;
+  }, [camOn, isCallActive, triggerViolation]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // FACE DETECTION ENGINE
   // ─────────────────────────────────────────────────────────────────────────
-  useEffect(()=>{
-    if(!isCallActive){clearInterval(detectionRef.current);return;}
+  useEffect(() => {
+    if (!isCallActive) {
+      clearInterval(detectionRef.current);
+      return;
+    }
 
-    let mlReady=false;
+    let mlReady = false;
     loadFaceModels()
-      .then(()=>{mlReady=true;console.log("[Proctor] face-api ready ✓");})
-      .catch(e=>console.warn("[Proctor] face-api failed, canvas-only:",e));
+      .then(() => {
+        mlReady = true;
+        console.log("[Proctor] face-api ready ✓");
+      })
+      .catch((e) => console.warn("[Proctor] face-api failed, canvas-only:", e));
 
-    const canvasAnalyse=(vid:HTMLVideoElement)=>{
-      const W=160,H=120;
-      const cnv=document.createElement("canvas");cnv.width=W;cnv.height=H;
-      const ctx=cnv.getContext("2d",{willReadFrequently:true});
-      if(!ctx)return{dark:false,skinRatio:0,gazeDrift:0,skinBlobs:0};
-      ctx.drawImage(vid,0,0,W,H);
-      const {data}=ctx.getImageData(0,0,W,H);
-      let bright=0,skinCount=0,skinSumX=0;
-      const skinMap=new Uint8Array(W*H);
-      for(let i=0;i<data.length;i+=4){
-        const r=data[i],g=data[i+1],b=data[i+2];
-        bright+=(r+g+b)/3;
-        const isSkin=r>50&&g>25&&b>10&&r>b&&r>g&&(r-Math.min(g,b))>8&&Math.abs(r-g)<90&&r<250;
-        const px=i/4;
-        if(isSkin){skinMap[px]=1;skinCount++;skinSumX+=(px%W);}
+    const canvasAnalyse = (vid: HTMLVideoElement) => {
+      const W = 160,
+        H = 120;
+      const cnv = document.createElement("canvas");
+      cnv.width = W;
+      cnv.height = H;
+      const ctx = cnv.getContext("2d", { willReadFrequently: true });
+      if (!ctx)
+        return { dark: false, skinRatio: 0, gazeDrift: 0, skinBlobs: 0 };
+      ctx.drawImage(vid, 0, 0, W, H);
+      const { data } = ctx.getImageData(0, 0, W, H);
+      let bright = 0,
+        skinCount = 0,
+        skinSumX = 0;
+      const skinMap = new Uint8Array(W * H);
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i],
+          g = data[i + 1],
+          b = data[i + 2];
+        bright += (r + g + b) / 3;
+        const isSkin =
+          r > 50 &&
+          g > 25 &&
+          b > 10 &&
+          r > b &&
+          r > g &&
+          r - Math.min(g, b) > 8 &&
+          Math.abs(r - g) < 90 &&
+          r < 250;
+        const px = i / 4;
+        if (isSkin) {
+          skinMap[px] = 1;
+          skinCount++;
+          skinSumX += px % W;
+        }
       }
-      const total=W*H,skinRatio=skinCount/total;
-      let gazeDrift=0;
-      if(skinCount>50){const cx=(skinSumX/skinCount)/W;gazeDrift=Math.abs(cx-0.5)*2;}
-      const third=Math.floor(W/3),thirds=[0,0,0];
-      for(let px=0;px<total;px++){if(skinMap[px])thirds[Math.min(2,Math.floor((px%W)/third))]++;}
-      const skinBlobs=thirds.filter(t=>t>total*0.02).length;
-      return{dark:(bright/total)<18,skinRatio,gazeDrift,skinBlobs};
+      const total = W * H,
+        skinRatio = skinCount / total;
+      let gazeDrift = 0;
+      if (skinCount > 50) {
+        const cx = skinSumX / skinCount / W;
+        gazeDrift = Math.abs(cx - 0.5) * 2;
+      }
+      const third = Math.floor(W / 3),
+        thirds = [0, 0, 0];
+      for (let px = 0; px < total; px++) {
+        if (skinMap[px]) thirds[Math.min(2, Math.floor((px % W) / third))]++;
+      }
+      const skinBlobs = thirds.filter((t) => t > total * 0.02).length;
+      return { dark: bright / total < 18, skinRatio, gazeDrift, skinBlobs };
     };
 
-    const mlAnalyse=async(vid:HTMLVideoElement)=>{
-      if(!mlReady)return null;
-      try{
-        const dets=await faceapi
-          .detectAllFaces(vid,new faceapi.SsdMobilenetv1Options({minConfidence:MULTI_CONFIDENCE}))
+    const mlAnalyse = async (vid: HTMLVideoElement) => {
+      if (!mlReady) return null;
+      try {
+        const dets = await faceapi
+          .detectAllFaces(
+            vid,
+            new faceapi.SsdMobilenetv1Options({
+              minConfidence: MULTI_CONFIDENCE,
+            }),
+          )
           .withFaceLandmarks();
 
-        if(dets.length>1)return{faceCount:dets.length,gazeHard:false,eyesHard:false};
-        if(dets.length===0)return{faceCount:0,gazeHard:false,eyesHard:false};
+        if (dets.length > 1)
+          return { faceCount: dets.length, gazeHard: false, eyesHard: false };
+        if (dets.length === 0)
+          return { faceCount: 0, gazeHard: false, eyesHard: false };
 
-        const{detection,landmarks}=dets[0];
-        if(detection.score<0.35)return{faceCount:1,gazeHard:false,eyesHard:false};
+        const { detection, landmarks } = dets[0];
+        if (detection.score < 0.35)
+          return { faceCount: 1, gazeHard: false, eyesHard: false };
 
-        const nose=landmarks.getNose(),jaw=landmarks.getJawOutline(),lEye=landmarks.getLeftEye(),rEye=landmarks.getRightEye();
+        const nose = landmarks.getNose(),
+          jaw = landmarks.getJawOutline(),
+          lEye = landmarks.getLeftEye(),
+          rEye = landmarks.getRightEye();
 
-        let gazeHard=false;
-        if(nose?.length&&jaw?.length){
-          const jL=jaw[0].x,jR=jaw[jaw.length-1].x,jawW=jR-jL,jawM=(jL+jR)/2;
-          if(jawW>15){
-            const tip=nose[nose.length-1],hOff=Math.abs(tip.x-jawM)/jawW;
-            let eyeOff=0;
-            if(lEye?.length&&rEye?.length){const em=(lEye.reduce((s,p)=>s+p.x,0)/lEye.length+rEye.reduce((s,p)=>s+p.x,0)/rEye.length)/2;eyeOff=Math.abs(em-jawM)/jawW;}
-            gazeHard=hOff>GAZE_HARD||eyeOff>GAZE_HARD;
+        let gazeHard = false;
+        if (nose?.length && jaw?.length) {
+          const jL = jaw[0].x,
+            jR = jaw[jaw.length - 1].x,
+            jawW = jR - jL,
+            jawM = (jL + jR) / 2;
+          if (jawW > 15) {
+            const tip = nose[nose.length - 1],
+              hOff = Math.abs(tip.x - jawM) / jawW;
+            let eyeOff = 0;
+            if (lEye?.length && rEye?.length) {
+              const em =
+                (lEye.reduce((s, p) => s + p.x, 0) / lEye.length +
+                  rEye.reduce((s, p) => s + p.x, 0) / rEye.length) /
+                2;
+              eyeOff = Math.abs(em - jawM) / jawW;
+            }
+            gazeHard = hOff > GAZE_HARD || eyeOff > GAZE_HARD;
           }
         }
 
-        let eyesHard=false;
-        if(lEye?.length>=6&&rEye?.length>=6)eyesHard=(earVal(lEye)+earVal(rEye))/2<EAR_HARD;
+        let eyesHard = false;
+        if (lEye?.length >= 6 && rEye?.length >= 6)
+          eyesHard = (earVal(lEye) + earVal(rEye)) / 2 < EAR_HARD;
 
-        return{faceCount:1,gazeHard,eyesHard};
-      }catch(e){console.warn("[Proctor] mlAnalyse:",e);return null;}
+        return { faceCount: 1, gazeHard, eyesHard };
+      } catch (e) {
+        console.warn("[Proctor] mlAnalyse:", e);
+        return null;
+      }
     };
 
-    detectionRef.current=setInterval(async()=>{
-      if(!isCallActiveRef.current)return;
-      if(violLockedRef.current)return;
+    detectionRef.current = setInterval(async () => {
+      if (!isCallActiveRef.current) return;
+      if (violLockedRef.current) return;
 
-      const vid=behaviorVidRef.current;
-      if(!vid)return;
+      const vid = behaviorVidRef.current;
+      if (!vid) return;
 
-      if(!vid.srcObject&&streamRef.current){vid.srcObject=streamRef.current;vid.play().catch(()=>{});return;}
-      if(vid.readyState<2||vid.videoWidth===0||vid.videoHeight===0)return;
-
-      const T=ticks.current;
-      const cv=canvasAnalyse(vid);
-
-      if(cv.dark){
-        setNoFaceVisible(true);setFaceStatus("warn");
-        T.noface++;T.gaze=0;T.multi=0;T.eyes=0;
-        if(T.noface>=2){T.noface=0;trigViolRef.current("no-face");}
+      if (!vid.srcObject && streamRef.current) {
+        vid.srcObject = streamRef.current;
+        vid.play().catch(() => {});
         return;
       }
-
-      if(cv.skinRatio<0.018){
-        setNoFaceVisible(true);setFaceStatus("warn");
-        T.noface++;T.gaze=0;T.multi=0;T.eyes=0;
-        if(T.noface>=HARD_TICKS){T.noface=0;trigViolRef.current("no-face");}
+      if (vid.readyState < 2 || vid.videoWidth === 0 || vid.videoHeight === 0)
         return;
-      }
 
-      const ml=await mlAnalyse(vid);
+      const T = ticks.current;
+      const cv = canvasAnalyse(vid);
 
-      if(ml!==null){
-        if(ml.faceCount===0){
-          setNoFaceVisible(true);setFaceStatus("warn");
-          T.noface++;T.gaze=0;T.eyes=0;
-          if(T.noface>=HARD_TICKS){T.noface=0;trigViolRef.current("no-face");}
-          return;
+      if (cv.dark) {
+        setNoFaceVisible(true);
+        setFaceStatus("warn");
+        T.noface++;
+        T.gaze = 0;
+        T.multi = 0;
+        T.eyes = 0;
+        if (T.noface >= 2) {
+          T.noface = 0;
+          trigViolRef.current("no-face");
         }
+        return;
+      }
 
-        if(ml.faceCount>1){
+      if (cv.skinRatio < 0.018) {
+        setNoFaceVisible(true);
+        setFaceStatus("warn");
+        T.noface++;
+        T.gaze = 0;
+        T.multi = 0;
+        T.eyes = 0;
+        if (T.noface >= HARD_TICKS) {
+          T.noface = 0;
+          trigViolRef.current("no-face");
+        }
+        return;
+      }
+
+      const ml = await mlAnalyse(vid);
+
+      if (ml !== null) {
+        if (ml.faceCount === 0) {
+          setNoFaceVisible(true);
           setFaceStatus("warn");
-          T.multi++;T.noface=0;T.gaze=0;T.eyes=0;
-          if(T.multi>=MULTI_TICKS){T.multi=0;trigViolRef.current("multiple-faces");}
+          T.noface++;
+          T.gaze = 0;
+          T.eyes = 0;
+          if (T.noface >= HARD_TICKS) {
+            T.noface = 0;
+            trigViolRef.current("no-face");
+          }
           return;
         }
 
-        T.noface=0;T.multi=0;setNoFaceVisible(false);
+        if (ml.faceCount > 1) {
+          setFaceStatus("warn");
+          T.multi++;
+          T.noface = 0;
+          T.gaze = 0;
+          T.eyes = 0;
+          if (T.multi >= MULTI_TICKS) {
+            T.multi = 0;
+            trigViolRef.current("multiple-faces");
+          }
+          return;
+        }
 
-        if(ml.gazeHard){setFaceStatus("warn");T.gaze++;if(T.gaze>=HARD_TICKS){T.gaze=0;trigViolRef.current("looking-away");}}
-        else T.gaze=0;
+        T.noface = 0;
+        T.multi = 0;
+        setNoFaceVisible(false);
 
-        if(ml.eyesHard){T.eyes++;if(T.eyes>=HARD_TICKS+1){T.eyes=0;trigViolRef.current("eyes-closed");}}
-        else T.eyes=0;
+        if (ml.gazeHard) {
+          setFaceStatus("warn");
+          T.gaze++;
+          if (T.gaze >= HARD_TICKS) {
+            T.gaze = 0;
+            trigViolRef.current("looking-away");
+          }
+        } else T.gaze = 0;
 
-        if(!ml.gazeHard&&!ml.eyesHard)setFaceStatus("ok");
+        if (ml.eyesHard) {
+          T.eyes++;
+          if (T.eyes >= HARD_TICKS + 1) {
+            T.eyes = 0;
+            trigViolRef.current("eyes-closed");
+          }
+        } else T.eyes = 0;
 
-      }else{
-        T.noface=0;setNoFaceVisible(false);
-        if(cv.skinBlobs>=3&&cv.skinRatio>0.08){setFaceStatus("warn");T.multi++;if(T.multi>=HARD_TICKS){T.multi=0;trigViolRef.current("multiple-faces");}}
-        else T.multi=0;
-        if(cv.gazeDrift>0.28&&cv.skinRatio>0.03){setFaceStatus("warn");T.gaze++;if(T.gaze>=HARD_TICKS){T.gaze=0;trigViolRef.current("looking-away");}}
-        else{T.gaze=0;setFaceStatus("ok");}
+        if (!ml.gazeHard && !ml.eyesHard) setFaceStatus("ok");
+      } else {
+        T.noface = 0;
+        setNoFaceVisible(false);
+        if (cv.skinBlobs >= 3 && cv.skinRatio > 0.08) {
+          setFaceStatus("warn");
+          T.multi++;
+          if (T.multi >= HARD_TICKS) {
+            T.multi = 0;
+            trigViolRef.current("multiple-faces");
+          }
+        } else T.multi = 0;
+        if (cv.gazeDrift > 0.28 && cv.skinRatio > 0.03) {
+          setFaceStatus("warn");
+          T.gaze++;
+          if (T.gaze >= HARD_TICKS) {
+            T.gaze = 0;
+            trigViolRef.current("looking-away");
+          }
+        } else {
+          T.gaze = 0;
+          setFaceStatus("ok");
+        }
       }
-    },TICK_MS);
+    }, TICK_MS);
 
-    return()=>clearInterval(detectionRef.current);
-  },[isCallActive]);
+    return () => clearInterval(detectionRef.current);
+  }, [isCallActive]);
 
   // ── Interview info ─────────────────────────────────────────────────────
-  useEffect(()=>{
-    if(!interviewInfo){navigate(`/user/${interview_id}/interview-instruction`);return;}
-    const dur=(parseInt(String(interviewInfo?.duration||"5"),10)||5)*60;
+  useEffect(() => {
+    if (!interviewInfo) {
+      navigate(`/user/${interview_id}/interview-instruction`);
+      return;
+    }
+    const dur =
+      (parseInt(String(interviewInfo?.duration || "5"), 10) || 5) * 60;
     setTimeLeft(dur);
-    setIsResumeInterview((interviewInfo?.type||interviewInfo?.examType||"")==="resume-based");
-    maxQuestions.current=parseInt(String(interviewInfo?.numberOfQuestions||"5"),10)||5;
+    setIsResumeInterview(
+      (interviewInfo?.type || interviewInfo?.examType || "") === "resume-based",
+    );
+    maxQuestions.current =
+      parseInt(String(interviewInfo?.numberOfQuestions || "5"), 10) || 5;
     setLoading(false);
-  },[interviewInfo,interview_id,navigate]);
+  }, [interviewInfo, interview_id, navigate]);
 
-  useEffect(()=>{if(isResumeInterview)fetch(`/api/resumes/${interview_id}`).then(r=>r.json()).then(({data})=>setResumeData(data)).catch(()=>{});},[isResumeInterview,interview_id]);
-  useEffect(()=>{const t=setInterval(()=>setNow(new Date()),1000);return()=>clearInterval(t);},[]);
-  useEffect(()=>{if(screen==="lobby"||screen==="connecting")return;const t=setInterval(()=>setElapsed(e=>e+1),1000);return()=>clearInterval(t);},[screen]);
-  useEffect(()=>{
-    if(!isCallActive||timeLeft<=0)return;
-    const t=setInterval(()=>setTimeLeft(s=>{if(s<=1){clearInterval(t);endInterview();return 0;}return s-1;}),1000);
-    return()=>clearInterval(t);
-  },[isCallActive,endInterview]);
+  useEffect(() => {
+    if (isResumeInterview)
+      fetch(`/api/resumes/${interview_id}`)
+        .then((r) => r.json())
+        .then(({ data }) => setResumeData(data))
+        .catch(() => {});
+  }, [isResumeInterview, interview_id]);
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  useEffect(() => {
+    if (screen === "lobby" || screen === "connecting") return;
+    const t = setInterval(() => setElapsed((e) => e + 1), 1000);
+    return () => clearInterval(t);
+  }, [screen]);
+  useEffect(() => {
+    if (!isCallActive || timeLeft <= 0) return;
+    const t = setInterval(
+      () =>
+        setTimeLeft((s) => {
+          if (s <= 1) {
+            clearInterval(t);
+            endInterview();
+            return 0;
+          }
+          return s - 1;
+        }),
+      1000,
+    );
+    return () => clearInterval(t);
+  }, [isCallActive, endInterview]);
 
-  const initHeyGen=useCallback(async()=>{
-    if(avatarMode!=="heygen")return;
-    const svc=new HeyGenService(heygenVideoRef);
-    svc.onStateChange=(s)=>setAvatarState(s?"speaking":"idle");
-    svc.onStreamReady=()=>{setHeygenReady(true);setHeygenStreamLive(true);};
-    heygenSvcRef.current=svc;
-    const ok=await svc.init();
-    if(!ok)setHeygenStreamLive(true);
-  },[avatarMode]);
+  const initHeyGen = useCallback(async () => {
+    if (avatarMode !== "heygen") return;
+    const svc = new HeyGenService(heygenVideoRef);
+    svc.onStateChange = (s) => setAvatarState(s ? "speaking" : "idle");
+    svc.onStreamReady = () => {
+      setHeygenReady(true);
+      setHeygenStreamLive(true);
+    };
+    heygenSvcRef.current = svc;
+    const ok = await svc.init();
+    if (!ok) setHeygenStreamLive(true);
+  }, [avatarMode]);
 
-  const generateGanGreeting=useCallback(async(text:string)=>{
-    if(avatarMode!=="ganai")return;
-    setGanAiLoading(true);
-    try{const rid=await ganAi.generate(text);if(!rid)return;const url=await ganAi.poll(rid);if(url)setGanAiVideoUrl(url);}
-    catch{}finally{setGanAiLoading(false);}
-  },[avatarMode]);
+  const generateGanGreeting = useCallback(
+    async (text: string) => {
+      if (avatarMode !== "ganai") return;
+      setGanAiLoading(true);
+      try {
+        const rid = await ganAi.generate(text);
+        if (!rid) return;
+        const url = await ganAi.poll(rid);
+        if (url) setGanAiVideoUrl(url);
+      } catch {
+      } finally {
+        setGanAiLoading(false);
+      }
+    },
+    [avatarMode],
+  );
 
   // ── Vapi ────────────────────────────────────────────────────────────────
-  useEffect(()=>{
-    const inst=new Vapi("6736f532-acfb-41f4-a5ac-0fe67cbc7be7");
+  useEffect(() => {
+    const inst = new Vapi("6736f532-acfb-41f4-a5ac-0fe67cbc7be7");
     setVapi(inst);
 
-    inst.on("speech-start",()=>{
+    inst.on("speech-start", () => {
       // AI started speaking — mark it so we don't count candidate answers yet
-      aiIsSpeakingRef.current=true;
-      candidateRespondedRef.current=false;
+      aiIsSpeakingRef.current = true;
+      candidateRespondedRef.current = false;
       setIsSpeaking(true);
-      if(avatarMode==="animated"||(avatarMode==="ganai"&&!ganAiVideoUrl))setAvatarState("speaking");
+      if (
+        avatarMode === "animated" ||
+        (avatarMode === "ganai" && !ganAiVideoUrl)
+      )
+        setAvatarState("speaking");
     });
 
-    inst.on("speech-end",()=>{
+    inst.on("speech-end", () => {
       // AI finished speaking — now we wait for candidate
-      aiIsSpeakingRef.current=false;
+      aiIsSpeakingRef.current = false;
       setIsSpeaking(false);
-      if(avatarMode!=="heygen")setAvatarState("idle");
-      const text=aiTranscriptBuf.current.trim();
-      if(text){
+      if (avatarMode !== "heygen") setAvatarState("idle");
+      const text = aiTranscriptBuf.current.trim();
+      if (text) {
         setAvatarSub(text);
-        if(avatarMode==="heygen"&&heygenSvcRef.current&&heygenReady)heygenSvcRef.current.speak(text).catch(()=>{});
-        aiTranscriptBuf.current="";
+        if (avatarMode === "heygen" && heygenSvcRef.current && heygenReady)
+          heygenSvcRef.current.speak(text).catch(() => {});
+        aiTranscriptBuf.current = "";
       }
-      if(closingInProgress.current&&isCallActiveRef.current){
-        closingInProgress.current=false;
-        setTimeout(()=>{try{vapiRef.current?.stop();}catch{}},3500);
+      if (closingInProgress.current && isCallActiveRef.current) {
+        closingInProgress.current = false;
+        setTimeout(() => {
+          try {
+            vapiRef.current?.stop();
+          } catch {}
+        }, 3500);
       }
     });
 
-    inst.on("call-start",()=>{
+    inst.on("call-start", () => {
       setIsCallActive(true);
-      isCallActiveRef.current=true;
+      isCallActiveRef.current = true;
       setAvatarState("thinking");
       setVapiReady(true);
     });
 
-    inst.on("error",(e:any)=>console.error("Vapi:",e));
+    inst.on("error", (e: any) => console.error("Vapi:", e));
 
-    inst.on("message",(msg:any)=>{
-      if(msg?.type==="transcript"){
-        const text=msg.transcript||msg.text||"";
+    inst.on("message", (msg: any) => {
+      if (msg?.type === "transcript") {
+        const text = msg.transcript || msg.text || "";
 
-        if(msg.role==="assistant"){
+        if (msg.role === "assistant") {
           // ── AI transcript ──────────────────────────────────────────
           conversationRef.current.push(msg);
-          aiTranscriptBuf.current=text;
+          aiTranscriptBuf.current = text;
           setAvatarSub(text);
           setAvatarState("thinking");
 
           // Mark pre-check done when AI asks a real interview question
           // (anything that's not the audio check)
-          if(text.includes("?")){
-            const lt=text.toLowerCase();
-            const isAudioCheck=lt.includes("can you hear")||lt.includes("audio")||lt.includes("video working")||lt.includes("hear me");
-            if(!isAudioCheck&&!preCheckDone.current){
-              preCheckDone.current=true;
-              console.log("[Interview] Pre-check done, interview questions now active");
+          if (text.includes("?")) {
+            const lt = text.toLowerCase();
+            const isAudioCheck =
+              lt.includes("can you hear") ||
+              lt.includes("audio") ||
+              lt.includes("video working") ||
+              lt.includes("hear me");
+            if (!isAudioCheck && !preCheckDone.current) {
+              preCheckDone.current = true;
+              console.log(
+                "[Interview] Pre-check done, interview questions now active",
+              );
             }
           }
-
-        } else if(msg.role==="user"){
+        } else if (msg.role === "user") {
           // ── Candidate transcript ───────────────────────────────────
-          if(!micOnRef.current)return;
+          if (!micOnRef.current) return;
 
           conversationRef.current.push(msg);
-          userTranscriptBuf.current=text;
+          userTranscriptBuf.current = text;
           setUserSub(text);
           setIsListening(true);
           setAvatarState("idle");
-          lastSpeechRef.current=Date.now();
-          silenceWarnedRef.current=false;
-          silenceWarnCount.current=0;
+          lastSpeechRef.current = Date.now();
+          silenceWarnedRef.current = false;
+          silenceWarnCount.current = 0;
 
           // ── FIXED: Count candidate ANSWERS, not AI questions ───────
           // Only count when:
@@ -4190,87 +5201,96 @@ const VideoInterview:React.FC=()=>{
           // 3. Answer is long enough to be a real response
           // 4. Not already at question limit
           // 5. Not a duplicate count for same answer (candidateRespondedRef)
-          if(
+          if (
             preCheckDone.current &&
             !aiIsSpeakingRef.current &&
             !questionLimitReached.current &&
             !candidateRespondedRef.current &&
             text.trim().length >= MIN_ANSWER_LENGTH
-          ){
-            candidateRespondedRef.current=true; // prevent double-counting same utterance
+          ) {
+            candidateRespondedRef.current = true; // prevent double-counting same utterance
             questionCount.current++;
             setQuestionProgress(questionCount.current);
-            console.log(`[Interview] Answer ${questionCount.current}/${maxQuestions.current} received`);
+            console.log(
+              `[Interview] Answer ${questionCount.current}/${maxQuestions.current} received`,
+            );
 
-            if(questionCount.current>=maxQuestions.current){
-              questionLimitReached.current=true;
-              setTimeout(()=>{
-                try{
-                  closingInProgress.current=true;
+            if (questionCount.current >= maxQuestions.current) {
+              questionLimitReached.current = true;
+              setTimeout(() => {
+                try {
+                  closingInProgress.current = true;
                   vapiRef.current?.send({
-                    type:"add-message",
-                    message:{
-                      role:"system",
-                      content:`[SYSTEM]: The candidate has now answered all ${maxQuestions.current} questions. Do NOT ask any more questions. Give only a warm, professional farewell and end the interview gracefully.`,
+                    type: "add-message",
+                    message: {
+                      role: "system",
+                      content: `[SYSTEM]: The candidate has now answered all ${maxQuestions.current} questions. Do NOT ask any more questions. Give only a warm, professional farewell and end the interview gracefully.`,
                     },
                   });
-                }catch{}
-              },1000);
+                } catch {}
+              }, 1000);
             }
           }
         }
-      }else{
+      } else {
         conversationRef.current.push(msg);
       }
     });
 
-    inst.on("user-speech-start",()=>{
-      if(!micOnRef.current)return;
+    inst.on("user-speech-start", () => {
+      if (!micOnRef.current) return;
       setIsListening(true);
-      lastSpeechRef.current=Date.now();
-      silenceWarnedRef.current=false;
-      silenceWarnCount.current=0;
+      lastSpeechRef.current = Date.now();
+      silenceWarnedRef.current = false;
+      silenceWarnCount.current = 0;
     });
 
-    inst.on("user-speech-end",()=>{
+    inst.on("user-speech-end", () => {
       setIsListening(false);
-      if(!micOnRef.current)return;
-      if(userTranscriptBuf.current.trim()){
+      if (!micOnRef.current) return;
+      if (userTranscriptBuf.current.trim()) {
         setUserSub(userTranscriptBuf.current.trim());
-        userTranscriptBuf.current="";
+        userTranscriptBuf.current = "";
       }
     });
 
-    return()=>{inst.stop();};
-  },[avatarMode,heygenReady]);
+    return () => {
+      inst.stop();
+    };
+  }, [avatarMode, heygenReady]);
 
   // ── Start call ─────────────────────────────────────────────────────────
-  const startCall=useCallback(()=>{
-    if(!vapi||!interviewInfo)return;
+  const startCall = useCallback(() => {
+    if (!vapi || !interviewInfo) return;
 
     // Reset all counters
-    alertCountRef.current=0;
-    questionCount.current=0;
-    questionLimitReached.current=false;
-    closingInProgress.current=false;
-    preCheckDone.current=false;
-    interviewEndedRef.current=false;
-    ticks.current={noface:0,multi:0,gaze:0,eyes:0};
-    violLockedRef.current=false;
-    lastViolAt.current=0;
-    aiIsSpeakingRef.current=false;
-    candidateRespondedRef.current=false;
+    alertCountRef.current = 0;
+    questionCount.current = 0;
+    questionLimitReached.current = false;
+    closingInProgress.current = false;
+    preCheckDone.current = false;
+    interviewEndedRef.current = false;
+    ticks.current = { noface: 0, multi: 0, gaze: 0, eyes: 0 };
+    violLockedRef.current = false;
+    lastViolAt.current = 0;
+    aiIsSpeakingRef.current = false;
+    candidateRespondedRef.current = false;
     setQuestionProgress(0);
 
-    const pos=interviewInfo?.position||interviewInfo?.jobPosition||"the role";
-    const diff=interviewInfo?.difficulty||"Medium";
-    const skills=Array.isArray(interviewInfo?.skills)?interviewInfo.skills.join(", "):interviewInfo?.skills||"";
-    const numQs=maxQuestions.current;
-    const cName=interviewInfo?.username||interviewInfo?.candidateName||"Candidate";
-    const durationMins=(parseInt(String(interviewInfo?.duration||"5"),10)||5);
+    const pos =
+      interviewInfo?.position || interviewInfo?.jobPosition || "the role";
+    const diff = interviewInfo?.difficulty || "Medium";
+    const skills = Array.isArray(interviewInfo?.skills)
+      ? interviewInfo.skills.join(", ")
+      : interviewInfo?.skills || "";
+    const numQs = maxQuestions.current;
+    const cName =
+      interviewInfo?.username || interviewInfo?.candidateName || "Candidate";
+    const durationMins =
+      parseInt(String(interviewInfo?.duration || "5"), 10) || 5;
 
     // ── FIXED: Explicit turn-taking instructions in system prompt ──────
-    const PRECHECK=`
+    const PRECHECK = `
 PHASE 1 — AUDIO & VIDEO PRE-CHECK:
 - Greet the candidate warmly by name.
 - Ask ONLY this: "Can you hear me clearly? Is your audio and video working?"
@@ -4278,7 +5298,7 @@ PHASE 1 — AUDIO & VIDEO PRE-CHECK:
 - Once they confirm, say "Perfect, let's begin the interview." then move to PHASE 2.
 - Do NOT ask anything else until they respond.`;
 
-    const TURN_RULES=`
+    const TURN_RULES = `
 CRITICAL TURN-TAKING RULES (must follow at all times):
 - After asking a question, STOP TALKING COMPLETELY. Do not add commentary, do not rephrase, do not say "take your time" — just wait in silence.
 - Only speak again AFTER the candidate has finished their response.
@@ -4286,7 +5306,7 @@ CRITICAL TURN-TAKING RULES (must follow at all times):
 - Never ask two questions back to back without a candidate response in between.
 - Keep acknowledgements to ONE short sentence max before the next question.`;
 
-    const RULES=`
+    const RULES = `
 PHASE 2 — INTERVIEW:
 - You are a ${diff}-level senior interviewer. Professional, warm, conversational.
 - Ask EXACTLY ONE question. Then STOP and wait for the full answer.
@@ -4295,193 +5315,462 @@ PHASE 2 — INTERVIEW:
 - Wait for a complete answer after EACH question before proceeding.
 - After all ${numQs} questions are answered → give a warm farewell ONLY. No more questions.`;
 
-    let sys="",first="";
+    let sys = "",
+      first = "";
 
-    if(isResumeInterview){
-      sys=`You are a senior AI interviewer conducting a real interview.
+    if (isResumeInterview) {
+      sys = `You are a senior AI interviewer conducting a real interview.
 CANDIDATE RESUME:
-${resumeData?.resumeText||"Not provided"}
+${resumeData?.resumeText || "Not provided"}
 ROLE: ${pos}
 ${PRECHECK}
 ${TURN_RULES}
 ${RULES}`;
-      first=`Hello ${cName}! I'm your AI interviewer for the ${pos} position. It's great to meet you.`;
-    }else{
-      let qList:string[]=[];
-      try{
-        const raw=interviewInfo?.questions??interviewInfo?.questionList;
-        if(Array.isArray(raw)&&raw.length)qList=raw.map((x:any)=>typeof x==="string"?x:x?.question).filter(Boolean);
-        if(!qList.length&&typeof raw==="string")qList=(JSON.parse(raw)||[]).map((x:any)=>typeof x==="string"?x:x?.question).filter(Boolean);
-      }catch{}
-      const filt=qList.filter(q=>!q.toLowerCase().includes("tell me about yourself")).slice(0,numQs);
-      const qBlock=filt.length
-        ?`QUESTIONS to ask (ask them one at a time, waiting for each answer):\n${filt.map((q,i)=>`${i+1}. ${q}`).join("\n")}`
-        :`Generate exactly ${numQs} professional interview questions for this role.\nROLE: ${pos}\nSKILLS: ${skills}\nDIFFICULTY: ${diff}\nAsk them one at a time, waiting for each answer.`;
+      first = `Hello ${cName}! I'm your AI interviewer for the ${pos} position. It's great to meet you.`;
+    } else {
+      let qList: string[] = [];
+      try {
+        const raw = interviewInfo?.questions ?? interviewInfo?.questionList;
+        if (Array.isArray(raw) && raw.length)
+          qList = raw
+            .map((x: any) => (typeof x === "string" ? x : x?.question))
+            .filter(Boolean);
+        if (!qList.length && typeof raw === "string")
+          qList = (JSON.parse(raw) || [])
+            .map((x: any) => (typeof x === "string" ? x : x?.question))
+            .filter(Boolean);
+      } catch {}
+      const filt = qList
+        .filter((q) => !q.toLowerCase().includes("tell me about yourself"))
+        .slice(0, numQs);
+      const qBlock = filt.length
+        ? `QUESTIONS to ask (ask them one at a time, waiting for each answer):\n${filt.map((q, i) => `${i + 1}. ${q}`).join("\n")}`
+        : `Generate exactly ${numQs} professional interview questions for this role.\nROLE: ${pos}\nSKILLS: ${skills}\nDIFFICULTY: ${diff}\nAsk them one at a time, waiting for each answer.`;
 
-      sys=`You are a senior AI interviewer conducting a real interview.
+      sys = `You are a senior AI interviewer conducting a real interview.
 ROLE: ${pos}
 ${qBlock}
 ${PRECHECK}
 ${TURN_RULES}
 ${RULES}`;
-      first=`Hello ${userData?.name||userData?.firstName||userData?.username||cName}! Welcome, I'm your AI interviewer for the ${pos} position. It's great to have you here.`;
+      first = `Hello ${userData?.name || userData?.firstName || userData?.username || cName}! Welcome, I'm your AI interviewer for the ${pos} position. It's great to have you here.`;
     }
 
-    if(avatarMode==="heygen")initHeyGen();
-    if(avatarMode==="ganai")generateGanGreeting(first);
+    if (avatarMode === "heygen") initHeyGen();
+    if (avatarMode === "ganai") generateGanGreeting(first);
 
     vapi.start({
-      name:"AI Recruiter",
-      firstMessage:first,
-      transcriber:null,
-      voice:{
-        provider:"vapi",
-        voiceId:"Neha",
-        speed:0.92,
-        fillerInjectionEnabled:false,
+      name: "AI Recruiter",
+      firstMessage: first,
+      transcriber: null,
+      voice: {
+        provider: "vapi",
+        voiceId: "Neha",
+        speed: 0.92,
+        fillerInjectionEnabled: false,
       },
-      model:{
-        provider:"openai",
-        model:"gpt-4-turbo",
-        messages:[{role:"system",content:sys}],
-        temperature:0.55,   // lower = more disciplined, follows instructions better
-        maxTokens:300,       // shorter responses = AI doesn't monologue
+      model: {
+        provider: "openai",
+        model: "gpt-4-turbo",
+        messages: [{ role: "system", content: sys }],
+        temperature: 0.55, // lower = more disciplined, follows instructions better
+        maxTokens: 300, // shorter responses = AI doesn't monologue
       },
       // Turn-taking / session settings
-      silenceTimeoutSeconds:25,
-      maxDurationSeconds:durationMins*60,
-      endCallMessage:"Thank you so much for your time. Best of luck — we'll be in touch soon!",
-      endCallPhrases:["goodbye","best of luck","we'll be in touch","thank you for your time"],
+      silenceTimeoutSeconds: 25,
+      maxDurationSeconds: durationMins * 60,
+      endCallMessage:
+        "Thank you so much for your time. Best of luck — we'll be in touch soon!",
+      endCallPhrases: [
+        "goodbye",
+        "best of luck",
+        "we'll be in touch",
+        "thank you for your time",
+      ],
     });
-  },[vapi,interviewInfo,isResumeInterview,resumeData,userData,avatarMode,initHeyGen,generateGanGreeting]);
+  }, [
+    vapi,
+    interviewInfo,
+    isResumeInterview,
+    resumeData,
+    userData,
+    avatarMode,
+    initHeyGen,
+    generateGanGreeting,
+  ]);
 
   // ── Silence monitor ────────────────────────────────────────────────────
-  const startSilenceMonitor=useCallback(()=>{
-    lastSpeechRef.current=Date.now();silenceWarnedRef.current=false;silenceWarnCount.current=0;
-    if(silenceRef.current)clearInterval(silenceRef.current);
-    silenceRef.current=setInterval(()=>{
-      if(!isCallActiveRef.current)return;
+  const startSilenceMonitor = useCallback(() => {
+    lastSpeechRef.current = Date.now();
+    silenceWarnedRef.current = false;
+    silenceWarnCount.current = 0;
+    if (silenceRef.current) clearInterval(silenceRef.current);
+    silenceRef.current = setInterval(() => {
+      if (!isCallActiveRef.current) return;
       // Don't trigger silence warning while AI is speaking
-      if(aiIsSpeakingRef.current)return;
-      const silent=(Date.now()-lastSpeechRef.current)/1000;
-      if(silent>=SILENCE_THRESHOLD_SEC&&!silenceWarnedRef.current){
-        silenceWarnedRef.current=true;lastSpeechRef.current=Date.now();silenceWarnCount.current++;
-        const n=silenceWarnCount.current;
-        if(n>=MAX_SILENCE_WARNINGS){
-          try{vapiRef.current?.send({type:"add-message",message:{role:"system",content:"[SYSTEM]: Candidate is unresponsive. Thank them warmly and conclude the interview."}});}catch{}
-        }else{
-          const prompts=[
+      if (aiIsSpeakingRef.current) return;
+      const silent = (Date.now() - lastSpeechRef.current) / 1000;
+      if (silent >= SILENCE_THRESHOLD_SEC && !silenceWarnedRef.current) {
+        silenceWarnedRef.current = true;
+        lastSpeechRef.current = Date.now();
+        silenceWarnCount.current++;
+        const n = silenceWarnCount.current;
+        if (n >= MAX_SILENCE_WARNINGS) {
+          try {
+            vapiRef.current?.send({
+              type: "add-message",
+              message: {
+                role: "system",
+                content:
+                  "[SYSTEM]: Candidate is unresponsive. Thank them warmly and conclude the interview.",
+              },
+            });
+          } catch {}
+        } else {
+          const prompts = [
             "Candidate has been silent for 30 seconds. Gently ask if they are ready to continue.",
             "Second silence prompt. Ask if they can hear you clearly.",
             "Third prompt. Ask if they are experiencing any technical issues.",
             "Fourth prompt. Ask if they would like to continue with the interview.",
             "Fifth and final prompt. Give them one more chance to respond.",
           ];
-          try{vapiRef.current?.send({type:"add-message",message:{role:"system",content:`[SILENCE PROMPT #${n}]: ${prompts[n-1]}`}});}catch{}
+          try {
+            vapiRef.current?.send({
+              type: "add-message",
+              message: {
+                role: "system",
+                content: `[SILENCE PROMPT #${n}]: ${prompts[n - 1]}`,
+              },
+            });
+          } catch {}
         }
-        silenceWarnedRef.current=false;
+        silenceWarnedRef.current = false;
       }
-    },5000);
-  },[]);
+    }, 5000);
+  }, []);
 
-  const handleBothReady=useCallback(()=>{startSilenceMonitor();setScreen("spotlight");},[startSilenceMonitor]);
+  const handleBothReady = useCallback(() => {
+    startSilenceMonitor();
+    setScreen("spotlight");
+  }, [startSilenceMonitor]);
 
   // ── Feedback ───────────────────────────────────────────────────────────
-  const generateFeedback=useCallback(async()=>{
+  const generateFeedback = useCallback(async () => {
     setIsGenFeedback(true);
-    try{
-      const conv=conversationRef.current;
-      if(!conv.length){navigate(`/user/${interview_id}/assessment-complete`);return;}
-      const transcript=conv.filter(m=>m?.type==="transcript"&&(m.role==="assistant"||m.role==="user")).map(m=>({role:m.role==="assistant"?"Interviewer":"Candidate",text:m.transcript||m.text||""})).filter(m=>m.text.trim());
-      const r=await fetch("http://localhost:3000/api/ai-feedback",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({conversation:conv,transcript})});
-      const data=await r.json();
-      const raw=(data?.content||data?.feedback||"").replace(/```json|```/g,"").trim();
-      if(raw){
-        let parsed:any={};
-        try{parsed=JSON.parse(raw);}catch{}
+    try {
+      const conv = conversationRef.current;
+      if (!conv.length) {
+        navigate(`/user/${interview_id}/assessment-complete`);
+        return;
+      }
+
+      // Build clean transcript from conversation
+      const transcript = conv
+        .filter(
+          (m) =>
+            m?.type === "transcript" &&
+            (m.role === "assistant" || m.role === "user"),
+        )
+        .map((m) => ({
+          role: m.role === "assistant" ? "Interviewer" : "Candidate",
+          text: m.transcript || m.text || "",
+        }))
+        .filter((m) => m.text.trim());
+
+      // Build the formatted transcript string for the prompt
+      const transcriptString = transcript
+        .map((m) => `${m.role}: ${m.text}`)
+        .join("\n");
+
+      const pos =
+        interviewInfo?.position || interviewInfo?.jobPosition || "the role";
+      const cName =
+        interviewInfo?.username || interviewInfo?.candidateName || "Candidate";
+
+      // ── This is the EXACT payload your /api/ai-feedback endpoint should receive ──
+      const payload = {
+        conversation: conv, // raw Vapi events array
+        transcript, // [{role, text}] array for structured use
+        prompt: `You are a senior recruitment analyst with 15+ years of hiring experience. Your task is to produce a rigorous, accurate, evidence-based assessment of the following interview. This assessment will directly determine whether the candidate is hired, so be thorough and honest — not lenient.
+
+CANDIDATE: ${cName}
+ROLE: ${pos}
+
+INTERVIEW TRANSCRIPT:
+${transcriptString}
+
+Return a JSON object ONLY — no markdown, no extra text, no code fences:
+{
+  "candidateName": "${cName}",
+  "role": "${pos}",
+  "confidenceScore": <integer 0-100>,
+  "confidenceLabel": <"High" | "Moderate" | "Low">,
+  "behavioralInsights": [
+    { "title": "Communication Style",       "description": "<precise one-sentence observation>", "status": <"good"|"warning"|"bad"> },
+    { "title": "Problem-Solving Approach",  "description": "<precise one-sentence observation>", "status": <"good"|"warning"|"bad"> },
+    { "title": "Professionalism & Poise",   "description": "<precise one-sentence observation>", "status": <"good"|"warning"|"bad"> }
+  ],
+  "technicalCompetency": [
+    { "title": "Core Knowledge",       "description": "<precise one-sentence observation>", "status": <"good"|"warning"|"bad"> },
+    { "title": "Practical Experience", "description": "<precise one-sentence observation>", "status": <"good"|"warning"|"bad"> },
+    { "title": "Advanced Topics",      "description": "<precise one-sentence observation>", "status": <"good"|"warning"|"bad"> }
+  ],
+  "speechPatterns": {
+    "clarityScore": <integer 0-100>,
+    "avgResponseTime": "<estimate e.g. '1.4s' or '5.2s' based on transcript timing>",
+    "confidenceLevel": <integer 0-100>,
+    "complexityScore": <float 1.0-5.0>
+  },
+  "recommendations": [
+    "<specific, actionable recommendation 1>",
+    "<specific, actionable recommendation 2>"
+  ],
+  "overallVerdict": <"hire" | "consider" | "reject">,
+  "verdictReason": "<one evidence-based sentence with specific transcript references>"
+}
+
+SCORING GUIDELINES:
+- "hire": Consistently strong, specific, well-articulated answers. Clear technical competency with examples. Confident, professional communication. Would contribute from day one.
+- "consider": Genuine strengths but notable gaps — vague answers on some questions, inconsistent depth, or one area significantly weaker. Warrants a follow-up interview.
+- "reject": Consistently vague, unprepared, or off-topic. Unable to demonstrate required skills. No clear evidence of readiness.
+- confidenceScore: 80+ = most questions answered with depth. 50-79 = mixed. Below 50 = mostly weak.
+- clarityScore: Penalise heavy hedging, rambling, incomplete thoughts, excessive fillers.
+- confidenceLevel: Directness, ownership of statements, absence of excessive hedging.
+- complexityScore: 1-2 = basic. 3 = professional average. 4-5 = sophisticated domain expertise.
+- verdictReason must reference specific evidence from the transcript.`,
+      };
+
+      const r = await fetch("http://localhost:3000/api/ai-feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await r.json();
+      const raw = (data?.content || data?.feedback || "")
+        .replace(/```json|```/g, "")
+        .trim();
+      // get candidate ID from localStorage
+      const candidateDetails =
+        sessionStorage.getItem("candidateDetails") || undefined;
+      const candidateId = candidateDetails
+        ? JSON.parse(candidateDetails)?._id
+        : undefined;
+      console.log(candidateId);
+      if (raw) {
+        let parsed: any = {};
+        try {
+          parsed = JSON.parse(raw);
+        } catch {}
+
         await userService.generateFeedback({
           interview_id,
-          userName:userData?.name,
-          userEmail:userData?.email,
-          feedback:parsed,
+          userName: userData?.name,
+          userEmail: userData?.email,
+          candidateId: candidateId,
+          feedback: parsed,
           transcript,
-          behaviorReport:behaviorTracker.current.getReport(),
-          completedAt:new Date().toISOString(),
+          behaviorReport: behaviorTracker.current.getReport(),
+          completedAt: new Date().toISOString(),
         });
       }
-    }catch(e){console.error("Feedback:",e);}
-    finally{setIsGenFeedback(false);navigate(`/user/${interview_id}/assessment-complete`);}
-  },[interview_id,navigate,userData]);
+    } catch (e) {
+      console.error("Feedback:", e);
+    } finally {
+      setIsGenFeedback(false);
+      navigate(`/user/${interview_id}/assessment-complete`);
+    }
+  }, [interview_id, navigate, userData, interviewInfo]);
 
-  useEffect(()=>{
-    if(!vapi)return;
-    const h=()=>{
-      const has=conversationRef.current.filter(m=>m?.type==="transcript"&&(m.role==="assistant"||m.role==="user")).length>=2;
-      setIsCallActive(false);isCallActiveRef.current=false;setIsSpeaking(false);setAvatarState("idle");
-      if(!has){setScreen("lobby");setVapiReady(false);setHeygenStreamLive(false);setHeygenReady(false);setElapsed(0);return;}
+  useEffect(() => {
+    if (!vapi) return;
+    const h = () => {
+      const has =
+        conversationRef.current.filter(
+          (m) =>
+            m?.type === "transcript" &&
+            (m.role === "assistant" || m.role === "user"),
+        ).length >= 2;
+      setIsCallActive(false);
+      isCallActiveRef.current = false;
+      setIsSpeaking(false);
+      setAvatarState("idle");
+      if (!has) {
+        setScreen("lobby");
+        setVapiReady(false);
+        setHeygenStreamLive(false);
+        setHeygenReady(false);
+        setElapsed(0);
+        return;
+      }
       generateFeedback();
     };
-    vapi.on("call-end",h);return()=>vapi.off("call-end",h);
-  },[vapi,generateFeedback]);
+    vapi.on("call-end", h);
+    return () => vapi.off("call-end", h);
+  }, [vapi, generateFeedback]);
 
   // ── Controls ────────────────────────────────────────────────────────────
-  const handleJoin=()=>{tryEnterFS();setScreen("connecting");startCall();};
-  const handleEnd=()=>{setIsCallActive(false);if(silenceRef.current)clearInterval(silenceRef.current);try{vapi?.stop();}catch{}tryExitFS();setScreen("lobby");setElapsed(0);setVapiReady(false);setHeygenStreamLive(false);setHeygenReady(false);};
-  const toggleMic=()=>{const n=!micOn;streamRef.current?.getAudioTracks().forEach(t=>{t.enabled=n;});micOnRef.current=n;setMicOn(n);if(!n)userTranscriptBuf.current="";};
-  const toggleCam=()=>{streamRef.current?.getVideoTracks().forEach(t=>{t.enabled=!camOn;});setCamOn(v=>!v);};
+  const handleJoin = () => {
+    tryEnterFS();
+    setScreen("connecting");
+    startCall();
+  };
+  const handleEnd = () => {
+    setIsCallActive(false);
+    if (silenceRef.current) clearInterval(silenceRef.current);
+    try {
+      vapi?.stop();
+    } catch {}
+    tryExitFS();
+    setScreen("lobby");
+    setElapsed(0);
+    setVapiReady(false);
+    setHeygenStreamLive(false);
+    setHeygenReady(false);
+  };
+  const toggleMic = () => {
+    const n = !micOn;
+    streamRef.current?.getAudioTracks().forEach((t) => {
+      t.enabled = n;
+    });
+    micOnRef.current = n;
+    setMicOn(n);
+    if (!n) userTranscriptBuf.current = "";
+  };
+  const toggleCam = () => {
+    streamRef.current?.getVideoTracks().forEach((t) => {
+      t.enabled = !camOn;
+    });
+    setCamOn((v) => !v);
+  };
 
-  const fmt =(s:number)=>`${String(Math.floor(s/3600)).padStart(2,"0")}:${String(Math.floor((s%3600)/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
-  const fmtL=(s:number)=>isNaN(s)||s<0?"00:00":`${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
-  const fmtC=(d:Date)=>{let h=d.getHours(),m=d.getMinutes();const ap=h>=12?"PM":"AM";h=h%12||12;return `${h}:${String(m).padStart(2,"0")} ${ap}`;};
-  const fmtD=(d:Date)=>d.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"});
+  const fmt = (s: number) =>
+    `${String(Math.floor(s / 3600)).padStart(2, "0")}:${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+  const fmtL = (s: number) =>
+    isNaN(s) || s < 0
+      ? "00:00"
+      : `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+  const fmtC = (d: Date) => {
+    let h = d.getHours(),
+      m = d.getMinutes();
+    const ap = h >= 12 ? "PM" : "AM";
+    h = h % 12 || 12;
+    return `${h}:${String(m).padStart(2, "0")} ${ap}`;
+  };
+  const fmtD = (d: Date) =>
+    d.toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
 
-  const username=userData?.name||"You";
-  const avatarProps:AvatarTileProps={mode:avatarMode,state:avatarState,heygenVideoRef,ganAiVideoUrl,ganAiLoading,heygenReady};
+  const username = userData?.name || "You";
+  const avatarProps: AvatarTileProps = {
+    mode: avatarMode,
+    state: avatarState,
+    heygenVideoRef,
+    ganAiVideoUrl,
+    ganAiLoading,
+    heygenReady,
+  };
 
-  if(loading||!interviewInfo)return(<div className="h-screen bg-[#050A24] flex items-center justify-center"><Loader2 className="animate-spin h-8 w-8 text-[#2D55FB]"/><span className="ml-3 text-white text-lg">Preparing Interview...</span></div>);
-  if(isGenFeedback)return(<div className="h-screen bg-[#050A24] flex flex-col items-center justify-center gap-4"><Loader2 className="animate-spin h-12 w-12 text-[#2D55FB]"/><h2 className="text-white text-xl font-bold">Generating Your Feedback...</h2><p className="text-white/40 text-sm">Analyzing your performance</p></div>);
+  if (loading || !interviewInfo)
+    return (
+      <div className="h-screen bg-[#050A24] flex items-center justify-center">
+        <Loader2 className="animate-spin h-8 w-8 text-[#2D55FB]" />
+        <span className="ml-3 text-white text-lg">Preparing Interview...</span>
+      </div>
+    );
+  if (isGenFeedback)
+    return (
+      <div className="h-screen bg-[#050A24] flex flex-col items-center justify-center gap-4">
+        <Loader2 className="animate-spin h-12 w-12 text-[#2D55FB]" />
+        <h2 className="text-white text-xl font-bold">
+          Generating Your Feedback...
+        </h2>
+        <p className="text-white/40 text-sm">Analyzing your performance</p>
+      </div>
+    );
 
   // ── Bottom bar ──────────────────────────────────────────────────────────
-  const bottomBar=(
+  const bottomBar = (
     <div className="shrink-0 bg-[#070e2b] border-t border-white/5 px-5 sm:px-8 py-3.5 flex items-center justify-between">
       <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-        <span className="text-white/40 text-sm font-medium whitespace-nowrap">{interviewInfo?.position||interviewInfo?.jobPosition||"Interview"}</span>
-        <div className="w-px h-5 bg-white/15"/>
-        <span className={`font-bold text-sm whitespace-nowrap ${timeLeft<60?"text-red-400 animate-pulse":"text-[#2D55FB]"}`}>⏱ {fmtL(timeLeft)}</span>
+        <span className="text-white/40 text-sm font-medium whitespace-nowrap">
+          {interviewInfo?.position || interviewInfo?.jobPosition || "Interview"}
+        </span>
+        <div className="w-px h-5 bg-white/15" />
+        <span
+          className={`font-bold text-sm whitespace-nowrap ${timeLeft < 60 ? "text-red-400 animate-pulse" : "text-[#2D55FB]"}`}
+        >
+          ⏱ {fmtL(timeLeft)}
+        </span>
         {/* Question progress indicator */}
-        {isCallActive&&preCheckDone.current&&(
+        {isCallActive && preCheckDone.current && (
           <>
-            <div className="w-px h-5 bg-white/15"/>
+            <div className="w-px h-5 bg-white/15" />
             <span className="text-white/50 text-xs font-medium whitespace-nowrap">
-              Q {Math.min(questionProgress,maxQuestions.current)}/{maxQuestions.current}
+              Q {Math.min(questionProgress, maxQuestions.current)}/
+              {maxQuestions.current}
             </span>
           </>
         )}
       </div>
       <div className="flex items-center gap-2 sm:gap-3">
-        <CtrlBtn onClick={toggleMic} active={micOn}>{micOn?<Mic className="h-4 w-4"/>:<MicOff className="h-4 w-4"/>}</CtrlBtn>
-        <CtrlBtn onClick={toggleCam} active={camOn}>{camOn?<Video className="h-4 w-4"/>:<VideoOff className="h-4 w-4"/>}</CtrlBtn>
-        <CtrlBtn><MonitorUp className="h-4 w-4 text-gray-800"/></CtrlBtn>
-        <CtrlBtn onClick={handleEnd} danger><PhoneOff className="h-4 w-4"/></CtrlBtn>
+        <CtrlBtn onClick={toggleMic} active={micOn}>
+          {micOn ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+        </CtrlBtn>
+        <CtrlBtn onClick={toggleCam} active={camOn}>
+          {camOn ? (
+            <Video className="h-4 w-4" />
+          ) : (
+            <VideoOff className="h-4 w-4" />
+          )}
+        </CtrlBtn>
+        <CtrlBtn>
+          <MonitorUp className="h-4 w-4 text-gray-800" />
+        </CtrlBtn>
+        <CtrlBtn onClick={handleEnd} danger>
+          <PhoneOff className="h-4 w-4" />
+        </CtrlBtn>
       </div>
       <div className="min-w-[80px] sm:min-w-[110px] flex flex-col items-end gap-1">
-        <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-semibold ${isFullscreen?"bg-green-500/10 border-green-500/30 text-green-400":"bg-red-500/15 border-red-500/30 text-red-400 animate-pulse"}`}>
-          <Maximize className="w-2.5 h-2.5"/>{isFullscreen?"Fullscreen":"Not FS!"}
+        <div
+          className={`flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-semibold ${isFullscreen ? "bg-green-500/10 border-green-500/30 text-green-400" : "bg-red-500/15 border-red-500/30 text-red-400 animate-pulse"}`}
+        >
+          <Maximize className="w-2.5 h-2.5" />
+          {isFullscreen ? "Fullscreen" : "Not FS!"}
         </div>
-        {noFaceVisible&&<span className="text-red-400 text-[10px] font-bold animate-pulse">⚠ No face</span>}
-        {!noFaceVisible&&alertCountRef.current>0&&<span className="text-orange-400 text-[10px] font-bold">{alertCountRef.current}/3 warns</span>}
+        {noFaceVisible && (
+          <span className="text-red-400 text-[10px] font-bold animate-pulse">
+            ⚠ No face
+          </span>
+        )}
+        {!noFaceVisible && alertCountRef.current > 0 && (
+          <span className="text-orange-400 text-[10px] font-bold">
+            {alertCountRef.current}/3 warns
+          </span>
+        )}
         <div className="flex items-center gap-1">
-          <div className={`w-1.5 h-1.5 rounded-full ${faceStatus==="ok"?"bg-green-400":faceStatus==="warn"?"bg-red-400 animate-pulse":"bg-gray-500"}`}/>
-          <span className="text-white/30 text-[9px]">{faceStatus==="ok"?"Face OK":faceStatus==="warn"?"Alert":"Scanning"}</span>
+          <div
+            className={`w-1.5 h-1.5 rounded-full ${faceStatus === "ok" ? "bg-green-400" : faceStatus === "warn" ? "bg-red-400 animate-pulse" : "bg-gray-500"}`}
+          />
+          <span className="text-white/30 text-[9px]">
+            {faceStatus === "ok"
+              ? "Face OK"
+              : faceStatus === "warn"
+                ? "Alert"
+                : "Scanning"}
+          </span>
         </div>
       </div>
     </div>
   );
 
   // ── Overlays ────────────────────────────────────────────────────────────
-  const overlays=(
+  const overlays = (
     <>
-      {activeAlert&&(
+      {activeAlert && (
         <ViolationModal
           key={`${activeAlert.type}__${activeAlert.count}`}
           alert={activeAlert}
@@ -4489,34 +5778,75 @@ ${RULES}`;
         />
       )}
       <AnimatePresence>
-        {noiseWarning&&screen!=="lobby"&&screen!=="connecting"&&!activeAlert&&(
-          <motion.div key="noise" initial={{opacity:0,y:-12}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-12}} className="fixed top-14 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 bg-amber-500/90 backdrop-blur-sm border border-amber-400/50 rounded-xl px-4 py-2.5 shadow-lg max-w-sm w-full">
-            <Volume2 className="h-4 w-4 text-amber-900 shrink-0"/>
-            <span className="text-amber-950 text-xs font-semibold flex-1">Background noise detected — please reduce noise.</span>
-            <button onClick={()=>setNoiseWarning(false)} className="text-amber-900/60 hover:text-amber-900"><X className="h-4 w-4"/></button>
-          </motion.div>
-        )}
+        {noiseWarning &&
+          screen !== "lobby" &&
+          screen !== "connecting" &&
+          !activeAlert && (
+            <motion.div
+              key="noise"
+              initial={{ opacity: 0, y: -12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              className="fixed top-14 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 bg-amber-500/90 backdrop-blur-sm border border-amber-400/50 rounded-xl px-4 py-2.5 shadow-lg max-w-sm w-full"
+            >
+              <Volume2 className="h-4 w-4 text-amber-900 shrink-0" />
+              <span className="text-amber-950 text-xs font-semibold flex-1">
+                Background noise detected — please reduce noise.
+              </span>
+              <button
+                onClick={() => setNoiseWarning(false)}
+                className="text-amber-900/60 hover:text-amber-900"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </motion.div>
+          )}
       </AnimatePresence>
       <AnimatePresence>
-        {showFSBanner&&screen!=="lobby"&&screen!=="connecting"&&!activeAlert&&(
-          <motion.div key="fs" initial={{opacity:0,y:-12}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-12}} className="fixed top-14 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 bg-red-500/90 backdrop-blur-sm border border-red-400/50 rounded-xl px-4 py-2.5 shadow-lg max-w-sm w-full">
-            <Maximize className="h-4 w-4 text-white shrink-0"/>
-            <span className="text-white text-xs font-semibold flex-1">Fullscreen exited — re-entering.</span>
-            <button onClick={()=>{tryEnterFS();setShowFSBanner(false);}} className="text-white/60 hover:text-white"><X className="h-4 w-4"/></button>
-          </motion.div>
-        )}
+        {showFSBanner &&
+          screen !== "lobby" &&
+          screen !== "connecting" &&
+          !activeAlert && (
+            <motion.div
+              key="fs"
+              initial={{ opacity: 0, y: -12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              className="fixed top-14 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 bg-red-500/90 backdrop-blur-sm border border-red-400/50 rounded-xl px-4 py-2.5 shadow-lg max-w-sm w-full"
+            >
+              <Maximize className="h-4 w-4 text-white shrink-0" />
+              <span className="text-white text-xs font-semibold flex-1">
+                Fullscreen exited — re-entering.
+              </span>
+              <button
+                onClick={() => {
+                  tryEnterFS();
+                  setShowFSBanner(false);
+                }}
+                className="text-white/60 hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </motion.div>
+          )}
       </AnimatePresence>
-      {isCallActive&&alertCountRef.current>0&&!activeAlert&&(
+      {isCallActive && alertCountRef.current > 0 && !activeAlert && (
         <div className="fixed bottom-24 right-4 z-40 flex items-center gap-1.5 px-2.5 py-1 bg-red-500/20 border border-red-500/40 rounded-full">
-          <ShieldAlert className="w-3 h-3 text-red-400"/>
-          <span className="text-red-400 text-xs font-semibold">{alertCountRef.current}/{MAX_VIOLATIONS} warns</span>
+          <ShieldAlert className="w-3 h-3 text-red-400" />
+          <span className="text-red-400 text-xs font-semibold">
+            {alertCountRef.current}/{MAX_VIOLATIONS} warns
+          </span>
         </div>
       )}
-      {isCallActive&&(
+      {isCallActive && (
         <div className="fixed bottom-24 left-4 z-40 flex items-center gap-1.5 px-2 py-1 bg-black/40 border border-white/10 rounded-full backdrop-blur-sm">
-          <Eye className="w-3 h-3 text-white/40"/>
-          <div className={`w-1.5 h-1.5 rounded-full ${faceStatus==="ok"?"bg-green-400":faceStatus==="warn"?"bg-red-400 animate-pulse":"bg-gray-500"}`}/>
-          <span className="text-white/40 text-[9px]">{faceStatus==="ok"?"OK":faceStatus==="warn"?"⚠":"…"}</span>
+          <Eye className="w-3 h-3 text-white/40" />
+          <div
+            className={`w-1.5 h-1.5 rounded-full ${faceStatus === "ok" ? "bg-green-400" : faceStatus === "warn" ? "bg-red-400 animate-pulse" : "bg-gray-500"}`}
+          />
+          <span className="text-white/40 text-[9px]">
+            {faceStatus === "ok" ? "OK" : faceStatus === "warn" ? "⚠" : "…"}
+          </span>
         </div>
       )}
     </>
@@ -4525,107 +5855,292 @@ ${RULES}`;
   // ═══════════════════════════════════════════════════════════════════════════
   // RENDER
   // ═══════════════════════════════════════════════════════════════════════════
-  return(
+  return (
     <div className="contents">
       {/* Always-mounted behavior video for face detection proctoring */}
       <video
         ref={behaviorVidRef}
-        muted playsInline
-        style={{position:"fixed",top:"-2px",left:"-2px",width:"2px",height:"2px",opacity:0,pointerEvents:"none",zIndex:-1}}
+        muted
+        playsInline
+        style={{
+          position: "fixed",
+          top: "-2px",
+          left: "-2px",
+          width: "2px",
+          height: "2px",
+          opacity: 0,
+          pointerEvents: "none",
+          zIndex: -1,
+        }}
       />
 
       {/* ═══════════════════ LOBBY ════════════════════════════════════ */}
-      {screen==="lobby"&&(
+      {screen === "lobby" && (
         <div className="h-screen bg-[#050A24] bg-[radial-gradient(ellipse_at_65%_0%,rgba(45,85,251,0.4),transparent_60%),radial-gradient(ellipse_at_0%_100%,rgba(20,40,120,0.4),transparent_60%)] flex flex-col overflow-hidden">
           <div className="flex items-center justify-between px-6 sm:px-10 py-5 shrink-0">
-            <h1 className="text-white font-bold text-lg sm:text-xl tracking-tight">Vitric IQ</h1>
-            <div className="flex items-center gap-2 text-white/60 text-sm font-medium"><span>{fmtC(now)}</span><span className="text-white/20 mx-1">|</span><span>{fmtD(now)}</span></div>
+            <h1 className="text-white font-bold text-lg sm:text-xl tracking-tight">
+              Vitric IQ
+            </h1>
+            <div className="flex items-center gap-2 text-white/60 text-sm font-medium">
+              <span>{fmtC(now)}</span>
+              <span className="text-white/20 mx-1">|</span>
+              <span>{fmtD(now)}</span>
+            </div>
           </div>
           <div className="flex-1 flex flex-col lg:flex-row items-center justify-center gap-8 lg:gap-16 px-6 pb-10">
-            <motion.div className="relative w-full max-w-sm sm:max-w-md lg:max-w-xl xl:max-w-2xl bg-[#0a1035] rounded-2xl overflow-hidden border border-white/10 shadow-2xl shadow-black/50" style={{aspectRatio:"16/9"}} initial={{opacity:0,scale:0.95}} animate={{opacity:1,scale:1}} transition={{duration:0.55}}>
-              <video ref={lobbyVidRef} muted playsInline className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${camOn&&streamReady?"opacity-100":"opacity-0"}`} style={{transform:"scaleX(-1)"}}/>
-              {(!camOn||!streamReady)&&<div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-[#1a2a5e] to-[#050A24] gap-3"><div className="w-20 h-20 rounded-full bg-[#2D55FB]/20 border border-[#2D55FB]/30 flex items-center justify-center">{streamReady?<VideoOff className="h-10 w-10 text-[#2D55FB]/60"/>:<User className="h-10 w-10 text-[#2D55FB]/50"/>}</div><span className="text-white/30 text-sm">{streamReady?"Camera off":"Waiting for camera…"}</span></div>}
+            <motion.div
+              className="relative w-full max-w-sm sm:max-w-md lg:max-w-xl xl:max-w-2xl bg-[#0a1035] rounded-2xl overflow-hidden border border-white/10 shadow-2xl shadow-black/50"
+              style={{ aspectRatio: "16/9" }}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.55 }}
+            >
+              <video
+                ref={lobbyVidRef}
+                muted
+                playsInline
+                className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${camOn && streamReady ? "opacity-100" : "opacity-0"}`}
+                style={{ transform: "scaleX(-1)" }}
+              />
+              {(!camOn || !streamReady) && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-[#1a2a5e] to-[#050A24] gap-3">
+                  <div className="w-20 h-20 rounded-full bg-[#2D55FB]/20 border border-[#2D55FB]/30 flex items-center justify-center">
+                    {streamReady ? (
+                      <VideoOff className="h-10 w-10 text-[#2D55FB]/60" />
+                    ) : (
+                      <User className="h-10 w-10 text-[#2D55FB]/50" />
+                    )}
+                  </div>
+                  <span className="text-white/30 text-sm">
+                    {streamReady ? "Camera off" : "Waiting for camera…"}
+                  </span>
+                </div>
+              )}
               <div className="absolute bottom-4 left-4 flex items-center gap-3">
-                <motion.button onClick={toggleMic} whileTap={{scale:0.9}} className={`w-10 h-10 rounded-full border flex items-center justify-center backdrop-blur transition-all ${micOn?"bg-white/15 border-white/25 text-white hover:bg-white/25":"bg-red-500 border-red-400 text-white"}`}>{micOn?<Mic className="h-4 w-4"/>:<MicOff className="h-4 w-4"/>}</motion.button>
-                <motion.button onClick={toggleCam} whileTap={{scale:0.9}} className={`w-10 h-10 rounded-full border flex items-center justify-center backdrop-blur transition-all ${camOn?"bg-white/15 border-white/25 text-white hover:bg-white/25":"bg-red-500 border-red-400 text-white"}`}>{camOn?<Video className="h-4 w-4"/>:<VideoOff className="h-4 w-4"/>}</motion.button>
+                <motion.button
+                  onClick={toggleMic}
+                  whileTap={{ scale: 0.9 }}
+                  className={`w-10 h-10 rounded-full border flex items-center justify-center backdrop-blur transition-all ${micOn ? "bg-white/15 border-white/25 text-white hover:bg-white/25" : "bg-red-500 border-red-400 text-white"}`}
+                >
+                  {micOn ? (
+                    <Mic className="h-4 w-4" />
+                  ) : (
+                    <MicOff className="h-4 w-4" />
+                  )}
+                </motion.button>
+                <motion.button
+                  onClick={toggleCam}
+                  whileTap={{ scale: 0.9 }}
+                  className={`w-10 h-10 rounded-full border flex items-center justify-center backdrop-blur transition-all ${camOn ? "bg-white/15 border-white/25 text-white hover:bg-white/25" : "bg-red-500 border-red-400 text-white"}`}
+                >
+                  {camOn ? (
+                    <Video className="h-4 w-4" />
+                  ) : (
+                    <VideoOff className="h-4 w-4" />
+                  )}
+                </motion.button>
               </div>
             </motion.div>
-            <motion.div className="flex flex-col items-center gap-5" initial={{opacity:0,x:28}} animate={{opacity:1,x:0}} transition={{duration:0.55,delay:0.2}}>
-              <h2 className="text-white text-2xl sm:text-3xl font-semibold">Ready to Join?</h2>
-              <p className="text-white/40 text-sm text-center max-w-xs">{interviewInfo?.position||interviewInfo?.jobPosition||"Interview"} • {interviewInfo?.duration||"N/A"}</p>
-              <div className={`flex items-center gap-2 px-3.5 py-2 rounded-xl max-w-xs border ${USE_HEYGEN?"bg-green-500/10 border-green-500/25":USE_GANAI?"bg-purple-500/10 border-purple-500/25":"bg-[#2D55FB]/10 border-[#2D55FB]/25"}`}><div className={`w-2 h-2 rounded-full ${USE_HEYGEN?"bg-green-400":USE_GANAI?"bg-purple-400":"bg-[#2D55FB]/60"}`}/><span className="text-white/50 text-xs">{USE_HEYGEN?"Photorealistic via HeyGen":USE_GANAI?"Via Gan.AI":"Animated AI avatar"}</span></div>
-              <div className="flex items-center gap-2 px-3.5 py-2 bg-[#2D55FB]/10 border border-[#2D55FB]/25 rounded-xl max-w-xs"><Maximize className="h-3.5 w-3.5 text-[#2D55FB]/70 shrink-0"/><span className="text-white/50 text-xs">Fullscreen + proctored interview</span></div>
-              <div className="flex items-center"><div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-400 to-indigo-700 border-2 border-[#2D55FB] flex items-center justify-center shadow-lg"><User className="h-6 w-6 text-white/80"/></div><div className="w-12 h-12 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 border-2 border-orange-400 flex items-center justify-center -ml-3 shadow-lg"><User className="h-6 w-6 text-white/80"/></div></div>
-              <p className="text-white/50 text-sm -mt-2">{username} and AI Recruiter</p>
-              <motion.button onClick={handleJoin} whileHover={{scale:1.04}} whileTap={{scale:0.97}} className="px-10 py-3 bg-[#2D55FB] hover:bg-[#1e3fd4] text-white font-semibold rounded-xl transition-colors shadow-lg shadow-[#2D55FB]/30">Join Interview</motion.button>
+            <motion.div
+              className="flex flex-col items-center gap-5"
+              initial={{ opacity: 0, x: 28 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.55, delay: 0.2 }}
+            >
+              <h2 className="text-white text-2xl sm:text-3xl font-semibold">
+                Ready to Join?
+              </h2>
+              <p className="text-white/40 text-sm text-center max-w-xs">
+                {interviewInfo?.position ||
+                  interviewInfo?.jobPosition ||
+                  "Interview"}{" "}
+                • {interviewInfo?.duration || "N/A"}
+              </p>
+              <div
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl max-w-xs border ${USE_HEYGEN ? "bg-green-500/10 border-green-500/25" : USE_GANAI ? "bg-purple-500/10 border-purple-500/25" : "bg-[#2D55FB]/10 border-[#2D55FB]/25"}`}
+              >
+                <div
+                  className={`w-2 h-2 rounded-full ${USE_HEYGEN ? "bg-green-400" : USE_GANAI ? "bg-purple-400" : "bg-[#2D55FB]/60"}`}
+                />
+                <span className="text-white/50 text-xs">
+                  {USE_HEYGEN
+                    ? "Photorealistic via HeyGen"
+                    : USE_GANAI
+                      ? "Via Gan.AI"
+                      : "Animated AI avatar"}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 px-3.5 py-2 bg-[#2D55FB]/10 border border-[#2D55FB]/25 rounded-xl max-w-xs">
+                <Maximize className="h-3.5 w-3.5 text-[#2D55FB]/70 shrink-0" />
+                <span className="text-white/50 text-xs">
+                  Fullscreen + proctored interview
+                </span>
+              </div>
+              <div className="flex items-center">
+                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-400 to-indigo-700 border-2 border-[#2D55FB] flex items-center justify-center shadow-lg">
+                  <User className="h-6 w-6 text-white/80" />
+                </div>
+                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 border-2 border-orange-400 flex items-center justify-center -ml-3 shadow-lg">
+                  <User className="h-6 w-6 text-white/80" />
+                </div>
+              </div>
+              <p className="text-white/50 text-sm -mt-2">
+                {username} and AI Recruiter
+              </p>
+              <motion.button
+                onClick={handleJoin}
+                whileHover={{ scale: 1.04 }}
+                whileTap={{ scale: 0.97 }}
+                className="px-10 py-3 bg-[#2D55FB] hover:bg-[#1e3fd4] text-white font-semibold rounded-xl transition-colors shadow-lg shadow-[#2D55FB]/30"
+              >
+                Join Interview
+              </motion.button>
             </motion.div>
           </div>
         </div>
       )}
 
       {/* ═══════════════════ CONNECTING ══════════════════════════════ */}
-      {screen==="connecting"&&<ConnectingScreen heygenReady={heygenStreamLive} vapiReady={vapiReady} avatarMode={avatarMode} onBothReady={handleBothReady}/>}
+      {screen === "connecting" && (
+        <ConnectingScreen
+          heygenReady={heygenStreamLive}
+          vapiReady={vapiReady}
+          avatarMode={avatarMode}
+          onBothReady={handleBothReady}
+        />
+      )}
 
       {/* ═══════════════════ SPOTLIGHT ═══════════════════════════════ */}
-      {screen==="spotlight"&&(
+      {screen === "spotlight" && (
         <div className="h-screen bg-[#070e2b] flex flex-col overflow-hidden relative">
           {overlays}
           <div className="flex items-center justify-between px-4 sm:px-5 py-2.5 bg-[#070e2b] shrink-0">
-            <div className="flex items-center gap-2"><span className="text-white/40 text-sm">Time :</span><span className="text-[#2D55FB] font-mono font-bold text-sm tracking-widest">{fmt(elapsed)}</span>{isCallActive&&<div className="flex items-center gap-1.5 ml-3 text-green-400 text-xs font-bold"><div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"/>LIVE</div>}</div>
-            <motion.button onClick={()=>setScreen("grid")} whileTap={{scale:0.94}} className="flex items-center gap-2 text-white/60 hover:text-white text-xs font-medium transition-colors">Grid View<div className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"><LayoutGrid className="h-4 w-4 text-white"/></div></motion.button>
+            <div className="flex items-center gap-2">
+              <span className="text-white/40 text-sm">Time :</span>
+              <span className="text-[#2D55FB] font-mono font-bold text-sm tracking-widest">
+                {fmt(elapsed)}
+              </span>
+              {isCallActive && (
+                <div className="flex items-center gap-1.5 ml-3 text-green-400 text-xs font-bold">
+                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+                  LIVE
+                </div>
+              )}
+            </div>
+            <motion.button
+              onClick={() => setScreen("grid")}
+              whileTap={{ scale: 0.94 }}
+              className="flex items-center gap-2 text-white/60 hover:text-white text-xs font-medium transition-colors"
+            >
+              Grid View
+              <div className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
+                <LayoutGrid className="h-4 w-4 text-white" />
+              </div>
+            </motion.button>
           </div>
           <div className="flex flex-1 min-h-0 gap-2.5 px-2.5 pb-2 pt-1">
             <div className="w-44 sm:w-52 shrink-0 flex flex-col gap-2">
-              <div className="relative rounded-xl overflow-hidden bg-[#0d1535] border border-white/5 shrink-0" style={{aspectRatio:"4/3"}}>
-                <UserVideo camOn={camOn} streamReady={streamReady} username={username} onVideoMount={onSpotlightMount}/>
-                <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent pointer-events-none"/>
-                <div className="absolute bottom-2 left-2.5 z-10"><span className="text-white text-xs font-semibold drop-shadow">{username}</span></div>
-                <div className="absolute bottom-2 right-2.5 z-10"><MicCircle muted={!micOn}/></div>
+              <div
+                className="relative rounded-xl overflow-hidden bg-[#0d1535] border border-white/5 shrink-0"
+                style={{ aspectRatio: "4/3" }}
+              >
+                <UserVideo
+                  camOn={camOn}
+                  streamReady={streamReady}
+                  username={username}
+                  onVideoMount={onSpotlightMount}
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent pointer-events-none" />
+                <div className="absolute bottom-2 left-2.5 z-10">
+                  <span className="text-white text-xs font-semibold drop-shadow">
+                    {username}
+                  </span>
+                </div>
+                <div className="absolute bottom-2 right-2.5 z-10">
+                  <MicCircle muted={!micOn} />
+                </div>
               </div>
               <div className="flex flex-col gap-2 overflow-y-auto flex-1 min-h-0">
                 <div className="bg-[#0e1640]/90 rounded-xl p-3 border border-white/5">
                   <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[#7a9cff] text-[11px] font-semibold">AI Recruiter:</span>
+                    <span className="text-[#7a9cff] text-[11px] font-semibold">
+                      AI Recruiter:
+                    </span>
                     <div className="flex items-center gap-1.5">
-                      {isSpeaking&&<div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"/>}
-                      {isSpeaking&&<span className="text-green-400 text-[9px] font-bold">Speaking</span>}
+                      {isSpeaking && (
+                        <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
+                      )}
+                      {isSpeaking && (
+                        <span className="text-green-400 text-[9px] font-bold">
+                          Speaking
+                        </span>
+                      )}
                     </div>
                   </div>
-                  <p className="text-gray-300 text-[11px] leading-relaxed">{avatarSub}</p>
+                  <p className="text-gray-300 text-[11px] leading-relaxed">
+                    {avatarSub}
+                  </p>
                 </div>
                 <div className="bg-[#0e1640]/90 rounded-xl p-3 border border-white/5">
                   <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[#7a9cff] text-[11px] font-semibold">You:</span>
+                    <span className="text-[#7a9cff] text-[11px] font-semibold">
+                      You:
+                    </span>
                     <div className="flex items-center gap-1.5">
-                      {isListening&&micOn&&<div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse"/>}
-                      {isListening&&micOn&&<span className="text-blue-400 text-[9px] font-bold">Listening</span>}
-                      {!micOn&&<span className="text-red-400/70 text-[9px] font-bold">MIC OFF</span>}
+                      {isListening && micOn && (
+                        <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" />
+                      )}
+                      {isListening && micOn && (
+                        <span className="text-blue-400 text-[9px] font-bold">
+                          Listening
+                        </span>
+                      )}
+                      {!micOn && (
+                        <span className="text-red-400/70 text-[9px] font-bold">
+                          MIC OFF
+                        </span>
+                      )}
                     </div>
                   </div>
-                  <p className="text-gray-300 text-[11px] leading-relaxed">{micOn?userSub:"Microphone is muted."}</p>
+                  <p className="text-gray-300 text-[11px] leading-relaxed">
+                    {micOn ? userSub : "Microphone is muted."}
+                  </p>
                 </div>
               </div>
             </div>
             <div className="flex-1 relative rounded-2xl overflow-hidden bg-[#0d1535] border border-white/5">
-              <AvatarTile {...avatarProps}/>
-              <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent pointer-events-none"/>
-              <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-10"><AudioWave active={isSpeaking}/></div>
-              <div className="absolute bottom-4 left-5 z-10"><span className="text-white font-medium text-sm">AI Recruiter</span></div>
-              {isCallActive&&<div className="absolute top-4 right-4 flex items-center gap-1.5 bg-red-600 text-white px-2.5 py-1 rounded-full text-xs font-bold z-10"><div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"/>REC</div>}
+              <AvatarTile {...avatarProps} />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent pointer-events-none" />
+              <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-10">
+                <AudioWave active={isSpeaking} />
+              </div>
+              <div className="absolute bottom-4 left-5 z-10">
+                <span className="text-white font-medium text-sm">
+                  AI Recruiter
+                </span>
+              </div>
+              {isCallActive && (
+                <div className="absolute top-4 right-4 flex items-center gap-1.5 bg-red-600 text-white px-2.5 py-1 rounded-full text-xs font-bold z-10">
+                  <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+                  REC
+                </div>
+              )}
               {/* Turn indicator */}
-              {isCallActive&&(
+              {isCallActive && (
                 <div className="absolute top-4 left-4 z-10">
-                  {isSpeaking&&(
+                  {isSpeaking && (
                     <div className="flex items-center gap-1.5 bg-green-600/80 backdrop-blur-sm text-white px-2.5 py-1 rounded-full text-xs font-bold">
-                      <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"/>AI Speaking
+                      <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+                      AI Speaking
                     </div>
                   )}
-                  {!isSpeaking&&isListening&&(
+                  {!isSpeaking && isListening && (
                     <div className="flex items-center gap-1.5 bg-blue-600/80 backdrop-blur-sm text-white px-2.5 py-1 rounded-full text-xs font-bold">
-                      <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"/>Your Turn
+                      <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+                      Your Turn
                     </div>
                   )}
-                  {!isSpeaking&&!isListening&&isCallActive&&(
+                  {!isSpeaking && !isListening && isCallActive && (
                     <div className="flex items-center gap-1.5 bg-white/10 backdrop-blur-sm text-white/50 px-2.5 py-1 rounded-full text-xs">
                       Waiting…
                     </div>
@@ -4639,48 +6154,112 @@ ${RULES}`;
       )}
 
       {/* ═══════════════════ GRID ════════════════════════════════════ */}
-      {screen==="grid"&&(
+      {screen === "grid" && (
         <div className="h-screen bg-[#070e2b] flex flex-col overflow-hidden relative">
           {overlays}
           <div className="flex items-center justify-between px-4 sm:px-5 py-2.5 bg-[#070e2b] shrink-0">
-            <div className="flex items-center gap-2"><span className="text-white/40 text-sm">Time :</span><span className="text-[#2D55FB] font-mono font-bold text-sm tracking-widest">{fmt(elapsed)}</span>{isCallActive&&<div className="flex items-center gap-1.5 ml-3 text-green-400 text-xs font-bold"><div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"/>LIVE</div>}</div>
-            <motion.button onClick={()=>setScreen("spotlight")} whileTap={{scale:0.94}} className="flex items-center gap-2 text-white/80 hover:text-white text-xs font-medium transition-colors">Spotlight<div className="w-7 h-7 rounded-lg bg-[#2D55FB] flex items-center justify-center shadow-md shadow-[#2D55FB]/30"><LayoutGrid className="h-4 w-4 text-white"/></div></motion.button>
+            <div className="flex items-center gap-2">
+              <span className="text-white/40 text-sm">Time :</span>
+              <span className="text-[#2D55FB] font-mono font-bold text-sm tracking-widest">
+                {fmt(elapsed)}
+              </span>
+              {isCallActive && (
+                <div className="flex items-center gap-1.5 ml-3 text-green-400 text-xs font-bold">
+                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+                  LIVE
+                </div>
+              )}
+            </div>
+            <motion.button
+              onClick={() => setScreen("spotlight")}
+              whileTap={{ scale: 0.94 }}
+              className="flex items-center gap-2 text-white/80 hover:text-white text-xs font-medium transition-colors"
+            >
+              Spotlight
+              <div className="w-7 h-7 rounded-lg bg-[#2D55FB] flex items-center justify-center shadow-md shadow-[#2D55FB]/30">
+                <LayoutGrid className="h-4 w-4 text-white" />
+              </div>
+            </motion.button>
           </div>
           <div className="flex-1 min-h-0 flex flex-col px-4 sm:px-6 pt-2 pb-1 gap-0">
-            <div className="flex gap-4 sm:gap-5" style={{flex:"0 0 auto",height:"clamp(200px,58vh,420px)"}}>
+            <div
+              className="flex gap-4 sm:gap-5"
+              style={{ flex: "0 0 auto", height: "clamp(200px,58vh,420px)" }}
+            >
               <div className="flex-1 relative rounded-2xl overflow-hidden bg-[#0d1535] border border-white/5">
-                <video ref={onGridUserMount} muted playsInline className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${camOn&&streamReady?"opacity-100":"opacity-0"}`} style={{transform:"scaleX(-1)"}}/>
-                {(!camOn||!streamReady)&&<div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-[#1a2a5e]/80 to-[#060c25]/80"><div className="w-14 h-14 rounded-full bg-[#2D55FB]/20 border border-[#2D55FB]/30 flex items-center justify-center">{streamReady?<VideoOff className="h-7 w-7 text-[#2D55FB]/60"/>:<User className="h-7 w-7 text-[#2D55FB]/50"/>}</div></div>}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-transparent pointer-events-none"/>
-                <div className="absolute bottom-12 right-3 z-10"><MicCircle muted={!micOn}/></div>
-                <div className="absolute bottom-4 left-4 z-10"><span className="text-white font-semibold text-base drop-shadow">{username}</span></div>
-                {isListening&&micOn&&(
+                <video
+                  ref={onGridUserMount}
+                  muted
+                  playsInline
+                  className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${camOn && streamReady ? "opacity-100" : "opacity-0"}`}
+                  style={{ transform: "scaleX(-1)" }}
+                />
+                {(!camOn || !streamReady) && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-[#1a2a5e]/80 to-[#060c25]/80">
+                    <div className="w-14 h-14 rounded-full bg-[#2D55FB]/20 border border-[#2D55FB]/30 flex items-center justify-center">
+                      {streamReady ? (
+                        <VideoOff className="h-7 w-7 text-[#2D55FB]/60" />
+                      ) : (
+                        <User className="h-7 w-7 text-[#2D55FB]/50" />
+                      )}
+                    </div>
+                  </div>
+                )}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-transparent pointer-events-none" />
+                <div className="absolute bottom-12 right-3 z-10">
+                  <MicCircle muted={!micOn} />
+                </div>
+                <div className="absolute bottom-4 left-4 z-10">
+                  <span className="text-white font-semibold text-base drop-shadow">
+                    {username}
+                  </span>
+                </div>
+                {isListening && micOn && (
                   <div className="absolute top-4 left-4 z-10">
                     <div className="flex items-center gap-1.5 bg-blue-600/80 text-white px-2 py-1 rounded-full text-xs font-bold">
-                      <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"/>Your Turn
+                      <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+                      Your Turn
                     </div>
                   </div>
                 )}
               </div>
               <div className="flex-1 relative rounded-2xl overflow-hidden bg-[#0d1535] border border-white/5">
-                <AvatarTile {...avatarProps}/>
-                <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-transparent pointer-events-none"/>
-                <div className="absolute bottom-12 right-3 z-10"><AudioWave active={isSpeaking}/></div>
-                <div className="absolute bottom-4 left-4 z-10"><span className="text-white font-semibold text-base drop-shadow">AI Recruiter</span></div>
-                {isSpeaking&&(
+                <AvatarTile {...avatarProps} />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-transparent pointer-events-none" />
+                <div className="absolute bottom-12 right-3 z-10">
+                  <AudioWave active={isSpeaking} />
+                </div>
+                <div className="absolute bottom-4 left-4 z-10">
+                  <span className="text-white font-semibold text-base drop-shadow">
+                    AI Recruiter
+                  </span>
+                </div>
+                {isSpeaking && (
                   <div className="absolute top-4 left-4 z-10">
                     <div className="flex items-center gap-1.5 bg-green-600/80 text-white px-2 py-1 rounded-full text-xs font-bold">
-                      <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"/>Speaking
+                      <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+                      Speaking
                     </div>
                   </div>
                 )}
               </div>
             </div>
-            <div className="flex gap-4 sm:gap-5 mt-3" style={{flex:"0 0 auto"}}>
-              <div className="flex-1 flex items-start justify-center"><p className="text-white/65 text-sm text-center leading-snug max-w-xs">{micOn?userSub:"🎤 Mic is muted"}</p></div>
-              <div className="flex-1 flex items-start justify-center"><p className="text-white/65 text-sm text-center leading-snug max-w-xs">{avatarSub}</p></div>
+            <div
+              className="flex gap-4 sm:gap-5 mt-3"
+              style={{ flex: "0 0 auto" }}
+            >
+              <div className="flex-1 flex items-start justify-center">
+                <p className="text-white/65 text-sm text-center leading-snug max-w-xs">
+                  {micOn ? userSub : "🎤 Mic is muted"}
+                </p>
+              </div>
+              <div className="flex-1 flex items-start justify-center">
+                <p className="text-white/65 text-sm text-center leading-snug max-w-xs">
+                  {avatarSub}
+                </p>
+              </div>
             </div>
-            <div className="flex-1"/>
+            <div className="flex-1" />
           </div>
           {bottomBar}
         </div>

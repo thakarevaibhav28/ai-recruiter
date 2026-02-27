@@ -15,6 +15,11 @@ const InterviewFeedbackSchema = new mongoose.Schema(
       ref: "AI_Interview",
       index: true,
     },
+    candidateId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Candidate",
+        required: true,
+      },
     pdfPath: String,
     userName: String,
     userEmail: String,
@@ -29,14 +34,15 @@ const InterviewFeedbackSchema = new mongoose.Schema(
     },
 
     feedback: {
+      
       candidateName: String,
       role: String,
-      technicalScore: {type:Number, min: 0, max: 100},
+      technicalScore: { type: Number, min: 0, max: 100 },
       relevanceScore: { type: Number, min: 0, max: 100 },
       confidenceScore: { type: Number, min: 0, max: 100 },
       confidenceLabel: {
         type: String,
-        enum: ["High Confidence", "Moderate Confidence", "Low Confidence"],
+        enum: ["High", "Moderate", "Low"],
       },
 
       behavioralInsights: [InsightSchema],
@@ -50,7 +56,7 @@ const InterviewFeedbackSchema = new mongoose.Schema(
       },
 
       recommendations: [String],
-      overallVerdict: { type: String, enum: ["hire", "consider", "rejected"] },
+      overallVerdict: { type: String, enum: ["Hire", "Consider", "Rejected"] },
       verdictReason: String,
     },
 

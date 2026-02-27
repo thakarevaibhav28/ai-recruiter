@@ -231,6 +231,7 @@ const ViewAssignedCandidate: React.FC<ViewAssignedCandidateProps> = ({
                           {candidate.scoreDetails?.pdfPath ?  (
                              <a
                         href={candidate.scoreDetails?.pdfPath}
+                        target="_blank"
                         download
                         className="px-4 py-2 bg-indigo-600 text-white rounded-lg"
                       >

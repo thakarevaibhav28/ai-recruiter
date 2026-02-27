@@ -108,7 +108,7 @@ export const CreateCandidate = async (req, res) => {
     });
   } catch (error) {
     console.log(error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({error});
   }
 };
 export const GetFilteredCandidates = async (req, res) => {
@@ -351,7 +351,7 @@ export const getCandidateProfile = async (req, res) => {
 
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Server Error" });
+    res.status(500).json({error});
   }
 };
 
