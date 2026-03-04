@@ -55,20 +55,26 @@ const ActiveInterviews: React.FC<ActiveInterviewsProps> = ({
   useEffect(() => {
     let isMounted = true;
 
-    const loadAssessments = async () => {
-      setTemplatesLoading(true);
-      try {
-        const res: any = await adminService.getDraft();
-        console.log("API Response:", res);
-        if (isMounted) {
-          setAssessments(res.drafts);
-        }
-      } catch (error) {
-        console.error("Error fetching assessments:", error);
-      } finally {
-        setTemplatesLoading(false);
-      }
-    };
+const loadAssessments = async () => {
+  setTemplatesLoading(true);
+  try {
+    const res: any = await adminService.getDraft();
+    console.log("API Response for getDraft:", res);
+
+    const interviews =
+      res?.data?.interviews ||
+      res?.interviews ||
+      res?.drafts ||
+      [];
+
+    setAssessments(interviews);
+  } catch (error) {
+    console.error("Error fetching assessments:", error);
+    setAssessments([]); // never allow undefined
+  } finally {
+    setTemplatesLoading(false);
+  }
+};
 
     loadAssessments();
 
@@ -102,6 +108,7 @@ const ActiveInterviews: React.FC<ActiveInterviewsProps> = ({
     (page - 1) * ROWS_PER_PAGE,
     page * ROWS_PER_PAGE,
   );
+  console.log(paginatedCandidates);
 
   const getTimeAgo = (dateString: string) => {
     const now = new Date();
@@ -479,13 +486,14 @@ const ActiveInterviews: React.FC<ActiveInterviewsProps> = ({
                               </td>
 
                               <td className="px-5 py-4">
-                                {candidate.pdfPath ? (
+                                {candidate.feedback?.pdfPath ? (
                                   <a
-                                    href={`${candidate.pdfPath}`}
+                                    href={`${candidate.feedback?.pdfPath}`}
+                                    target="_blank"
                                     download
                                     className="px-4 py-2 bg-indigo-600 text-white rounded-lg"
                                   >
-                                    Download Scorecard
+                                    Download
                                   </a>
                                 ) : (
                                   <span className="text-gray-400 text-xs">

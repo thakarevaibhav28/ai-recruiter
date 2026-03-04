@@ -1569,7 +1569,7 @@ export const GetCandidatesInInterview = async (req, res) => {
       return bTime - aTime;
     });
 
-    res.json({ candidates });
+    res.json({ candidates });``
   } catch (error) {
     console.log(error);
     res.status(500).json({error});
