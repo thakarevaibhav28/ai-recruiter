@@ -1042,7 +1042,6 @@ import { adminService } from "../../services/service/adminService";
 import { useAdminSocket } from "../../hooks/useAdminSocket";
 import ViewAssignedCandidate from "../../components/admin/TestAssessgnment/ViewAssignedCandidate";
 
-const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY || ""; 
 
 
 const EMPTY_FORM = {
@@ -1067,7 +1066,7 @@ const scoreCandidatesWithGroq = async (
   candidates: any[],
   jdAnalysis: any
 ): Promise<any[]> => {
-  if (!GROQ_API_KEY || !jdAnalysis || candidates.length === 0) return candidates;
+  if (!import.meta.env.VITE_GROQ_API_KEY || !jdAnalysis || candidates.length === 0) return candidates;
 
   const jobTitle = jdAnalysis.jobTitle || "";
   const experienceYears = jdAnalysis.experienceYears || "";
@@ -1112,7 +1111,7 @@ IMPORTANT: Return ONLY a valid JSON array. No markdown, no explanation, no code 
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${GROQ_API_KEY}`,
+        Authorization: `Bearer ${import.meta.env.VITE_GROQ_API_KEY}`
       },
       body: JSON.stringify({
         model: "llama-3.1-8b-instant",
