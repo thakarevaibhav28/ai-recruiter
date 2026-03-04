@@ -202,7 +202,7 @@ router.get(
 //       });
 //     } catch (err) {
 //       console.error(err);
-//       res.status(500).json({ message: "Server error" });
+//       res.status(500).json({error});
 //     }
 //   }
 // );
@@ -263,7 +263,7 @@ router.get(
 //       });
 //     } catch (err) {
 //       console.error(err);
-//       res.status(500).json({ message: "Server error" });
+//       res.status(500).json({error});
 //     }
 //   }
 // );

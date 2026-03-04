@@ -15,6 +15,11 @@ const InterviewFeedbackSchema = new mongoose.Schema(
       ref: "AI_Interview",
       index: true,
     },
+    candidateId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Candidate",
+        required: true,
+      },
     pdfPath: String,
     userName: String,
     userEmail: String,
