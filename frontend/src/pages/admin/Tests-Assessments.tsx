@@ -1042,7 +1042,7 @@ import { adminService } from "../../services/service/adminService";
 import { useAdminSocket } from "../../hooks/useAdminSocket";
 import ViewAssignedCandidate from "../../components/admin/TestAssessgnment/ViewAssignedCandidate";
 
-const GROQ_API_KEY = "REMOVED_GROQ_KEY"
+const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY || "";
 
 const EMPTY_FORM = {
   candidates: [],
