@@ -452,20 +452,36 @@ export function useScreenRecorder({
     chunkIndexRef.current = 0;
 
     // 1. Screen video
-    let screenStream: MediaStream;
-    try {
-      screenStream = await navigator.mediaDevices.getDisplayMedia({
-        video: { frameRate: { ideal: 15, max: 30 }, width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: false, // we build audio manually
-      });
-    } catch (err) {
-      console.warn("[ScreenRecorder] getDisplayMedia denied/cancelled:", err);
+  let screenStream: MediaStream | null = null;
+
+while (!screenStream) {
+  try {
+    screenStream = await navigator.mediaDevices.getDisplayMedia({
+      video: { frameRate: { ideal: 15, max: 30 }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false,
+    });
+  } catch (err: any) {
+    // NotAllowedError = user cancelled/denied — ask again
+    // Any other error = bail out
+    const isDismissed =
+      err?.name === "NotAllowedError" ||
+      err?.name === "PermissionDeniedError" ||
+      err?.message?.toLowerCase().includes("permission");
+
+    if (!isDismissed) {
+      console.warn("ScreenRecorder error:", err);
       setStatus("error");
       onError?.(err as Error);
       return;
     }
 
-    screenStreamRef.current = screenStream;
+    console.warn("User cancelled screen share");
+    // Small delay before re-prompting so the browser doesn't throttle
+    await new Promise((r) => setTimeout(r, 800));
+  }
+}
+
+screenStreamRef.current = screenStream;
 
     // 2. Mix mic + AI audio
     let mixedAudioTrack: MediaStreamTrack | null = null;

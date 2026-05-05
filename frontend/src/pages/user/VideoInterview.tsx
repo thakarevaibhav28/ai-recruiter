@@ -1755,8 +1755,8 @@ const VideoInterview: React.FC = () => {
 
   // ── Vapi ────────────────────────────────────────────────────────────────
   useEffect(() => {
-    // const inst = new Vapi("6736f532-acfb-41f4-a5ac-0fe67cbc7be7");
-    const inst = new Vapi("aa7ce731-2288-4878-870d-68f9d0335519");
+    // vapi Public KEY
+    const inst = new Vapi("5c5f81d8-3fa1-4fca-9bd5-bddd311b9669");
     setVapi(inst);
 
     inst.on("speech-start", () => {
@@ -2243,16 +2243,31 @@ ${RULES}`;
 
   // ── Controls ────────────────────────────────────────────────────────────
 
-  const handleJoin = () => {
-    tryEnterFS();
-    startCall();
-    startSilenceMonitor();
+  // const handleJoin = () => {
+  //   tryEnterFS();
+  //   startCall();
+  //   startSilenceMonitor();
   
-    setScreen("spotlight");
+  //   setScreen("spotlight");
     
-    // Start recording 1s after call starts — gives Vapi time to inject its <audio> element
-    setTimeout(() => { screenRecorder.start(); }, 1000); 
-  };
+  //   // Start recording 1s after call starts — gives Vapi time to inject its <audio> element
+  //   setTimeout(() => { screenRecorder.start(); }, 1000); 
+  // };
+
+  const handleJoin = async () => {
+  // Start call and silence monitor immediately
+  startCall();
+  startSilenceMonitor();
+  setScreen("spotlight");
+
+  // Start recording (which internally loops until user shares screen)
+  // Then enter fullscreen once they've shared
+  setTimeout(async () => {
+    await screenRecorder.start();
+    // After screen share is granted, lock into fullscreen
+    tryEnterFS();
+  }, 1000);
+};
 
   // Manual end — still submits (user chose to end)
 //   const handleEnd = async () => {
