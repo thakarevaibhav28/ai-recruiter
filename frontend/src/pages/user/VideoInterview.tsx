@@ -19,6 +19,7 @@ import {
   X,
   Maximize,
   Eye,
+  UserX,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../../context/context";
@@ -32,45 +33,39 @@ import { userPath } from "../../routes/EncryptRoute";
 const FACE_MODEL_URL =
   "https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model";
 let faceModelsLoaded = false;
+
+// ── NEW: Load faceRecognitionNet in addition to existing models ────────────
 async function loadFaceModels() {
   if (faceModelsLoaded) return;
   await Promise.all([
     faceapi.nets.ssdMobilenetv1.loadFromUri(FACE_MODEL_URL),
     faceapi.nets.faceLandmark68Net.loadFromUri(FACE_MODEL_URL),
+    faceapi.nets.faceRecognitionNet.loadFromUri(FACE_MODEL_URL), // ← NEW
   ]);
   faceModelsLoaded = true;
 }
 
+// ─── FACE RECOGNITION CONSTANTS ──────────────────────────────────────────────
+// Euclidean distance threshold: ≤0.45 ≈ same person (>80% similarity).
+// faceapi distance is 0 (identical) to ~1.5+ (very different).
+// 0.45 maps to ~80% confidence threshold.
+const FACE_MATCH_THRESHOLD = 0.45;
+// How many frames to collect for the reference descriptor (averaged for robustness)
+const REFERENCE_SAMPLE_COUNT = 3;
+// How many consecutive mismatches before triggering a violation
+const PERSON_CHANGE_TICKS = 3;
+// Don't check identity until N seconds after call starts (gives time to settle)
+const IDENTITY_CHECK_DELAY_MS = 8000;
+
 // ─── VOICE CONFIG ─────────────────────────────────────────────────────────────
-// ElevenLabs voice IDs — Indian accent, natural cadence
 const VOICE_CONFIG = {
   female: {
-    // voiceId: "pFZP5JQG7iQjIQuC4Bku",
-    // voiceId: "21m00Tcm4TlvDq8ikWAM",
-    voiceId: "Neha", // "Lily" — warm, natural Indian-English female
-    // stability: 0.6,
-    // similarityBoost: 0.78,
-    // style: 0.62,
+    voiceId: "Neha",
     speed: 1,
-    // emotion: {
-    //   happy: 0.3,
-    //   sad: 0.2,
-    //   angry: 0.1,
-    // },
   },
   male: {
-    // voiceId: "nPczCjzI2devNBz1zQrb",
-    // voiceId: "pNInz6obpgDQGcFmaJgB",
-    voiceId: "Rohan", // "Brian" — replace with Indian male voice ID
-    // stability: 0.6,
-    // similarityBoost: 0.75,
-    // style: 0.6,
+    voiceId: "Rohan",
     speed: 1,
-    //   emotion: {
-    //   happy: 0.3,
-    //   sad: 0.2,
-    //   angry: 0.1,
-    // },
   },
 } as const;
 
@@ -215,7 +210,6 @@ class HeyGenService {
 type Screen = "lobby" | "spotlight" | "grid";
 type AvatarMode = "heygen" | "ganai" | "animated";
 type AvatarState = "idle" | "thinking" | "speaking";
-// Turn state for natural conversation flow
 type TurnState =
   | "ai-speaking"
   | "user-turn"
@@ -232,7 +226,6 @@ interface AlertState {
 
 // ─── CONSTANTS ───────────────────────────────────────────────────────────────
 const MAX_VIOLATIONS = 3;
-// After 3 violations, interview continues but is flagged — only submits on end conditions
 const SILENCE_THRESHOLD_SEC = 30;
 const MAX_SILENCE_WARNINGS = 5;
 const TICK_MS = 1000;
@@ -243,12 +236,7 @@ const GAZE_HARD = 0.22;
 const MULTI_CONFIDENCE = 0.28;
 const VIOLATION_COOLDOWN_MS = 12000;
 const POST_CLOSE_LOCK_MS = 6000;
-
-// Natural conversation: wait 5s after user goes silent before AI responds
 const USER_PAUSE_GRACE_MS = 5000;
-// If user pauses for 2s+ during speech, it's a mid-answer pause — don't interrupt
-// const MID_ANSWER_PAUSE_MS = 2000;
-
 const MIN_ANSWER_LENGTH = 15;
 
 const VIOLATION_MSGS: Record<
@@ -313,6 +301,16 @@ const VIOLATION_MSGS: Record<
         : `Maximum warnings reached. Interview will be submitted on completion.`,
     spoken: "Please keep the interview in fullscreen mode.",
   },
+  // ── NEW: Person substitution violation ─────────────────────────────────
+  "person-substitution": {
+    title: "Different Person Detected",
+    body: (r) =>
+      r > 0
+        ? `The person in front of the camera does not match the registered candidate. ${r} warning(s) remaining.`
+        : `Maximum warnings reached. Interview flagged for review.`,
+    spoken:
+      "The face in front of the camera does not match the registered candidate. Only the original candidate may complete this interview.",
+  },
 };
 
 // ─── FULLSCREEN ──────────────────────────────────────────────────────────────
@@ -363,6 +361,11 @@ class BehaviorTracker {
         .length,
       eyesClosedCount: this.events.filter((e) => e.type === "eyes_closed")
         .length,
+      personSubstitutionCount: this.events.filter(
+        (e) => e.type === "person_substitution",
+      ).length, // ← NEW
+
+      violationCount: this.events.filter((e) => e.type === "violation").length, // ← NEW
       events: this.events,
     };
   }
@@ -828,9 +831,7 @@ const UserVideo = React.memo(
   ),
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// VIOLATION MODAL — updated: after MAX_VIOLATIONS, interview continues with flag
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── VIOLATION MODAL ──────────────────────────────────────────────────────────
 const ViolationModal = React.memo(
   ({ alert, onClose }: { alert: AlertState; onClose: () => void }) => {
     const atMax = alert.count >= MAX_VIOLATIONS;
@@ -841,11 +842,13 @@ const ViolationModal = React.memo(
       onClose();
     }, [onClose]);
 
-    // Auto-close after 6s — interview continues even at max violations
     useEffect(() => {
       const t = setTimeout(safeClose, atMax ? 5000 : 8000);
       return () => clearTimeout(t);
     }, [safeClose, atMax]);
+
+    // ── NEW: special styling for person-substitution ──────────────────────
+    const isPersonSwap = alert.type === "person-substitution";
 
     return (
       <div className="fixed inset-0 z-[9999] flex items-center justify-center">
@@ -854,17 +857,31 @@ const ViolationModal = React.memo(
           onClick={safeClose}
         />
         <div
-          className={`relative z-10 w-full max-w-sm mx-4 rounded-2xl border p-6 shadow-2xl ${atMax ? "bg-red-950/95 border-red-500/60" : "bg-[#0d1836] border-amber-500/50"}`}
+          className={`relative z-10 w-full max-w-sm mx-4 rounded-2xl border p-6 shadow-2xl ${
+            atMax
+              ? "bg-red-950/95 border-red-500/60"
+              : isPersonSwap
+                ? "bg-orange-950/95 border-orange-500/60"
+                : "bg-[#0d1836] border-amber-500/50"
+          }`}
           style={{
             animation: "violPop 0.25s cubic-bezier(0.34,1.56,0.64,1) both",
           }}
         >
           <style>{`@keyframes violPop{from{opacity:0;transform:scale(0.88) translateY(20px)}to{opacity:1;transform:scale(1) translateY(0)}}`}</style>
           <div
-            className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${atMax ? "bg-red-500/25" : "bg-amber-500/25"}`}
+            className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${
+              atMax
+                ? "bg-red-500/25"
+                : isPersonSwap
+                  ? "bg-orange-500/25"
+                  : "bg-amber-500/25"
+            }`}
           >
             {atMax ? (
               <ShieldAlert className="h-6 w-6 text-red-400" />
+            ) : isPersonSwap ? (
+              <UserX className="h-6 w-6 text-orange-400" />
             ) : (
               <AlertTriangle className="h-6 w-6 text-amber-400" />
             )}
@@ -873,7 +890,13 @@ const ViolationModal = React.memo(
             {atMax ? "Maximum Warnings Reached" : alert.title}
           </h3>
           <p
-            className={`text-sm mb-2 ${atMax ? "text-red-400" : "text-amber-400"}`}
+            className={`text-sm mb-2 ${
+              atMax
+                ? "text-red-400"
+                : isPersonSwap
+                  ? "text-orange-400"
+                  : "text-amber-400"
+            }`}
           >
             {atMax
               ? "Interview flagged — will auto-submit when complete"
@@ -887,7 +910,13 @@ const ViolationModal = React.memo(
               {[...Array(MAX_VIOLATIONS)].map((_, i) => (
                 <div
                   key={i}
-                  className={`flex-1 h-1.5 rounded-full transition-colors ${i < alert.count ? "bg-amber-400" : "bg-white/10"}`}
+                  className={`flex-1 h-1.5 rounded-full transition-colors ${
+                    i < alert.count
+                      ? isPersonSwap
+                        ? "bg-orange-400"
+                        : "bg-amber-400"
+                      : "bg-white/10"
+                  }`}
                 />
               ))}
             </div>
@@ -901,7 +930,13 @@ const ViolationModal = React.memo(
           )}
           <button
             onClick={safeClose}
-            className={`w-full py-2.5 rounded-xl font-semibold text-white text-sm transition-colors ${atMax ? "bg-red-600 hover:bg-red-500" : "bg-[#2D55FB] hover:bg-[#1e3fd4]"}`}
+            className={`w-full py-2.5 rounded-xl font-semibold text-white text-sm transition-colors ${
+              atMax
+                ? "bg-red-600 hover:bg-red-500"
+                : isPersonSwap
+                  ? "bg-orange-600 hover:bg-orange-500"
+                  : "bg-[#2D55FB] hover:bg-[#1e3fd4]"
+            }`}
           >
             {atMax ? "Continue Interview" : "I Understand — Continue"}
           </button>
@@ -1019,7 +1054,6 @@ const VideoInterview: React.FC = () => {
   const [, setHeygenStreamLive] = useState(false);
   const [, setVapiReady] = useState(false);
 
-  // Natural conversation turn state
   const [turnState, setTurnState] = useState<TurnState>("idle");
   const [pauseCountdown, setPauseCountdown] = useState(0);
 
@@ -1032,6 +1066,11 @@ const VideoInterview: React.FC = () => {
   const [ganAiLoading, setGanAiLoading] = useState(false);
 
   const [questionProgress, setQuestionProgress] = useState(0);
+
+  // ── NEW: Face recognition state ──────────────────────────────────────────
+  const [identityStatus, setIdentityStatus] = useState<
+    "unregistered" | "registering" | "verified" | "mismatch"
+  >("unregistered");
 
   const heygenVideoRef = useRef<HTMLVideoElement>(null);
   const heygenSvcRef = useRef<HeyGenService | null>(null);
@@ -1078,17 +1117,31 @@ const VideoInterview: React.FC = () => {
   const aiIsSpeakingRef = useRef(false);
   const candidateRespondedRef = useRef(false);
 
-  // Natural conversation refs
   const userSpeechEndedAtRef = useRef<number>(0);
   const pauseGraceTimerRef = useRef<any>(null);
   const pauseCountdownTimerRef = useRef<any>(null);
   const userIsActivelyTalkingRef = useRef(false);
   const lastUserSpeechActivityRef = useRef(Date.now());
-  // Track if we're in a mid-answer pause (user paused but hasn't finished)
   const midAnswerPauseTimerRef = useRef<any>(null);
+
+  // ── NEW: Face recognition refs ─────────────────────────────────────────────
+  // Stores the averaged reference descriptor of the registered candidate
+  const referenceDescriptorRef = useRef<Float32Array | null>(null);
+  // Tracks how many good samples we've collected for the reference
+  const refSampleCountRef = useRef(0);
+  // Accumulates descriptor vectors during the registration phase
+  const refDescriptorAccumulatorRef = useRef<Float32Array[]>([]);
+  // Timestamp when identity checking becomes active (after IDENTITY_CHECK_DELAY_MS)
+  const identityCheckActiveAtRef = useRef<number>(0);
+  // Consecutive mismatch tick counter (separate from other ticks)
+  const personChangeTicks = useRef(0);
+  // Whether faceRecognitionNet is loaded (set after loadFaceModels resolves)
+  const faceRecognitionReadyRef = useRef(false);
+
   const location = useLocation();
   const selectedVoice =
     (location.state?.voice as "female" | "male") ?? "female";
+
   useEffect(() => {
     vapiRef.current = vapi;
   }, [vapi]);
@@ -1098,7 +1151,6 @@ const VideoInterview: React.FC = () => {
   useEffect(() => {
     micOnRef.current = micOn;
   }, [micOn]);
-
 
   // ── Screen recorder ────────────────────────────────────────────────────
   const screenRecorder = useScreenRecorder({
@@ -1270,7 +1322,6 @@ const VideoInterview: React.FC = () => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
   }, []);
 
-  // ── endInterview — only called when a real end condition is met ────────
   const endInterview = useCallback(async () => {
     if (interviewEndedRef.current) return;
     interviewEndedRef.current = true;
@@ -1280,7 +1331,6 @@ const VideoInterview: React.FC = () => {
     setIsSpeaking(false);
     setAvatarState("idle");
     setTurnState("idle");
-    // Clear pause timers
     if (pauseGraceTimerRef.current) clearTimeout(pauseGraceTimerRef.current);
     if (pauseCountdownTimerRef.current)
       clearInterval(pauseCountdownTimerRef.current);
@@ -1293,7 +1343,7 @@ const VideoInterview: React.FC = () => {
       await heygenSvcRef.current.destroy();
       heygenSvcRef.current = null;
     }
-    await screenRecorder.stop(); // ← stop + finalize screen recording
+    await screenRecorder.stop();
     await tryExitFS();
   }, [stopAllProctoring]);
 
@@ -1313,9 +1363,6 @@ const VideoInterview: React.FC = () => {
     } catch {}
   }, []);
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // triggerViolation — warnings accumulate but DON'T terminate interview
-  // ─────────────────────────────────────────────────────────────────────────
   const triggerViolation = useCallback(
     (type: string) => {
       if (!isCallActiveRef.current) return;
@@ -1325,6 +1372,7 @@ const VideoInterview: React.FC = () => {
       violLockedRef.current = true;
       lastViolAt.current = Date.now();
       ticks.current = { noface: 0, multi: 0, gaze: 0, eyes: 0 };
+      personChangeTicks.current = 0; // also reset person change ticks
 
       alertCountRef.current++;
       const count = alertCountRef.current;
@@ -1346,7 +1394,6 @@ const VideoInterview: React.FC = () => {
         body: cfg.body(remaining),
       });
 
-      // Speak warning — only a brief note, not disruptive
       speakWarning(type);
     },
     [speakWarning],
@@ -1362,8 +1409,8 @@ const VideoInterview: React.FC = () => {
     setTimeout(() => {
       violLockedRef.current = false;
       ticks.current = { noface: 0, multi: 0, gaze: 0, eyes: 0 };
+      personChangeTicks.current = 0;
     }, POST_CLOSE_LOCK_MS);
-    // Interview NEVER terminates on warning close — only on real end conditions
     if (type === "fullscreen-exit") {
       tryEnterFS();
       setShowFSBanner(false);
@@ -1391,8 +1438,38 @@ const VideoInterview: React.FC = () => {
     } else camAlertRef.current = false;
   }, [camOn, isCallActive, triggerViolation]);
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // NEW: Helper — compute the mean of multiple face descriptors
+  // This gives a more robust reference than a single frame
+  // ══════════════════════════════════════════════════════════════════════════
+  const averageDescriptors = useCallback(
+    (descriptors: Float32Array[]): Float32Array => {
+      if (descriptors.length === 0) return new Float32Array(128);
+      const avg = new Float32Array(128);
+      for (const d of descriptors) {
+        for (let i = 0; i < 128; i++) avg[i] += d[i];
+      }
+      for (let i = 0; i < 128; i++) avg[i] /= descriptors.length;
+      return avg;
+    },
+    [],
+  );
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // NEW: Euclidean distance between two 128-dim face descriptors
+  // faceapi.euclideanDistance does the same but this avoids an import path dep
+  // ══════════════════════════════════════════════════════════════════════════
+  const euclideanDistance = useCallback(
+    (a: Float32Array, b: Float32Array): number => {
+      let sum = 0;
+      for (let i = 0; i < a.length; i++) sum += (a[i] - b[i]) ** 2;
+      return Math.sqrt(sum);
+    },
+    [],
+  );
+
   // ─────────────────────────────────────────────────────────────────────────
-  // FACE DETECTION ENGINE
+  // FACE DETECTION ENGINE (updated with identity verification)
   // ─────────────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!isCallActive) {
@@ -1404,8 +1481,13 @@ const VideoInterview: React.FC = () => {
     loadFaceModels()
       .then(() => {
         mlReady = true;
+        faceRecognitionReadyRef.current = true;
+        console.log("[Proctor] Face models (incl. recognition) loaded");
       })
       .catch((e) => console.warn("[Proctor] face-api failed:", e));
+
+    // Mark when identity checks should start (after initial delay)
+    identityCheckActiveAtRef.current = Date.now() + IDENTITY_CHECK_DELAY_MS;
 
     const canvasAnalyse = (vid: HTMLVideoElement) => {
       const W = 160,
@@ -1459,6 +1541,7 @@ const VideoInterview: React.FC = () => {
       return { dark: bright / total < 18, skinRatio, gazeDrift, skinBlobs };
     };
 
+    // ── UPDATED mlAnalyse: now also returns face descriptor ────────────────
     const mlAnalyse = async (vid: HTMLVideoElement) => {
       if (!mlReady) return null;
       try {
@@ -1469,14 +1552,33 @@ const VideoInterview: React.FC = () => {
               minConfidence: MULTI_CONFIDENCE,
             }),
           )
-          .withFaceLandmarks();
+          .withFaceLandmarks()
+          .withFaceDescriptors(); // ← NEW: compute 128-dim embedding
+
         if (dets.length > 1)
-          return { faceCount: dets.length, gazeHard: false, eyesHard: false };
+          return {
+            faceCount: dets.length,
+            gazeHard: false,
+            eyesHard: false,
+            descriptor: null as Float32Array | null,
+          };
         if (dets.length === 0)
-          return { faceCount: 0, gazeHard: false, eyesHard: false };
-        const { detection, landmarks } = dets[0];
+          return {
+            faceCount: 0,
+            gazeHard: false,
+            eyesHard: false,
+            descriptor: null as Float32Array | null,
+          };
+
+        const { detection, landmarks, descriptor } = dets[0];
         if (detection.score < 0.35)
-          return { faceCount: 1, gazeHard: false, eyesHard: false };
+          return {
+            faceCount: 1,
+            gazeHard: false,
+            eyesHard: false,
+            descriptor: null as Float32Array | null,
+          };
+
         const nose = landmarks.getNose(),
           jaw = landmarks.getJawOutline(),
           lEye = landmarks.getLeftEye(),
@@ -1504,7 +1606,13 @@ const VideoInterview: React.FC = () => {
         let eyesHard = false;
         if (lEye?.length >= 6 && rEye?.length >= 6)
           eyesHard = (earVal(lEye) + earVal(rEye)) / 2 < EAR_HARD;
-        return { faceCount: 1, gazeHard, eyesHard };
+
+        return {
+          faceCount: 1,
+          gazeHard,
+          eyesHard,
+          descriptor: descriptor ?? null, // ← 128-dim Float32Array
+        };
       } catch (e) {
         console.warn("[Proctor] mlAnalyse:", e);
         return null;
@@ -1523,8 +1631,10 @@ const VideoInterview: React.FC = () => {
       }
       if (vid.readyState < 2 || vid.videoWidth === 0 || vid.videoHeight === 0)
         return;
+
       const T = ticks.current;
       const cv = canvasAnalyse(vid);
+
       if (cv.dark) {
         setNoFaceVisible(true);
         setFaceStatus("warn");
@@ -1551,7 +1661,9 @@ const VideoInterview: React.FC = () => {
         }
         return;
       }
+
       const ml = await mlAnalyse(vid);
+
       if (ml !== null) {
         if (ml.faceCount === 0) {
           setNoFaceVisible(true);
@@ -1577,9 +1689,84 @@ const VideoInterview: React.FC = () => {
           }
           return;
         }
+
+        // ── Exactly 1 face detected ──────────────────────────────────────
         T.noface = 0;
         T.multi = 0;
         setNoFaceVisible(false);
+
+        // ════════════════════════════════════════════════════════════════
+        // NEW: FACE RECOGNITION — register or verify
+        // ════════════════════════════════════════════════════════════════
+        if (ml.descriptor && faceRecognitionReadyRef.current) {
+          const now = Date.now();
+
+          // ── Phase A: Reference registration (first REFERENCE_SAMPLE_COUNT frames) ──
+          if (referenceDescriptorRef.current === null) {
+            // Collect samples for a robust reference
+            if (
+              refSampleCountRef.current < REFERENCE_SAMPLE_COUNT &&
+              identityStatus !== "registering"
+            ) {
+              setIdentityStatus("registering");
+            }
+
+            refDescriptorAccumulatorRef.current.push(ml.descriptor);
+            refSampleCountRef.current++;
+
+            console.log(
+              `[Identity] Collecting reference sample ${refSampleCountRef.current}/${REFERENCE_SAMPLE_COUNT}`,
+            );
+
+            if (refSampleCountRef.current >= REFERENCE_SAMPLE_COUNT) {
+              // Average all collected samples → stable reference
+              referenceDescriptorRef.current = averageDescriptors(
+                refDescriptorAccumulatorRef.current,
+              );
+              refDescriptorAccumulatorRef.current = [];
+              setIdentityStatus("verified");
+              // Start identity checks after the delay
+              identityCheckActiveAtRef.current =
+                Date.now() + IDENTITY_CHECK_DELAY_MS;
+              console.log(
+                "[Identity] ✓ Reference face registered successfully",
+              );
+            }
+          }
+          // ── Phase B: Identity verification (after registration + delay) ──
+          else if (
+            referenceDescriptorRef.current !== null &&
+            now >= identityCheckActiveAtRef.current
+          ) {
+            const dist = euclideanDistance(
+              referenceDescriptorRef.current,
+              ml.descriptor,
+            );
+            const isSamePerson = dist <= FACE_MATCH_THRESHOLD;
+
+            // Log for debugging (remove in production if too noisy)
+            // console.log(`[Identity] dist=${dist.toFixed(3)} match=${isSamePerson}`);
+
+            if (!isSamePerson) {
+              personChangeTicks.current++;
+              setIdentityStatus("mismatch");
+              console.warn(
+                `[Identity] MISMATCH tick ${personChangeTicks.current}/${PERSON_CHANGE_TICKS} dist=${dist.toFixed(3)}`,
+              );
+
+              if (personChangeTicks.current >= PERSON_CHANGE_TICKS) {
+                personChangeTicks.current = 0;
+                trigViolRef.current("person-substitution");
+              }
+            } else {
+              // Reset mismatch counter — brief occlusion / angle change won't trigger
+              personChangeTicks.current = 0;
+              setIdentityStatus("verified");
+            }
+          }
+        }
+        // ════════════════════════════════════════════════════════════════
+
         if (ml.gazeHard) {
           setFaceStatus("warn");
           T.gaze++;
@@ -1588,6 +1775,7 @@ const VideoInterview: React.FC = () => {
             trigViolRef.current("looking-away");
           }
         } else T.gaze = 0;
+
         if (ml.eyesHard) {
           T.eyes++;
           if (T.eyes >= HARD_TICKS + 1) {
@@ -1595,8 +1783,10 @@ const VideoInterview: React.FC = () => {
             trigViolRef.current("eyes-closed");
           }
         } else T.eyes = 0;
+
         if (!ml.gazeHard && !ml.eyesHard) setFaceStatus("ok");
       } else {
+        // ML not ready yet — fall back to canvas heuristics
         T.noface = 0;
         setNoFaceVisible(false);
         if (cv.skinBlobs >= 3 && cv.skinRatio > 0.08) {
@@ -1622,7 +1812,7 @@ const VideoInterview: React.FC = () => {
     }, TICK_MS);
 
     return () => clearInterval(detectionRef.current);
-  }, [isCallActive]);
+  }, [isCallActive, averageDescriptors, euclideanDistance, identityStatus]);
 
   // ── Interview info ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -1660,7 +1850,6 @@ const VideoInterview: React.FC = () => {
     return () => clearInterval(t);
   }, [screen]);
 
-  // Time exhausted → submit
   useEffect(() => {
     if (!isCallActive || timeLeft <= 0) return;
     const t = setInterval(
@@ -1668,7 +1857,7 @@ const VideoInterview: React.FC = () => {
         setTimeLeft((s) => {
           if (s <= 1) {
             clearInterval(t);
-            endInterview(); // TIME EXHAUSTED → submit
+            endInterview();
             return 0;
           }
           return s - 1;
@@ -1708,10 +1897,6 @@ const VideoInterview: React.FC = () => {
     [avatarMode],
   );
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // NATURAL PAUSE HANDLING
-  // Clear any grace timer — user started talking again
-  // ─────────────────────────────────────────────────────────────────────────
   const clearPauseTimers = useCallback(() => {
     if (pauseGraceTimerRef.current) {
       clearTimeout(pauseGraceTimerRef.current);
@@ -1728,12 +1913,10 @@ const VideoInterview: React.FC = () => {
     setPauseCountdown(0);
   }, []);
 
-  // Called when user speech ends — start grace period before AI responds
   const startPauseGrace = useCallback(() => {
     clearPauseTimers();
     userSpeechEndedAtRef.current = Date.now();
 
-    // Show a countdown in UI
     let countdown = Math.ceil(USER_PAUSE_GRACE_MS / 1000);
     setPauseCountdown(countdown);
     pauseCountdownTimerRef.current = setInterval(() => {
@@ -1745,7 +1928,6 @@ const VideoInterview: React.FC = () => {
       }
     }, 1000);
 
-    // After grace period, signal to Vapi that user is done
     pauseGraceTimerRef.current = setTimeout(() => {
       setPauseCountdown(0);
       userIsActivelyTalkingRef.current = false;
@@ -1755,7 +1937,6 @@ const VideoInterview: React.FC = () => {
 
   // ── Vapi ────────────────────────────────────────────────────────────────
   useEffect(() => {
-    // vapi Public KEY
     const inst = new Vapi("5c5f81d8-3fa1-4fca-9bd5-bddd311b9669");
     setVapi(inst);
 
@@ -1765,7 +1946,6 @@ const VideoInterview: React.FC = () => {
       setIsSpeaking(true);
       setTurnState("ai-speaking");
       setAvatarState("speaking");
-      // Clear any user pause timers — AI took over
       clearPauseTimers();
     });
 
@@ -1782,7 +1962,6 @@ const VideoInterview: React.FC = () => {
         aiTranscriptBuf.current = "";
       }
 
-      // Switch to user's turn after AI finishes
       setTurnState("user-turn");
 
       if (closingInProgress.current && isCallActiveRef.current) {
@@ -1801,6 +1980,12 @@ const VideoInterview: React.FC = () => {
       setAvatarState("thinking");
       setVapiReady(true);
       setTurnState("ai-speaking");
+      // ── NEW: Reset identity state for new call ──────────────────────────
+      referenceDescriptorRef.current = null;
+      refSampleCountRef.current = 0;
+      refDescriptorAccumulatorRef.current = [];
+      personChangeTicks.current = 0;
+      setIdentityStatus("unregistered");
     });
 
     inst.on("error", (e: any) => console.error("Vapi:", e));
@@ -1808,14 +1993,13 @@ const VideoInterview: React.FC = () => {
     inst.on("message", (msg: any) => {
       if (msg?.type === "transcript") {
         const text = msg.transcript || msg.text || "";
-        const isFinal = msg.transcriptType === "final"; // ← ADD THIS CHECK
+        const isFinal = msg.transcriptType === "final";
 
         if (msg.role === "assistant") {
           aiTranscriptBuf.current = text;
           setAvatarSub(text);
           if (!aiIsSpeakingRef.current) setAvatarState("thinking");
 
-          // Only persist when Vapi signals the utterance is complete
           if (isFinal && text.trim()) {
             conversationRef.current.push({
               type: "transcript",
@@ -1848,7 +2032,6 @@ const VideoInterview: React.FC = () => {
           silenceWarnedRef.current = false;
           silenceWarnCount.current = 0;
 
-          // Only persist + count questions when utterance is complete
           if (isFinal && text.trim()) {
             conversationRef.current.push({
               type: "transcript",
@@ -1889,12 +2072,10 @@ const VideoInterview: React.FC = () => {
           }
         }
       } else {
-        // Non-transcript messages (tool calls, etc.) — store as-is
         conversationRef.current.push(msg);
       }
     });
 
-    // User starts speaking → cancel any grace timer
     (inst as any).on("user-speech-start", () => {
       if (!micOnRef.current) return;
       setIsListening(true);
@@ -1904,11 +2085,9 @@ const VideoInterview: React.FC = () => {
       lastUserSpeechActivityRef.current = Date.now();
       silenceWarnedRef.current = false;
       silenceWarnCount.current = 0;
-      // Cancel any pending grace/pause timers — user is talking
       clearPauseTimers();
     });
 
-    // User stops speaking → start grace period (5s before AI responds)
     (inst as any).on("user-speech-end", () => {
       setIsListening(false);
       if (!micOnRef.current) return;
@@ -1916,9 +2095,8 @@ const VideoInterview: React.FC = () => {
         setUserSub(userTranscriptBuf.current.trim());
         userTranscriptBuf.current = "";
       }
-      // Start natural pause grace period
       startPauseGrace();
-      setTurnState("user-turn"); // Show "your turn" with countdown
+      setTurnState("user-turn");
     });
 
     return () => {
@@ -1937,11 +2115,18 @@ const VideoInterview: React.FC = () => {
     preCheckDone.current = false;
     interviewEndedRef.current = false;
     ticks.current = { noface: 0, multi: 0, gaze: 0, eyes: 0 };
+    personChangeTicks.current = 0; // ← NEW: reset on each call start
     violLockedRef.current = false;
     lastViolAt.current = 0;
     aiIsSpeakingRef.current = false;
     candidateRespondedRef.current = false;
     setQuestionProgress(0);
+
+    // ── NEW: Reset face identity refs ──────────────────────────────────────
+    referenceDescriptorRef.current = null;
+    refSampleCountRef.current = 0;
+    refDescriptorAccumulatorRef.current = [];
+    setIdentityStatus("unregistered");
 
     const pos =
       interviewInfo?.position || interviewInfo?.jobPosition || "the role";
@@ -1955,10 +2140,6 @@ const VideoInterview: React.FC = () => {
     const durationMins =
       parseInt(String(interviewInfo?.duration || "5"), 10) || 5;
 
-    // Natural conversation system prompt — key improvements:
-    // 1. Explicitly wait for user to finish (5s pause = done)
-    // 2. Natural acknowledgements before next question
-    // 3. Don't interrupt mid-sentence pauses
     const NATURAL_CONV = `
 NATURAL CONVERSATION RULES (follow these strictly):
 1. ALWAYS wait for the candidate to completely finish speaking before responding.
@@ -2032,31 +2213,15 @@ ${RULES}`;
       name: "AI Recruiter",
       firstMessage: first,
       transcriber: {
-        // Better transcription settings for natural conversation
         provider: "deepgram",
         model: "nova-2",
         language: "en",
         smartFormat: true,
-        // Longer endpointing so user pauses don't cut off mid-sentence
-        endpointing: 500, // 500ms — longer than default to respect mid-sentence pauses
+        endpointing: 500,
       },
-      // voice: {
-      //   provider: "11labs",
-      //   voiceId: "pNInz6obpgDQGcFmaJgB", // Adam — natural, warm voice
-      //   stability: 0.5,
-      //   similarityBoost: 0.75,
-      //   style: 0.35,
-      //   useSpeakerBoost: true,
-      //   speed: 0.95,
-      //   fillerInjectionEnabled: false,
-      // },
       voice: {
         provider: "vapi",
         voiceId: VOICE_CONFIG[selectedVoice].voiceId,
-        // stability: VOICE_CONFIG[selectedVoice].stability,
-        // similarityBoost: VOICE_CONFIG[selectedVoice].similarityBoost,
-        // style: VOICE_CONFIG[selectedVoice].style,
-        // useSpeakerBoost: true,
         speed: VOICE_CONFIG[selectedVoice].speed,
         fillerInjectionEnabled: false,
       },
@@ -2065,9 +2230,8 @@ ${RULES}`;
         model: "gpt-4-turbo",
         messages: [{ role: "system", content: sys }],
         temperature: 0.6,
-        maxTokens: 250, // Keep responses concise and natural
+        maxTokens: 250,
       },
-      // Natural VAD settings — more patient with pauses
       silenceTimeoutSeconds: 35,
       maxDurationSeconds: durationMins * 60,
       endCallMessage:
@@ -2079,7 +2243,6 @@ ${RULES}`;
         "thank you for your time",
         "great speaking with you",
       ],
-      // Background denoising
       backgroundDenoisingEnabled: true,
     });
   }, [
@@ -2091,6 +2254,7 @@ ${RULES}`;
     avatarMode,
     initHeyGen,
     generateGanGreeting,
+    selectedVoice,
   ]);
 
   // ── Silence monitor ────────────────────────────────────────────────────
@@ -2176,7 +2340,16 @@ ${RULES}`;
           ? `\n\nPROCTORING NOTES: ${alertCountRef.current} violation warning(s) were issued during this interview.`
           : "";
 
-      const prompt = `You are a senior recruitment analyst with 15+ years of hiring experience. Produce a rigorous, accurate, evidence-based assessment of the following interview. This assessment will directly determine whether the candidate is hired — be thorough and honest.\n\nCANDIDATE: ${cName}\nROLE: ${pos}${violationSummary}\n\nINTERVIEW TRANSCRIPT:\n${transcript.map((m) => `${m.role === "Interviewer" ? "Interviewer" : "Candidate"}: ${m.text}`).join("\n")}\n\nReturn a JSON object ONLY — no markdown, no extra text, no code fences:\n{\n  \"candidateName\": \"${cName}\",\n  \"role\": \"${pos}\",\n  \"confidenceScore\": <integer 0-100>,\n  \"confidenceLabel\": <\"High Confidence\" | \"Moderate Confidence\" | \"Low Confidence\">,\n  \"behavioralInsights\": [\n    { \"title\": \"Communication Style\",       \"description\": \"<precise one-sentence observation>\", \"status\": <\"good\"|\"warning\"|\"bad\"> },\n    { \"title\": \"Problem-Solving Approach\",  \"description\": \"<precise one-sentence observation>\", \"status\": <\"good\"|\"warning\"|\"bad\"> },\n    { \"title\": \"Professionalism & Poise\",   \"description\": \"<precise one-sentence observation>\", \"status\": <\"good\"|\"warning\"|\"bad\"> }\n  ],\n  \"technicalCompetency\": [\n    { \"title\": \"Core Knowledge\",       \"description\": \"<precise one-sentence observation>\", \"status\": <\"good\"|\"warning\"|\"bad\"> },\n    { \"title\": \"Practical Experience\", \"description\": \"<precise one-sentence observation>\", \"status\": <\"good\"|\"warning\"|\"bad\"> },\n    { \"title\": \"Advanced Topics\",      \"description\": \"<precise one-sentence observation>\", \"status\": <\"good\"|\"warning\"|\"bad\"> }\n  ],\n  \"speechPatterns\": {\n    \"clarityScore\": <integer 0-100>,\n    \"avgResponseTime\": \"<estimate e.g. '1.4s' or '5.2s'>\",\n    \"confidenceLevel\": <integer 0-100>,\n    \"complexityScore\": <float 1.0-5.0>\n  },\n  \"proctoringFlags\": ${alertCountRef.current},\n  \"recommendations\": [\n    \"<specific, actionable recommendation 1>\",\n    \"<specific, actionable recommendation 2>\"\n  ],\n  \"overallVerdict\": <\"hire\" | \"consider\" | \"reject\">,\n  \"verdictReason\": \"<one evidence-based sentence with specific transcript references>\"\n}`;
+      // ── NEW: include person substitution in feedback ──────────────────
+      const personSwapCount = behaviorTracker.current
+        .getReport()
+        .personSubstitutionCount;
+      const personSwapNote =
+        personSwapCount > 0
+          ? ` Person substitution was detected ${personSwapCount} time(s).`
+          : "";
+
+      const prompt = `You are a senior recruitment analyst with 15+ years of hiring experience. Produce a rigorous, accurate, evidence-based assessment of the following interview. This assessment will directly determine whether the candidate is hired — be thorough and honest.\n\nCANDIDATE: ${cName}\nROLE: ${pos}${violationSummary}${personSwapNote}\n\nINTERVIEW TRANSCRIPT:\n${transcript.map((m) => `${m.role === "Interviewer" ? "Interviewer" : "Candidate"}: ${m.text}`).join("\n")}\n\nReturn a JSON object ONLY — no markdown, no extra text, no code fences:\n{\n  \"candidateName\": \"${cName}\",\n  \"role\": \"${pos}\",\n  \"confidenceScore\": <integer 0-100>,\n  \"confidenceLabel\": <\"High Confidence\" | \"Moderate Confidence\" | \"Low Confidence\">,\n  \"behavioralInsights\": [\n    { \"title\": \"Communication Style\",       \"description\": \"<precise one-sentence observation>\", \"status\": <\"good\"|\"warning\"|\"bad\"> },\n    { \"title\": \"Problem-Solving Approach\",  \"description\": \"<precise one-sentence observation>\", \"status\": <\"good\"|\"warning\"|\"bad\"> },\n    { \"title\": \"Professionalism & Poise\",   \"description\": \"<precise one-sentence observation>\", \"status\": <\"good\"|\"warning\"|\"bad\"> }\n  ],\n  \"technicalCompetency\": [\n    { \"title\": \"Core Knowledge\",       \"description\": \"<precise one-sentence observation>\", \"status\": <\"good\"|\"warning\"|\"bad\"> },\n    { \"title\": \"Practical Experience\", \"description\": \"<precise one-sentence observation>\", \"status\": <\"good\"|\"warning\"|\"bad\"> },\n    { \"title\": \"Advanced Topics\",      \"description\": \"<precise one-sentence observation>\", \"status\": <\"good\"|\"warning\"|\"bad\"> }\n  ],\n  \"speechPatterns\": {\n    \"clarityScore\": <integer 0-100>,\n    \"avgResponseTime\": \"<estimate e.g. '1.4s' or '5.2s'>\",\n    \"confidenceLevel\": <integer 0-100>,\n    \"complexityScore\": <float 1.0-5.0>\n  },\n  \"proctoringFlags\": ${alertCountRef.current},\n  \"personSubstitutionFlags\": ${personSwapCount},\n  \"recommendations\": [\n    \"<specific, actionable recommendation 1>\",\n    \"<specific, actionable recommendation 2>\"\n  ],\n  \"overallVerdict\": <\"hire\" | \"consider\" | \"reject\">,\n  \"verdictReason\": \"<one evidence-based sentence with specific transcript references>\"\n}`;
 
       const r = await fetch(`${Base_Url}/ai-feedback`, {
         method: "POST",
@@ -2201,6 +2374,7 @@ ${RULES}`;
           transcript,
           behaviorReport: behaviorTracker.current.getReport(),
           violationCount: alertCountRef.current,
+          personSubstitutionCount: personSwapCount, // ← NEW
           completedAt: new Date().toISOString(),
         });
       }
@@ -2242,92 +2416,47 @@ ${RULES}`;
   }, [vapi, generateFeedback, clearPauseTimers]);
 
   // ── Controls ────────────────────────────────────────────────────────────
-
-  // const handleJoin = () => {
-  //   tryEnterFS();
-  //   startCall();
-  //   startSilenceMonitor();
-  
-  //   setScreen("spotlight");
-    
-  //   // Start recording 1s after call starts — gives Vapi time to inject its <audio> element
-  //   setTimeout(() => { screenRecorder.start(); }, 1000); 
-  // };
-
   const handleJoin = async () => {
-  // Start call and silence monitor immediately
-  startCall();
-  startSilenceMonitor();
-  setScreen("spotlight");
+    startCall();
+    startSilenceMonitor();
+    setScreen("spotlight");
 
-  // Start recording (which internally loops until user shares screen)
-  // Then enter fullscreen once they've shared
-  setTimeout(async () => {
-    await screenRecorder.start();
-    // After screen share is granted, lock into fullscreen
-    tryEnterFS();
-  }, 1000);
-};
+    setTimeout(async () => {
+      await screenRecorder.start();
+      tryEnterFS();
+    }, 1000);
+  };
 
-  // Manual end — still submits (user chose to end)
-//   const handleEnd = async () => {
-//   if (silenceRef.current) clearInterval(silenceRef.current);
-//   clearPauseTimers();
+  const handleEnd = async () => {
+    if (silenceRef.current) clearInterval(silenceRef.current);
+    clearPauseTimers();
 
-//    setIsCallActive(false);
-//   isCallActiveRef.current = false;
+    setIsCallActive(false);
+    isCallActiveRef.current = false;
 
-// try {
-//     vapi?.stop();
-//   } catch {}
+    setIsSpeaking(false);
+    setAvatarState("idle");
+    setTurnState("idle");
+    setElapsed(0);
+    setVapiReady(false);
+    setHeygenStreamLive(false);
+    setHeygenReady(false);
 
-//   screenRecorder.stop().catch(() => {});
-//   tryExitFS();
+    try {
+      await screenRecorder.stop();
+      console.log("[handleEnd] Screen recording stopped");
+    } catch (err) {
+      console.warn("[handleEnd] Screen recorder stop error:", err);
+    }
 
-//   setIsSpeaking(false);
-//   setAvatarState("idle");
-//   setTurnState("idle");
-//   setElapsed(0);
-//   setVapiReady(false);
-//   setHeygenStreamLive(false);
-//   setHeygenReady(false);
+    await new Promise((resolve) => setTimeout(resolve, 500));
 
-//   };
+    try {
+      vapi?.stop();
+    } catch {}
 
-
-const handleEnd = async () => {
-  if (silenceRef.current) clearInterval(silenceRef.current);
-  clearPauseTimers();
-
-  setIsCallActive(false);
-  isCallActiveRef.current = false;
-
-  setIsSpeaking(false);
-  setAvatarState("idle");
-  setTurnState("idle");
-  setElapsed(0);
-  setVapiReady(false);
-  setHeygenStreamLive(false);
-  setHeygenReady(false);
-
-  // ── Step 1: Stop screen recording FIRST and wait for it ──────────────
-  try {
-    await screenRecorder.stop();
-    console.log("[handleEnd] Screen recording stopped");
-  } catch (err) {
-    console.warn("[handleEnd] Screen recorder stop error:", err);
-  }
-
-  // ── Step 2: Small delay to let final chunk upload begin ───────────────
-  await new Promise((resolve) => setTimeout(resolve, 500));
-
-  // ── Step 3: Now stop Vapi — this triggers call-end → generateFeedback ─
-  try {
-    vapi?.stop();
-  } catch {}
-
-  tryExitFS();
-};
+    tryExitFS();
+  };
 
   const toggleMic = () => {
     const n = !micOn;
@@ -2450,6 +2579,29 @@ const handleEnd = async () => {
           <span className="text-orange-400 text-[10px] font-bold">
             {alertCountRef.current}/{MAX_VIOLATIONS} warns
           </span>
+        )}
+        {/* ── NEW: Identity status indicator ──────────────────────────── */}
+        {isCallActive && (
+          <div
+            className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[9px] font-semibold ${
+              identityStatus === "verified"
+                ? "bg-green-500/10 border-green-500/30 text-green-400"
+                : identityStatus === "mismatch"
+                  ? "bg-red-500/15 border-red-500/30 text-red-400 animate-pulse"
+                  : identityStatus === "registering"
+                    ? "bg-blue-500/10 border-blue-500/30 text-blue-400"
+                    : "bg-white/5 border-white/10 text-white/30"
+            }`}
+          >
+            <UserX className="w-2 h-2" />
+            {identityStatus === "verified"
+              ? "ID OK"
+              : identityStatus === "mismatch"
+                ? "ID ⚠"
+                : identityStatus === "registering"
+                  ? "Scanning"
+                  : "ID…"}
+          </div>
         )}
         <div className="flex items-center gap-1">
           <div
@@ -2670,6 +2822,13 @@ const handleEnd = async () => {
                   Fullscreen + proctored interview
                 </span>
               </div>
+              {/* ── NEW: Identity verification notice in lobby ──────────────── */}
+              <div className="flex items-center gap-2 px-3.5 py-2 bg-orange-500/10 border border-orange-500/25 rounded-xl max-w-xs">
+                <UserX className="h-3.5 w-3.5 text-orange-400/70 shrink-0" />
+                <span className="text-white/50 text-xs">
+                  Face identity verified throughout interview
+                </span>
+              </div>
               <div className="flex items-center">
                 <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-400 to-indigo-700 border-2 border-[#2D55FB] flex items-center justify-center shadow-lg">
                   <User className="h-6 w-6 text-white/80" />
@@ -2743,6 +2902,19 @@ const handleEnd = async () => {
                 <div className="absolute bottom-2 right-2.5 z-10">
                   <MicCircle muted={!micOn} />
                 </div>
+                {/* ── NEW: Identity mismatch badge on user tile ─────────── */}
+                {identityStatus === "mismatch" && isCallActive && (
+                  <div className="absolute top-2 left-2 z-20 flex items-center gap-1 bg-red-500/90 text-white px-1.5 py-0.5 rounded-full text-[9px] font-bold animate-pulse">
+                    <UserX className="w-2.5 h-2.5" />
+                    ID Mismatch
+                  </div>
+                )}
+                {identityStatus === "registering" && isCallActive && (
+                  <div className="absolute top-2 left-2 z-20 flex items-center gap-1 bg-blue-500/90 text-white px-1.5 py-0.5 rounded-full text-[9px] font-semibold">
+                    <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                    Registering ID
+                  </div>
+                )}
               </div>
               <div className="flex flex-col gap-2 overflow-y-auto flex-1 min-h-0">
                 <div className="bg-[#0e1640]/90 rounded-xl p-3 border border-white/5">
@@ -2868,7 +3040,6 @@ const handleEnd = async () => {
                   REC
                 </div>
               )}
-              {/* Turn indicator — replaces the old "AI Speaking / Your Turn" logic */}
               {isCallActive && (
                 <div className="absolute top-4 left-4 z-10">
                   <TurnIndicator
@@ -2944,6 +3115,13 @@ const handleEnd = async () => {
                     {username}
                   </span>
                 </div>
+                {/* ── NEW: Identity badge on grid user tile ─────────────── */}
+                {identityStatus === "mismatch" && isCallActive && (
+                  <div className="absolute top-3 left-3 z-20 flex items-center gap-1 bg-red-500/90 text-white px-2 py-0.5 rounded-full text-[10px] font-bold animate-pulse">
+                    <UserX className="w-3 h-3" />
+                    Different Person
+                  </div>
+                )}
                 {turnState === "user-speaking" && micOn && (
                   <div className="absolute top-4 left-4 z-10">
                     <TurnIndicator

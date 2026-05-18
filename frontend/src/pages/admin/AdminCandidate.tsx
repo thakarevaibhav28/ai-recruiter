@@ -91,6 +91,25 @@ const CandidateFormModal = ({
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
       setForm((f) => ({ ...f, [k]: e.target.value }));
 
+  /* ── Helpers ───────────────────────────────
+     toTitleCase  : capitalises each word properly
+     extractMobile: strips country code / non-digits,
+                    returns only the last 10 digits
+  ─────────────────────────────────────────── */
+  const toTitleCase = (str: string) =>
+    str
+      ? str
+          .toLowerCase()
+          .split(/\s+/)
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(" ")
+      : str;
+
+  const extractMobile = (raw: string) => {
+    const digits = raw.replace(/\D/g, ""); // strip everything except digits
+    return digits.length >= 10 ? digits.slice(-10) : digits;
+  };
+
   /* ── Resume upload ─────────────────────────
      API response shape:
      { success: true, analysis: { name, email, mobile, role,
@@ -113,10 +132,14 @@ const CandidateFormModal = ({
 
       if (res?.success && d) {
         setForm((f) => ({
-          name: d.name || f.name,
-          email: d.email || f.email,
-          mobile: d.mobile || f.mobile,
-          role: d.role || f.role,
+          // Title-case the name (e.g. "himanshu s" → "Himanshu S")
+          name: d.name ? toTitleCase(d.name) : f.name,
+          // Lowercase + trim email
+          email: d.email ? d.email.toLowerCase().trim() : f.email,
+          // Strip country code — keep only last 10 digits
+          mobile: d.mobile ? extractMobile(d.mobile) : f.mobile,
+          // Title-case the role (e.g. "senior full stack developer" → "Senior Full Stack Developer")
+          role: d.role ? toTitleCase(d.role) : f.role,
           year_of_experience: d.year_of_experience || f.year_of_experience,
           key_Skills: d.key_Skills || f.key_Skills,
           description: d.description || f.description,
@@ -244,6 +267,7 @@ const CandidateFormModal = ({
                 type={type}
                 value={form[key]}
                 onChange={set(key)}
+                placeholder={`Enter ${label.toLowerCase()}`}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none  transition"
               />
             </div>
@@ -257,6 +281,7 @@ const CandidateFormModal = ({
               rows={4}
               value={form.description}
               onChange={set("description")}
+              placeholder="Brief description or summary about the candidate"
               className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none  resize-none transition"
             />
           </div>
@@ -761,18 +786,6 @@ const Candidates = () => {
           >
             <Plus className="h-4 w-4" /> Add Candidates
           </button>
-          {/* <div className="flex cursor-pointer items-center gap-2 bg-white rounded-lg px-2 border border-[#00000033]">
-            <Filter className="h-4 w-4 text-gray-600" />
-            <select
-              value={statusFilter}
-              onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-              className="px-3 py-2 text-sm cursor-pointer border-none outline-none focus:ring-0"
-            >
-              <option value="all">All Status</option>
-              <option value="active">Active</option>
-              <option value="inactive">In-Active</option>
-            </select>
-          </div> */}
         </div>
       </div>
 
@@ -889,12 +902,6 @@ const Candidates = () => {
           ) : data.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20">
               <div className={`mb-2 ${theme === 'dark' ? 'text-slate-300' : 'text-gray-400'}`}>No candidates found</div>
-              {/* <button
-                onClick={() => setFormModal({ open: true, mode: "add" })}
-                className="text-indigo-600 hover:text-indigo-700 text-sm font-medium"
-              >
-                Add your first candidate
-              </button> */}
             </div>
           ) : (
             <>

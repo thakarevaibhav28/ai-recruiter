@@ -63,6 +63,25 @@ const AddCandidateModal: React.FC<AddCandidateModalProps> = ({
     }
   }, [candidateData, setValue, reset]);
 
+  /* ── Helpers ───────────────────────────────
+     toTitleCase  : capitalises each word properly
+     extractMobile: strips country code / non-digits,
+                    returns only the last 10 digits
+  ─────────────────────────────────────────── */
+  const toTitleCase = (str: string) =>
+    str
+      ? str
+          .toLowerCase()
+          .split(/\s+/)
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(" ")
+      : str;
+
+  const extractMobile = (raw: string) => {
+    const digits = raw.replace(/\D/g, ""); // strip everything except digits
+    return digits.length >= 10 ? digits.slice(-10) : digits;
+  };
+
   /* ================= Analyze Resume ================= */
   const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -92,11 +111,11 @@ const AddCandidateModal: React.FC<AddCandidateModalProps> = ({
 
       setResumeUrl(url || "");
 
-      // Auto fill safely
-      setValue("name", analysis?.name ?? "");
-      setValue("email", analysis?.email ?? "");
-      setValue("mobile", analysis?.mobile ?? "");
-      setValue("role", analysis?.role ?? "");
+      // Auto fill with formatting applied
+      setValue("name", analysis?.name ? toTitleCase(analysis.name) : "");
+      setValue("email", analysis?.email ? analysis.email.toLowerCase().trim() : "");
+      setValue("mobile", analysis?.mobile ? extractMobile(analysis.mobile) : "");
+      setValue("role", analysis?.role ? toTitleCase(analysis.role) : "");
       setValue("year_of_experience", analysis?.year_of_experience ?? "");
       setValue("key_Skills", analysis?.key_Skills ?? "");
       setValue("description", analysis?.description ?? "");

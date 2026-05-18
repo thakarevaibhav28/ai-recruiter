@@ -1,13 +1,11 @@
 import mongoose from "mongoose";
 
-// ─── Sub Schema ─────────────────────────────
 const InsightSchema = new mongoose.Schema({
   title: { type: String, required: true },
   description: { type: String, required: true },
   status: { type: String, enum: ["good", "warning", "bad"], required: true },
 });
 
-// ─── Main Schema ────────────────────────────
 const InterviewFeedbackSchema = new mongoose.Schema(
   {
     interview_id: {
@@ -16,10 +14,10 @@ const InterviewFeedbackSchema = new mongoose.Schema(
       index: true,
     },
     candidateId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Candidate",
-        required: true,
-      },
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Candidate",
+      required: true,
+    },
     pdfPath: String,
     userName: String,
     userEmail: String,
@@ -36,7 +34,7 @@ const InterviewFeedbackSchema = new mongoose.Schema(
     feedback: {
       candidateName: String,
       role: String,
-      technicalScore: {type:Number, min: 0, max: 100},
+      technicalScore: { type: Number, min: 0, max: 100 },
       relevanceScore: { type: Number, min: 0, max: 100 },
       confidenceScore: { type: Number, min: 0, max: 100 },
       confidenceLabel: {
@@ -54,6 +52,8 @@ const InterviewFeedbackSchema = new mongoose.Schema(
         complexityScore: { type: Number, min: 1, max: 5 },
       },
 
+      proctoringFlags: { type: Number, default: 0 },        // ← NEW
+      personSubstitutionFlags: { type: Number, default: 0 },// ← NEW
       recommendations: [String],
       overallVerdict: { type: String, enum: ["hire", "consider", "rejected"] },
       verdictReason: String,
@@ -66,28 +66,31 @@ const InterviewFeedbackSchema = new mongoose.Schema(
       },
     ],
 
-   behaviorReport: {
-  totalEvents: Number,
-  noFaceCount: Number,
-  multipleFacesCount: Number,
-  lookingAwayCount: Number,
-  eyesClosedCount: Number,
+    behaviorReport: {
+      totalEvents: Number,
+      noFaceCount: Number,
+      multipleFacesCount: Number,
+      lookingAwayCount: Number,
+      eyesClosedCount: Number,
+      personSubstitutionCount: { type: Number, default: 0 }, // ← NEW
+    violationCount: { type: Number, default: 0 },          // ← NEW
 
-  events: [
-    {
-      type: {
-        type: String,
-        enum: [
-          "looking_away",
-          "no_face",
-          "multiple_faces",
-          "eyes_closed"
-        ],
-      },
-      timestamp: Number,
+      events: [
+        {
+          type: {
+            type: String,
+            enum: [
+              "looking_away",
+              "no_face",
+              "multiple_faces",
+              "eyes_closed",
+              "person_substitution", // ← NEW
+            ],
+          },
+          timestamp: Number,
+        },
+      ],
     },
-  ],
-}
   },
   { timestamps: true },
 );

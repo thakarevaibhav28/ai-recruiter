@@ -635,6 +635,8 @@ router.post("/feedback", async (req, res) => {
       feedback,
       transcript,
       behaviorReport,
+        violationCount,
+  personSubstitutionCount,  
       completedAt,
     } = req.body;
 
