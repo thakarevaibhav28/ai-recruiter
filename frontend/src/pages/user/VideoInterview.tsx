@@ -34,28 +34,26 @@ const FACE_MODEL_URL =
   "https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model";
 let faceModelsLoaded = false;
 
-// ── NEW: Load faceRecognitionNet in addition to existing models ────────────
 async function loadFaceModels() {
   if (faceModelsLoaded) return;
   await Promise.all([
     faceapi.nets.ssdMobilenetv1.loadFromUri(FACE_MODEL_URL),
     faceapi.nets.faceLandmark68Net.loadFromUri(FACE_MODEL_URL),
-    faceapi.nets.faceRecognitionNet.loadFromUri(FACE_MODEL_URL), // ← NEW
+    faceapi.nets.faceRecognitionNet.loadFromUri(FACE_MODEL_URL),
   ]);
   faceModelsLoaded = true;
 }
 
 // ─── FACE RECOGNITION CONSTANTS ──────────────────────────────────────────────
-// Euclidean distance threshold: ≤0.45 ≈ same person (>80% similarity).
-// faceapi distance is 0 (identical) to ~1.5+ (very different).
-// 0.45 maps to ~80% confidence threshold.
-const FACE_MATCH_THRESHOLD = 0.45;
-// How many frames to collect for the reference descriptor (averaged for robustness)
-const REFERENCE_SAMPLE_COUNT = 3;
-// How many consecutive mismatches before triggering a violation
-const PERSON_CHANGE_TICKS = 3;
-// Don't check identity until N seconds after call starts (gives time to settle)
-const IDENTITY_CHECK_DELAY_MS = 8000;
+// FIXED: Threshold tuned — 0.5 is a good balance for face-api euclidean distance
+// (lower = stricter match required; values > threshold = different person)
+const FACE_MATCH_THRESHOLD = 0.5;
+// FIXED: Collect more samples for a robust reference descriptor
+const REFERENCE_SAMPLE_COUNT = 8;
+// FIXED: Require 4 consecutive mismatch ticks before flagging (reduces false positives)
+const PERSON_CHANGE_TICKS = 4;
+// FIXED: Start identity checks 10s after registration completes (not from call start)
+const IDENTITY_CHECK_INTERVAL_MS = 5000; // check every 5 seconds after registration
 
 // ─── VOICE CONFIG ─────────────────────────────────────────────────────────────
 const VOICE_CONFIG = {
@@ -235,6 +233,8 @@ const EAR_HARD = 0.22;
 const GAZE_HARD = 0.22;
 const MULTI_CONFIDENCE = 0.28;
 const VIOLATION_COOLDOWN_MS = 12000;
+// FIXED: Identity violations use their own shorter cooldown so they surface quickly
+const IDENTITY_VIOLATION_COOLDOWN_MS = 15000;
 const POST_CLOSE_LOCK_MS = 6000;
 const USER_PAUSE_GRACE_MS = 5000;
 const MIN_ANSWER_LENGTH = 15;
@@ -301,9 +301,8 @@ const VIOLATION_MSGS: Record<
         : `Maximum warnings reached. Interview will be submitted on completion.`,
     spoken: "Please keep the interview in fullscreen mode.",
   },
-  // ── NEW: Person substitution violation ─────────────────────────────────
   "person-substitution": {
-    title: "Different Person Detected",
+    title: "Identity Mismatch Detected",
     body: (r) =>
       r > 0
         ? `The person in front of the camera does not match the registered candidate. ${r} warning(s) remaining.`
@@ -363,9 +362,7 @@ class BehaviorTracker {
         .length,
       personSubstitutionCount: this.events.filter(
         (e) => e.type === "person_substitution",
-      ).length, // ← NEW
-
-      violationCount: this.events.filter((e) => e.type === "violation").length, // ← NEW
+      ).length,
       events: this.events,
     };
   }
@@ -847,7 +844,6 @@ const ViolationModal = React.memo(
       return () => clearTimeout(t);
     }, [safeClose, atMax]);
 
-    // ── NEW: special styling for person-substitution ──────────────────────
     const isPersonSwap = alert.type === "person-substitution";
 
     return (
@@ -1067,7 +1063,7 @@ const VideoInterview: React.FC = () => {
 
   const [questionProgress, setQuestionProgress] = useState(0);
 
-  // ── NEW: Face recognition state ──────────────────────────────────────────
+  // ── Face recognition state ──────────────────────────────────────────────
   const [identityStatus, setIdentityStatus] = useState<
     "unregistered" | "registering" | "verified" | "mismatch"
   >("unregistered");
@@ -1084,6 +1080,8 @@ const VideoInterview: React.FC = () => {
   const aiTranscriptBuf = useRef("");
   const userTranscriptBuf = useRef("");
   const detectionRef = useRef<any>(null);
+  // FIXED: Separate interval ref for identity checking loop
+  const identityCheckIntervalRef = useRef<any>(null);
   const behaviorTracker = useRef(new BehaviorTracker());
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -1101,6 +1099,8 @@ const VideoInterview: React.FC = () => {
 
   const violLockedRef = useRef(false);
   const lastViolAt = useRef(0);
+  // FIXED: Separate cooldown tracking for identity violations
+  const lastIdentityViolAt = useRef(0);
 
   const ticks = useRef({ noface: 0, multi: 0, gaze: 0, eyes: 0 });
 
@@ -1124,19 +1124,16 @@ const VideoInterview: React.FC = () => {
   const lastUserSpeechActivityRef = useRef(Date.now());
   const midAnswerPauseTimerRef = useRef<any>(null);
 
-  // ── NEW: Face recognition refs ─────────────────────────────────────────────
-  // Stores the averaged reference descriptor of the registered candidate
+  // ── Face recognition refs ───────────────────────────────────────────────
   const referenceDescriptorRef = useRef<Float32Array | null>(null);
-  // Tracks how many good samples we've collected for the reference
   const refSampleCountRef = useRef(0);
-  // Accumulates descriptor vectors during the registration phase
   const refDescriptorAccumulatorRef = useRef<Float32Array[]>([]);
-  // Timestamp when identity checking becomes active (after IDENTITY_CHECK_DELAY_MS)
-  const identityCheckActiveAtRef = useRef<number>(0);
-  // Consecutive mismatch tick counter (separate from other ticks)
   const personChangeTicks = useRef(0);
-  // Whether faceRecognitionNet is loaded (set after loadFaceModels resolves)
   const faceRecognitionReadyRef = useRef(false);
+  // FIXED: Use ref so identity verification loop doesn't restart the detection engine
+  const identityStatusRef = useRef<"unregistered" | "registering" | "verified" | "mismatch">("unregistered");
+  // FIXED: Track registration in progress to avoid duplicate samples
+  const registrationCompleteRef = useRef(false);
 
   const location = useLocation();
   const selectedVoice =
@@ -1318,6 +1315,8 @@ const VideoInterview: React.FC = () => {
 
   const stopAllProctoring = useCallback(() => {
     if (detectionRef.current) clearInterval(detectionRef.current);
+    // FIXED: Also clear the identity check interval
+    if (identityCheckIntervalRef.current) clearInterval(identityCheckIntervalRef.current);
     if (silenceRef.current) clearInterval(silenceRef.current);
     streamRef.current?.getTracks().forEach((t) => t.stop());
   }, []);
@@ -1372,7 +1371,7 @@ const VideoInterview: React.FC = () => {
       violLockedRef.current = true;
       lastViolAt.current = Date.now();
       ticks.current = { noface: 0, multi: 0, gaze: 0, eyes: 0 };
-      personChangeTicks.current = 0; // also reset person change ticks
+      personChangeTicks.current = 0;
 
       alertCountRef.current++;
       const count = alertCountRef.current;
@@ -1398,6 +1397,36 @@ const VideoInterview: React.FC = () => {
     },
     [speakWarning],
   );
+
+  // FIXED: Dedicated identity violation trigger with its own cooldown,
+  // so it doesn't compete with or get blocked by other violation cooldowns
+  const triggerIdentityViolation = useCallback(() => {
+    if (!isCallActiveRef.current) return;
+    const now = Date.now();
+    if (now - lastIdentityViolAt.current < IDENTITY_VIOLATION_COOLDOWN_MS) return;
+
+    lastIdentityViolAt.current = now;
+    personChangeTicks.current = 0;
+
+    alertCountRef.current++;
+    const count = alertCountRef.current;
+    const cfg = VIOLATION_MSGS["person-substitution"];
+    const remaining = Math.max(0, MAX_VIOLATIONS - count);
+
+    console.warn(
+      `[Identity] VIOLATION #${count} person-substitution remaining=${remaining}`,
+    );
+    behaviorTracker.current.addEvent("person_substitution");
+
+    setActiveAlert({
+      type: "person-substitution",
+      count,
+      title: cfg.title,
+      body: cfg.body(remaining),
+    });
+
+    speakWarning("person-substitution");
+  }, [speakWarning]);
 
   useEffect(() => {
     trigViolRef.current = triggerViolation;
@@ -1438,10 +1467,7 @@ const VideoInterview: React.FC = () => {
     } else camAlertRef.current = false;
   }, [camOn, isCallActive, triggerViolation]);
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // NEW: Helper — compute the mean of multiple face descriptors
-  // This gives a more robust reference than a single frame
-  // ══════════════════════════════════════════════════════════════════════════
+  // ── Face recognition helpers ────────────────────────────────────────────
   const averageDescriptors = useCallback(
     (descriptors: Float32Array[]): Float32Array => {
       if (descriptors.length === 0) return new Float32Array(128);
@@ -1455,10 +1481,6 @@ const VideoInterview: React.FC = () => {
     [],
   );
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // NEW: Euclidean distance between two 128-dim face descriptors
-  // faceapi.euclideanDistance does the same but this avoids an import path dep
-  // ══════════════════════════════════════════════════════════════════════════
   const euclideanDistance = useCallback(
     (a: Float32Array, b: Float32Array): number => {
       let sum = 0;
@@ -1469,11 +1491,142 @@ const VideoInterview: React.FC = () => {
   );
 
   // ─────────────────────────────────────────────────────────────────────────
-  // FACE DETECTION ENGINE (updated with identity verification)
+  // FIXED: IDENTITY CHECK LOOP — runs every 5 seconds independently from the
+  // main face detection tick. This gives clear, reliable per-check verification
+  // rather than trying to interleave it with gaze/eye/multi detection logic.
+  // ─────────────────────────────────────────────────────────────────────────
+  const runIdentityCheck = useCallback(async () => {
+    if (!isCallActiveRef.current) return;
+    if (!faceRecognitionReadyRef.current) return;
+    if (referenceDescriptorRef.current === null) return; // not registered yet
+
+    const vid = behaviorVidRef.current;
+    if (!vid || vid.readyState < 2 || vid.videoWidth === 0) return;
+
+    try {
+      const dets = await faceapi
+        .detectAllFaces(
+          vid,
+          new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }),
+        )
+        .withFaceLandmarks()
+        .withFaceDescriptors();
+
+      if (dets.length === 0) {
+        // No face — handled by main detection loop, don't double-penalise
+        console.log("[Identity] Check skipped — no face detected");
+        return;
+      }
+
+      if (dets.length > 1) {
+        // Multiple people — handled by main detection loop
+        console.log("[Identity] Check skipped — multiple faces");
+        return;
+      }
+
+      const { descriptor, detection } = dets[0];
+      if (detection.score < 0.5) {
+        console.log("[Identity] Check skipped — low confidence detection");
+        return;
+      }
+
+      const dist = euclideanDistance(referenceDescriptorRef.current, descriptor);
+      const isSamePerson = dist <= FACE_MATCH_THRESHOLD;
+
+      console.log(
+        `[Identity] Check — dist=${dist.toFixed(4)} threshold=${FACE_MATCH_THRESHOLD} match=${isSamePerson}`,
+      );
+
+      if (!isSamePerson) {
+        personChangeTicks.current++;
+        identityStatusRef.current = "mismatch";
+        setIdentityStatus("mismatch");
+        console.warn(
+          `[Identity] MISMATCH tick ${personChangeTicks.current}/${PERSON_CHANGE_TICKS}`,
+        );
+
+        if (personChangeTicks.current >= PERSON_CHANGE_TICKS) {
+          personChangeTicks.current = 0;
+          triggerIdentityViolation();
+        }
+      } else {
+        // Reset mismatch ticks on successful match
+        if (personChangeTicks.current > 0) {
+          console.log("[Identity] Match restored — resetting mismatch ticks");
+          personChangeTicks.current = 0;
+        }
+        identityStatusRef.current = "verified";
+        setIdentityStatus("verified");
+      }
+    } catch (e) {
+      console.warn("[Identity] Check error:", e);
+    }
+  }, [euclideanDistance, triggerIdentityViolation]);
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // FIXED: REFERENCE REGISTRATION — runs inside main detection loop only until
+  // registration is complete. After that, the separate identity check loop takes over.
+  // ─────────────────────────────────────────────────────────────────────────
+  const runRegistration = useCallback(async (vid: HTMLVideoElement) => {
+    if (registrationCompleteRef.current) return;
+    if (!faceRecognitionReadyRef.current) return;
+
+    try {
+      const dets = await faceapi
+        .detectAllFaces(
+          vid,
+          new faceapi.SsdMobilenetv1Options({ minConfidence: 0.6 }),
+        )
+        .withFaceLandmarks()
+        .withFaceDescriptors();
+
+      if (dets.length !== 1) return; // need exactly one face for clean registration
+      const { descriptor, detection } = dets[0];
+      if (detection.score < 0.6) return; // require high confidence for reference
+
+      refDescriptorAccumulatorRef.current.push(descriptor);
+      refSampleCountRef.current++;
+
+      if (identityStatusRef.current !== "registering") {
+        identityStatusRef.current = "registering";
+        setIdentityStatus("registering");
+      }
+
+      console.log(
+        `[Identity] Registration sample ${refSampleCountRef.current}/${REFERENCE_SAMPLE_COUNT}`,
+      );
+
+      if (refSampleCountRef.current >= REFERENCE_SAMPLE_COUNT) {
+        // Average all collected samples for a robust reference
+        referenceDescriptorRef.current = averageDescriptors(
+          refDescriptorAccumulatorRef.current,
+        );
+        refDescriptorAccumulatorRef.current = [];
+        registrationCompleteRef.current = true;
+        identityStatusRef.current = "verified";
+        setIdentityStatus("verified");
+        console.log("[Identity] ✓ Reference face registered — starting verification loop");
+
+        // FIXED: Start the identity check loop only AFTER registration is done
+        if (identityCheckIntervalRef.current) clearInterval(identityCheckIntervalRef.current);
+        identityCheckIntervalRef.current = setInterval(
+          runIdentityCheck,
+          IDENTITY_CHECK_INTERVAL_MS,
+        );
+      }
+    } catch (e) {
+      console.warn("[Identity] Registration error:", e);
+    }
+  }, [averageDescriptors, runIdentityCheck]);
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // FACE DETECTION ENGINE — handles gaze, eyes, multi-face, no-face.
+  // Registration is handled here; identity verification is in its own loop.
   // ─────────────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!isCallActive) {
       clearInterval(detectionRef.current);
+      clearInterval(identityCheckIntervalRef.current);
       return;
     }
 
@@ -1482,16 +1635,12 @@ const VideoInterview: React.FC = () => {
       .then(() => {
         mlReady = true;
         faceRecognitionReadyRef.current = true;
-        console.log("[Proctor] Face models (incl. recognition) loaded");
+        console.log("[Proctor] Face models loaded — recognition active");
       })
       .catch((e) => console.warn("[Proctor] face-api failed:", e));
 
-    // Mark when identity checks should start (after initial delay)
-    identityCheckActiveAtRef.current = Date.now() + IDENTITY_CHECK_DELAY_MS;
-
     const canvasAnalyse = (vid: HTMLVideoElement) => {
-      const W = 160,
-        H = 120;
+      const W = 160, H = 120;
       const cnv = document.createElement("canvas");
       cnv.width = W;
       cnv.height = H;
@@ -1500,24 +1649,14 @@ const VideoInterview: React.FC = () => {
         return { dark: false, skinRatio: 0, gazeDrift: 0, skinBlobs: 0 };
       ctx.drawImage(vid, 0, 0, W, H);
       const { data } = ctx.getImageData(0, 0, W, H);
-      let bright = 0,
-        skinCount = 0,
-        skinSumX = 0;
+      let bright = 0, skinCount = 0, skinSumX = 0;
       const skinMap = new Uint8Array(W * H);
       for (let i = 0; i < data.length; i += 4) {
-        const r = data[i],
-          g = data[i + 1],
-          b = data[i + 2];
+        const r = data[i], g = data[i + 1], b = data[i + 2];
         bright += (r + g + b) / 3;
         const isSkin =
-          r > 50 &&
-          g > 25 &&
-          b > 10 &&
-          r > b &&
-          r > g &&
-          r - Math.min(g, b) > 8 &&
-          Math.abs(r - g) < 90 &&
-          r < 250;
+          r > 50 && g > 25 && b > 10 && r > b && r > g &&
+          r - Math.min(g, b) > 8 && Math.abs(r - g) < 90 && r < 250;
         const px = i / 4;
         if (isSkin) {
           skinMap[px] = 1;
@@ -1525,15 +1664,13 @@ const VideoInterview: React.FC = () => {
           skinSumX += px % W;
         }
       }
-      const total = W * H,
-        skinRatio = skinCount / total;
+      const total = W * H, skinRatio = skinCount / total;
       let gazeDrift = 0;
       if (skinCount > 50) {
         const cx = skinSumX / skinCount / W;
         gazeDrift = Math.abs(cx - 0.5) * 2;
       }
-      const third = Math.floor(W / 3),
-        thirds = [0, 0, 0];
+      const third = Math.floor(W / 3), thirds = [0, 0, 0];
       for (let px = 0; px < total; px++) {
         if (skinMap[px]) thirds[Math.min(2, Math.floor((px % W) / third))]++;
       }
@@ -1541,63 +1678,38 @@ const VideoInterview: React.FC = () => {
       return { dark: bright / total < 18, skinRatio, gazeDrift, skinBlobs };
     };
 
-    // ── UPDATED mlAnalyse: now also returns face descriptor ────────────────
     const mlAnalyse = async (vid: HTMLVideoElement) => {
       if (!mlReady) return null;
       try {
         const dets = await faceapi
           .detectAllFaces(
             vid,
-            new faceapi.SsdMobilenetv1Options({
-              minConfidence: MULTI_CONFIDENCE,
-            }),
+            new faceapi.SsdMobilenetv1Options({ minConfidence: MULTI_CONFIDENCE }),
           )
           .withFaceLandmarks()
-          .withFaceDescriptors(); // ← NEW: compute 128-dim embedding
+          .withFaceDescriptors();
 
         if (dets.length > 1)
-          return {
-            faceCount: dets.length,
-            gazeHard: false,
-            eyesHard: false,
-            descriptor: null as Float32Array | null,
-          };
+          return { faceCount: dets.length, gazeHard: false, eyesHard: false };
         if (dets.length === 0)
-          return {
-            faceCount: 0,
-            gazeHard: false,
-            eyesHard: false,
-            descriptor: null as Float32Array | null,
-          };
+          return { faceCount: 0, gazeHard: false, eyesHard: false };
 
-        const { detection, landmarks, descriptor } = dets[0];
+        const { detection, landmarks } = dets[0];
         if (detection.score < 0.35)
-          return {
-            faceCount: 1,
-            gazeHard: false,
-            eyesHard: false,
-            descriptor: null as Float32Array | null,
-          };
+          return { faceCount: 1, gazeHard: false, eyesHard: false };
 
-        const nose = landmarks.getNose(),
-          jaw = landmarks.getJawOutline(),
-          lEye = landmarks.getLeftEye(),
-          rEye = landmarks.getRightEye();
+        const nose = landmarks.getNose(), jaw = landmarks.getJawOutline(),
+          lEye = landmarks.getLeftEye(), rEye = landmarks.getRightEye();
         let gazeHard = false;
         if (nose?.length && jaw?.length) {
-          const jL = jaw[0].x,
-            jR = jaw[jaw.length - 1].x,
-            jawW = jR - jL,
-            jawM = (jL + jR) / 2;
+          const jL = jaw[0].x, jR = jaw[jaw.length - 1].x,
+            jawW = jR - jL, jawM = (jL + jR) / 2;
           if (jawW > 15) {
-            const tip = nose[nose.length - 1],
-              hOff = Math.abs(tip.x - jawM) / jawW;
+            const tip = nose[nose.length - 1], hOff = Math.abs(tip.x - jawM) / jawW;
             let eyeOff = 0;
             if (lEye?.length && rEye?.length) {
-              const em =
-                (lEye.reduce((s, p) => s + p.x, 0) / lEye.length +
-                  rEye.reduce((s, p) => s + p.x, 0) / rEye.length) /
-                2;
+              const em = (lEye.reduce((s, p) => s + p.x, 0) / lEye.length +
+                rEye.reduce((s, p) => s + p.x, 0) / rEye.length) / 2;
               eyeOff = Math.abs(em - jawM) / jawW;
             }
             gazeHard = hOff > GAZE_HARD || eyeOff > GAZE_HARD;
@@ -1607,12 +1719,7 @@ const VideoInterview: React.FC = () => {
         if (lEye?.length >= 6 && rEye?.length >= 6)
           eyesHard = (earVal(lEye) + earVal(rEye)) / 2 < EAR_HARD;
 
-        return {
-          faceCount: 1,
-          gazeHard,
-          eyesHard,
-          descriptor: descriptor ?? null, // ← 128-dim Float32Array
-        };
+        return { faceCount: 1, gazeHard, eyesHard };
       } catch (e) {
         console.warn("[Proctor] mlAnalyse:", e);
         return null;
@@ -1629,8 +1736,7 @@ const VideoInterview: React.FC = () => {
         vid.play().catch(() => {});
         return;
       }
-      if (vid.readyState < 2 || vid.videoWidth === 0 || vid.videoHeight === 0)
-        return;
+      if (vid.readyState < 2 || vid.videoWidth === 0 || vid.videoHeight === 0) return;
 
       const T = ticks.current;
       const cv = canvasAnalyse(vid);
@@ -1695,77 +1801,11 @@ const VideoInterview: React.FC = () => {
         T.multi = 0;
         setNoFaceVisible(false);
 
-        // ════════════════════════════════════════════════════════════════
-        // NEW: FACE RECOGNITION — register or verify
-        // ════════════════════════════════════════════════════════════════
-        if (ml.descriptor && faceRecognitionReadyRef.current) {
-          const now = Date.now();
-
-          // ── Phase A: Reference registration (first REFERENCE_SAMPLE_COUNT frames) ──
-          if (referenceDescriptorRef.current === null) {
-            // Collect samples for a robust reference
-            if (
-              refSampleCountRef.current < REFERENCE_SAMPLE_COUNT &&
-              identityStatus !== "registering"
-            ) {
-              setIdentityStatus("registering");
-            }
-
-            refDescriptorAccumulatorRef.current.push(ml.descriptor);
-            refSampleCountRef.current++;
-
-            console.log(
-              `[Identity] Collecting reference sample ${refSampleCountRef.current}/${REFERENCE_SAMPLE_COUNT}`,
-            );
-
-            if (refSampleCountRef.current >= REFERENCE_SAMPLE_COUNT) {
-              // Average all collected samples → stable reference
-              referenceDescriptorRef.current = averageDescriptors(
-                refDescriptorAccumulatorRef.current,
-              );
-              refDescriptorAccumulatorRef.current = [];
-              setIdentityStatus("verified");
-              // Start identity checks after the delay
-              identityCheckActiveAtRef.current =
-                Date.now() + IDENTITY_CHECK_DELAY_MS;
-              console.log(
-                "[Identity] ✓ Reference face registered successfully",
-              );
-            }
-          }
-          // ── Phase B: Identity verification (after registration + delay) ──
-          else if (
-            referenceDescriptorRef.current !== null &&
-            now >= identityCheckActiveAtRef.current
-          ) {
-            const dist = euclideanDistance(
-              referenceDescriptorRef.current,
-              ml.descriptor,
-            );
-            const isSamePerson = dist <= FACE_MATCH_THRESHOLD;
-
-            // Log for debugging (remove in production if too noisy)
-            // console.log(`[Identity] dist=${dist.toFixed(3)} match=${isSamePerson}`);
-
-            if (!isSamePerson) {
-              personChangeTicks.current++;
-              setIdentityStatus("mismatch");
-              console.warn(
-                `[Identity] MISMATCH tick ${personChangeTicks.current}/${PERSON_CHANGE_TICKS} dist=${dist.toFixed(3)}`,
-              );
-
-              if (personChangeTicks.current >= PERSON_CHANGE_TICKS) {
-                personChangeTicks.current = 0;
-                trigViolRef.current("person-substitution");
-              }
-            } else {
-              // Reset mismatch counter — brief occlusion / angle change won't trigger
-              personChangeTicks.current = 0;
-              setIdentityStatus("verified");
-            }
-          }
+        // ── FIXED: Registration runs here; verification is in its own interval
+        if (mlReady && !registrationCompleteRef.current) {
+          // Run registration asynchronously — don't await to keep the tick fast
+          runRegistration(vid);
         }
-        // ════════════════════════════════════════════════════════════════
 
         if (ml.gazeHard) {
           setFaceStatus("warn");
@@ -1811,8 +1851,12 @@ const VideoInterview: React.FC = () => {
       }
     }, TICK_MS);
 
-    return () => clearInterval(detectionRef.current);
-  }, [isCallActive, averageDescriptors, euclideanDistance, identityStatus]);
+    return () => {
+      clearInterval(detectionRef.current);
+      clearInterval(identityCheckIntervalRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCallActive, runRegistration, runIdentityCheck]);
 
   // ── Interview info ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -1980,12 +2024,20 @@ const VideoInterview: React.FC = () => {
       setAvatarState("thinking");
       setVapiReady(true);
       setTurnState("ai-speaking");
-      // ── NEW: Reset identity state for new call ──────────────────────────
+      // FIXED: Reset all identity refs cleanly on each new call
       referenceDescriptorRef.current = null;
       refSampleCountRef.current = 0;
       refDescriptorAccumulatorRef.current = [];
+      registrationCompleteRef.current = false;
       personChangeTicks.current = 0;
+      lastIdentityViolAt.current = 0;
+      identityStatusRef.current = "unregistered";
       setIdentityStatus("unregistered");
+      // Clear any lingering identity check interval from a previous call
+      if (identityCheckIntervalRef.current) {
+        clearInterval(identityCheckIntervalRef.current);
+        identityCheckIntervalRef.current = null;
+      }
     });
 
     inst.on("error", (e: any) => console.error("Vapi:", e));
@@ -2115,18 +2167,25 @@ const VideoInterview: React.FC = () => {
     preCheckDone.current = false;
     interviewEndedRef.current = false;
     ticks.current = { noface: 0, multi: 0, gaze: 0, eyes: 0 };
-    personChangeTicks.current = 0; // ← NEW: reset on each call start
+    personChangeTicks.current = 0;
     violLockedRef.current = false;
     lastViolAt.current = 0;
+    lastIdentityViolAt.current = 0;
     aiIsSpeakingRef.current = false;
     candidateRespondedRef.current = false;
     setQuestionProgress(0);
 
-    // ── NEW: Reset face identity refs ──────────────────────────────────────
+    // FIXED: Reset all face identity refs
     referenceDescriptorRef.current = null;
     refSampleCountRef.current = 0;
     refDescriptorAccumulatorRef.current = [];
+    registrationCompleteRef.current = false;
+    identityStatusRef.current = "unregistered";
     setIdentityStatus("unregistered");
+    if (identityCheckIntervalRef.current) {
+      clearInterval(identityCheckIntervalRef.current);
+      identityCheckIntervalRef.current = null;
+    }
 
     const pos =
       interviewInfo?.position || interviewInfo?.jobPosition || "the role";
@@ -2166,8 +2225,7 @@ PHASE 2 — INTERVIEW:
 - After each answer, give a brief natural acknowledgement, then ask the next question.
 - After all ${numQs} questions, wrap up warmly and naturally — like a real interviewer.`;
 
-    let sys = "",
-      first = "";
+    let sys = "", first = "";
 
     if (isResumeInterview) {
       sys = `You are a senior AI interviewer having a real, natural conversation.
@@ -2340,7 +2398,6 @@ ${RULES}`;
           ? `\n\nPROCTORING NOTES: ${alertCountRef.current} violation warning(s) were issued during this interview.`
           : "";
 
-      // ── NEW: include person substitution in feedback ──────────────────
       const personSwapCount = behaviorTracker.current
         .getReport()
         .personSubstitutionCount;
@@ -2374,7 +2431,7 @@ ${RULES}`;
           transcript,
           behaviorReport: behaviorTracker.current.getReport(),
           violationCount: alertCountRef.current,
-          personSubstitutionCount: personSwapCount, // ← NEW
+          personSubstitutionCount: personSwapCount,
           completedAt: new Date().toISOString(),
         });
       }
@@ -2401,6 +2458,11 @@ ${RULES}`;
       setAvatarState("idle");
       setTurnState("idle");
       clearPauseTimers();
+      // FIXED: Always clear identity loop when call ends
+      if (identityCheckIntervalRef.current) {
+        clearInterval(identityCheckIntervalRef.current);
+        identityCheckIntervalRef.current = null;
+      }
       if (!has) {
         setScreen("lobby");
         setVapiReady(false);
@@ -2430,6 +2492,12 @@ ${RULES}`;
   const handleEnd = async () => {
     if (silenceRef.current) clearInterval(silenceRef.current);
     clearPauseTimers();
+
+    // FIXED: Stop identity check loop on manual end
+    if (identityCheckIntervalRef.current) {
+      clearInterval(identityCheckIntervalRef.current);
+      identityCheckIntervalRef.current = null;
+    }
 
     setIsCallActive(false);
     isCallActiveRef.current = false;
@@ -2481,8 +2549,7 @@ ${RULES}`;
       ? "00:00"
       : `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
   const fmtC = (d: Date) => {
-    let h = d.getHours(),
-      m = d.getMinutes();
+    let h = d.getHours(), m = d.getMinutes();
     const ap = h >= 12 ? "PM" : "AM";
     h = h % 12 || 12;
     return `${h}:${String(m).padStart(2, "0")} ${ap}`;
@@ -2580,7 +2647,7 @@ ${RULES}`;
             {alertCountRef.current}/{MAX_VIOLATIONS} warns
           </span>
         )}
-        {/* ── NEW: Identity status indicator ──────────────────────────── */}
+        {/* Identity status indicator */}
         {isCallActive && (
           <div
             className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[9px] font-semibold ${
@@ -2822,7 +2889,6 @@ ${RULES}`;
                   Fullscreen + proctored interview
                 </span>
               </div>
-              {/* ── NEW: Identity verification notice in lobby ──────────────── */}
               <div className="flex items-center gap-2 px-3.5 py-2 bg-orange-500/10 border border-orange-500/25 rounded-xl max-w-xs">
                 <UserX className="h-3.5 w-3.5 text-orange-400/70 shrink-0" />
                 <span className="text-white/50 text-xs">
@@ -2902,7 +2968,6 @@ ${RULES}`;
                 <div className="absolute bottom-2 right-2.5 z-10">
                   <MicCircle muted={!micOn} />
                 </div>
-                {/* ── NEW: Identity mismatch badge on user tile ─────────── */}
                 {identityStatus === "mismatch" && isCallActive && (
                   <div className="absolute top-2 left-2 z-20 flex items-center gap-1 bg-red-500/90 text-white px-1.5 py-0.5 rounded-full text-[9px] font-bold animate-pulse">
                     <UserX className="w-2.5 h-2.5" />
@@ -2983,45 +3048,22 @@ ${RULES}`;
                   }
                 >
                   <div className="flex items-center justify-center gap-2">
-                    <motion.div
-                      className="w-3 h-3 bg-[#2D55FB] rounded-full"
-                      animate={
-                        isSpeaking
-                          ? { scale: [1, 1.4, 1], opacity: [0.6, 1, 0.6] }
-                          : { scale: 0.8, opacity: 0.5 }
-                      }
-                      transition={
-                        isSpeaking
-                          ? { duration: 0.7, repeat: Infinity, delay: 0 }
-                          : { duration: 0.3 }
-                      }
-                    />
-                    <motion.div
-                      className="w-3 h-3 bg-[#2D55FB] rounded-full"
-                      animate={
-                        isSpeaking
-                          ? { scale: [1, 1.4, 1], opacity: [0.6, 1, 0.6] }
-                          : { scale: 0.8, opacity: 0.5 }
-                      }
-                      transition={
-                        isSpeaking
-                          ? { duration: 0.7, repeat: Infinity, delay: 0.15 }
-                          : { duration: 0.3 }
-                      }
-                    />
-                    <motion.div
-                      className="w-3 h-3 bg-[#2D55FB] rounded-full"
-                      animate={
-                        isSpeaking
-                          ? { scale: [1, 1.4, 1], opacity: [0.6, 1, 0.6] }
-                          : { scale: 0.8, opacity: 0.5 }
-                      }
-                      transition={
-                        isSpeaking
-                          ? { duration: 0.7, repeat: Infinity, delay: 0.3 }
-                          : { duration: 0.3 }
-                      }
-                    />
+                    {[0, 0.15, 0.3].map((delay, i) => (
+                      <motion.div
+                        key={i}
+                        className="w-3 h-3 bg-[#2D55FB] rounded-full"
+                        animate={
+                          isSpeaking
+                            ? { scale: [1, 1.4, 1], opacity: [0.6, 1, 0.6] }
+                            : { scale: 0.8, opacity: 0.5 }
+                        }
+                        transition={
+                          isSpeaking
+                            ? { duration: 0.7, repeat: Infinity, delay }
+                            : { duration: 0.3 }
+                        }
+                      />
+                    ))}
                   </div>
                 </motion.div>
               </div>
@@ -3115,22 +3157,13 @@ ${RULES}`;
                     {username}
                   </span>
                 </div>
-                {/* ── NEW: Identity badge on grid user tile ─────────────── */}
                 {identityStatus === "mismatch" && isCallActive && (
                   <div className="absolute top-3 left-3 z-20 flex items-center gap-1 bg-red-500/90 text-white px-2 py-0.5 rounded-full text-[10px] font-bold animate-pulse">
                     <UserX className="w-3 h-3" />
                     Different Person
                   </div>
                 )}
-                {turnState === "user-speaking" && micOn && (
-                  <div className="absolute top-4 left-4 z-10">
-                    <TurnIndicator
-                      turnState={turnState}
-                      pauseCountdown={pauseCountdown}
-                    />
-                  </div>
-                )}
-                {turnState === "user-turn" && micOn && (
+                {(turnState === "user-speaking" || turnState === "user-turn") && micOn && (
                   <div className="absolute top-4 left-4 z-10">
                     <TurnIndicator
                       turnState={turnState}
@@ -3158,45 +3191,22 @@ ${RULES}`;
                     }
                   >
                     <div className="flex items-center justify-center gap-2">
-                      <motion.div
-                        className="w-3 h-3 bg-[#2D55FB] rounded-full"
-                        animate={
-                          isSpeaking
-                            ? { scale: [1, 1.4, 1], opacity: [0.6, 1, 0.6] }
-                            : { scale: 0.8, opacity: 0.5 }
-                        }
-                        transition={
-                          isSpeaking
-                            ? { duration: 0.7, repeat: Infinity, delay: 0 }
-                            : { duration: 0.3 }
-                        }
-                      />
-                      <motion.div
-                        className="w-3 h-3 bg-[#2D55FB] rounded-full"
-                        animate={
-                          isSpeaking
-                            ? { scale: [1, 1.4, 1], opacity: [0.6, 1, 0.6] }
-                            : { scale: 0.8, opacity: 0.5 }
-                        }
-                        transition={
-                          isSpeaking
-                            ? { duration: 0.7, repeat: Infinity, delay: 0.15 }
-                            : { duration: 0.3 }
-                        }
-                      />
-                      <motion.div
-                        className="w-3 h-3 bg-[#2D55FB] rounded-full"
-                        animate={
-                          isSpeaking
-                            ? { scale: [1, 1.4, 1], opacity: [0.6, 1, 0.6] }
-                            : { scale: 0.8, opacity: 0.5 }
-                        }
-                        transition={
-                          isSpeaking
-                            ? { duration: 0.7, repeat: Infinity, delay: 0.3 }
-                            : { duration: 0.3 }
-                        }
-                      />
+                      {[0, 0.15, 0.3].map((delay, i) => (
+                        <motion.div
+                          key={i}
+                          className="w-3 h-3 bg-[#2D55FB] rounded-full"
+                          animate={
+                            isSpeaking
+                              ? { scale: [1, 1.4, 1], opacity: [0.6, 1, 0.6] }
+                              : { scale: 0.8, opacity: 0.5 }
+                          }
+                          transition={
+                            isSpeaking
+                              ? { duration: 0.7, repeat: Infinity, delay }
+                              : { duration: 0.3 }
+                          }
+                        />
+                      ))}
                     </div>
                   </motion.div>
                 </div>
@@ -3209,8 +3219,7 @@ ${RULES}`;
                     AI Recruiter
                   </span>
                 </div>
-                {(turnState === "ai-speaking" ||
-                  turnState === "processing") && (
+                {(turnState === "ai-speaking" || turnState === "processing") && (
                   <div className="absolute top-4 left-4 z-10">
                     <TurnIndicator turnState={turnState} pauseCountdown={0} />
                   </div>
