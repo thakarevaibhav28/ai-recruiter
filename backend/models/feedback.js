@@ -52,8 +52,8 @@ const InterviewFeedbackSchema = new mongoose.Schema(
         complexityScore: { type: Number, min: 1, max: 5 },
       },
 
-      proctoringFlags: { type: Number, default: 0 },        // ← NEW
-      personSubstitutionFlags: { type: Number, default: 0 },// ← NEW
+      proctoringFlags: { type: Number, default: 0 }, // ← NEW
+      personSubstitutionFlags: { type: Number, default: 0 }, // ← NEW
       recommendations: [String],
       overallVerdict: { type: String, enum: ["hire", "consider", "rejected"] },
       verdictReason: String,
@@ -63,6 +63,10 @@ const InterviewFeedbackSchema = new mongoose.Schema(
       {
         role: { type: String, enum: ["Interviewer", "Candidate"] },
         text: String,
+        timestamp: {
+          type: Date,
+          default: Date.now,
+        },
       },
     ],
 
@@ -73,7 +77,7 @@ const InterviewFeedbackSchema = new mongoose.Schema(
       lookingAwayCount: Number,
       eyesClosedCount: Number,
       personSubstitutionCount: { type: Number, default: 0 }, // ← NEW
-    violationCount: { type: Number, default: 0 },          // ← NEW
+      violationCount: { type: Number, default: 0 }, // ← NEW
 
       events: [
         {

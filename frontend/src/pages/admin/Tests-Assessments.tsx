@@ -279,6 +279,7 @@ const TestsAssessments = () => {
     },
   });
 
+  /*
   const aiCandidates = scoredCandidates || [];
   const manualCandidates = candidatesList.filter(
     (c: any) => !aiCandidates.some((ai: any) => ai._id === c._id),
@@ -288,6 +289,7 @@ const TestsAssessments = () => {
       .toLowerCase()
       .includes(candidateSearch.toLowerCase()),
   );
+  */
 
   const runGroqScoring = async (candidates: any[], analysis: any) => {
     setGroqLoading(true);

@@ -78,6 +78,20 @@ const ConversationView = ({
   // ← was: const turns = deduplicateTranscript(transcript);
   const turns = transcript?.filter((t) => t?.text?.trim()) ?? [];
 
+  const formatTime = (timestamp: string | number) => {
+    if (!timestamp) return "";
+    try {
+      const date = new Date(timestamp);
+      return date.toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
+    } catch {
+      return "";
+    }
+  };
+
   if (!turns.length) {
     return (
       <p className="text-sm text-gray-500 text-center py-6">
@@ -90,6 +104,7 @@ const ConversationView = ({
     <div className="space-y-3 max-h-96 overflow-y-auto pr-1 scrollbar-thin">
       {turns.map((turn, idx) => {
         const isInterviewer = turn.role === "Interviewer";
+        const timeStr = formatTime(turn.timestamp);
         return (
           <div
             key={turn._id || idx}
@@ -107,13 +122,20 @@ const ConversationView = ({
                   : "bg-gray-900 text-white rounded-tr-sm"
               }`}
             >
-              <p
-                className={`text-[10px] font-semibold mb-1 ${isInterviewer ? "text-indigo-500" : "text-gray-400"}`}
-              >
-                {isInterviewer
-                  ? "AI Interviewer"
-                  : candidateName || "Candidate"}
-              </p>
+              <div className="flex items-center justify-between mb-1 gap-2">
+                <p
+                  className={`text-[10px] font-semibold ${isInterviewer ? "text-indigo-500" : "text-gray-400"}`}
+                >
+                  {isInterviewer
+                    ? "AI Interviewer"
+                    : candidateName || "Candidate"}
+                </p>
+                {timeStr && (
+                  <span className={`text-[9px] font-medium ${isInterviewer ? "text-indigo-400" : "text-gray-500"}`}>
+                    {timeStr}
+                  </span>
+                )}
+              </div>
               {turn.text}
             </div>
             {!isInterviewer && (
@@ -182,7 +204,7 @@ const ReportsInsights = () => {
     return (
       matchesName && matchesMin && matchesMax && matchesStart && matchesEnd
     );
-  });
+  }).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
   const filteredAIScores = scores.filter((row) => {
     const nameMatch =
       !aiFilters.search ||
@@ -206,7 +228,7 @@ const ReportsInsights = () => {
       !aiFilters.endDate || rowDate <= new Date(aiFilters.endDate).getTime();
 
     return nameMatch && verdictMatch && scoreMatch && startMatch && endMatch;
-  });
+  }).sort((a, b) => new Date(b.completedAt || b.createdAt).getTime() - new Date(a.completedAt || a.createdAt).getTime());
 
   const fetchScores = async (type: "AI" | "MCQ") => {
     try {
@@ -2094,7 +2116,7 @@ const ReportsInsights = () => {
                   }`}>
                     Behavior Report
                   </h3>
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-3 gap-4 mb-6">
                     <div className={`text-center p-3 rounded-lg border ${
                       theme === 'dark'
                         ? 'bg-slate-900 border-slate-600'
@@ -2111,56 +2133,104 @@ const ReportsInsights = () => {
                     </div>
                     <div className={`text-center p-3 rounded-lg border ${
                       theme === 'dark'
-                        ? 'bg-slate-900 border-slate-600'
-                        : 'bg-white border-gray-100'
+                        ? 'bg-red-900/20 border-red-600/40'
+                        : 'bg-red-50 border-red-200'
                     }`}>
                       <p className={`text-2xl font-bold ${
-                        theme === 'dark' ? 'text-white' : 'text-gray-900'
+                        theme === 'dark' ? 'text-red-400' : 'text-red-600'
                       }`}>
                         {selectedScore.behaviorReport.noFaceCount || 0}
                       </p>
                       <p className={`text-xs ${
-                        theme === 'dark' ? 'text-slate-400' : 'text-gray-500'
+                        theme === 'dark' ? 'text-red-300' : 'text-red-600'
                       }`}>No Face Detected</p>
                     </div>
                     <div className={`text-center p-3 rounded-lg border ${
                       theme === 'dark'
-                        ? 'bg-slate-900 border-slate-600'
-                        : 'bg-white border-gray-100'
+                        ? 'bg-orange-900/20 border-orange-600/40'
+                        : 'bg-orange-50 border-orange-200'
                     }`}>
                       <p className={`text-2xl font-bold ${
-                        theme === 'dark' ? 'text-white' : 'text-gray-900'
+                        theme === 'dark' ? 'text-orange-400' : 'text-orange-600'
                       }`}>
                         {selectedScore.behaviorReport.multipleFacesCount || 0}
                       </p>
                       <p className={`text-xs ${
-                        theme === 'dark' ? 'text-slate-400' : 'text-gray-500'
+                        theme === 'dark' ? 'text-orange-300' : 'text-orange-600'
                       }`}>Multiple Faces</p>
                     </div>
                   </div>
+                  
                   {selectedScore.behaviorReport.events?.length > 0 && (
-                    <div className="mt-4 space-y-2">
-                      <p className={`text-sm font-semibold ${
+                    <div>
+                      <p className={`text-sm font-semibold mb-4 ${
                         theme === 'dark' ? 'text-slate-300' : 'text-gray-700'
                       }`}>
-                        Events:
+                        Events Timeline:
                       </p>
-                      {selectedScore.behaviorReport.events.map(
-                        (event: any, idx: number) => (
-                          <div
-                            key={idx}
-                            className={`text-sm p-2 rounded border ${
-                              theme === 'dark'
-                                ? 'bg-slate-900 border-slate-600 text-slate-200'
-                                : 'bg-white border-gray-100 text-gray-600'
-                            }`}
-                          >
-                            {event.type ||
-                              event.description ||
-                              JSON.stringify(event)}
-                          </div>
-                        ),
-                      )}
+                      <div className="space-y-2">
+                        {selectedScore.behaviorReport.events.map(
+                          (event: any, idx: number) => {
+                            const eventType = (event.type || event.description || 'unknown')
+                              .toLowerCase()
+                              .replace(/_/g, ' ');
+                            
+                            let badgeColor = 'bg-gray-100 text-gray-700';
+                            let badgeDarkColor = 'bg-slate-700 text-slate-200';
+                            let icon = '⚠️';
+                            
+                            if (eventType.includes('no_face') || eventType.includes('no face')) {
+                              badgeColor = 'bg-red-100 text-red-700';
+                              badgeDarkColor = 'bg-red-900/30 text-red-300';
+                              icon = '🚫';
+                            } else if (eventType.includes('looking_away') || eventType.includes('looking away')) {
+                              badgeColor = 'bg-yellow-100 text-yellow-700';
+                              badgeDarkColor = 'bg-yellow-900/30 text-yellow-300';
+                              icon = '👀';
+                            } else if (eventType.includes('multiple') || eventType.includes('multiple faces')) {
+                              badgeColor = 'bg-orange-100 text-orange-700';
+                              badgeDarkColor = 'bg-orange-900/30 text-orange-300';
+                              icon = '👥';
+                            }
+
+                            return (
+                              <div
+                                key={idx}
+                                className={`p-3 rounded-lg border flex items-center gap-3 ${
+                                  theme === 'dark'
+                                    ? `${badgeDarkColor} border-slate-600`
+                                    : `${badgeColor} border-opacity-30 border`
+                                }`}
+                              >
+                                <span className="text-xl">{icon}</span>
+                                <div className="flex-1">
+                                  <p className="text-sm font-medium capitalize">
+                                    {eventType}
+                                  </p>
+                                  {event.timestamp && (
+                                    <p className={`text-xs ${
+                                      theme === 'dark' ? 'text-slate-400' : 'text-gray-500'
+                                    }`}>
+                                      {new Date(event.timestamp).toLocaleTimeString('en-US', {
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                        second: '2-digit'
+                                      })}
+                                    </p>
+                                  )}
+                                </div>
+                                <span className={`text-xs px-2 py-1 rounded-full font-semibold ${
+                                  theme === 'dark'
+                                    ? 'bg-slate-600 text-slate-200'
+                                    : 'bg-white bg-opacity-50 text-gray-600'
+                                }`}>
+                                  #{idx + 1}
+                                </span>
+                              </div>
+                            );
+                          },
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
