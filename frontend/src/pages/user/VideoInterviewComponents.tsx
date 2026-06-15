@@ -4,7 +4,6 @@ import React, { useEffect, useRef, useCallback } from "react";
 import {
   Mic,
   MicOff,
-  Video,
   VideoOff,
   User,
   Loader2,

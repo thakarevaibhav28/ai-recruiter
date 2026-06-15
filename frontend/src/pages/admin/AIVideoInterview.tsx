@@ -22,11 +22,104 @@ import { userPath } from "../../routes/EncryptRoute";
 import { adminService } from "../../services/service/adminService";
 import AddCandidateModal from "../../components/Candidates/AddCandidate";
 import { useTheme } from "../../context/Themecontext";
+import BulkAddCandidate from "../../components/Candidates/BulkAddCandidate";
+const isCandidateRelevant = (c: any, targetPosition: string, targetSkills: string[]): boolean => {
+  if (!targetPosition) return true;
+
+  const target = targetPosition.toLowerCase().trim();
+  const candidateRole = (c.role || c.jobTitle || c.designation || "").toString().toLowerCase().trim();
+
+  // Rule 1: Platform-specific exclusion
+  const platforms = ["kinaxis", "sap", "salesforce", "workday", "peoplesoft", "servicenow"];
+  for (const plat of platforms) {
+    if (candidateRole.includes(plat) && !target.includes(plat)) {
+      return false;
+    }
+  }
+
+  // Rule 2: Exclude non-tech / unrelated roles
+  const nonTechRoles = ["hr ", "recruiter", "marketing", "sales ", "accountant", "finance", "lawyer", "content writer", "designer"];
+  for (const role of nonTechRoles) {
+    if (candidateRole.includes(role) && !target.includes(role)) {
+      return false;
+    }
+  }
+
+  // Helper to extract keywords from position
+  const getRelevantKeywords = (pos: string): string[] => {
+    const words = pos
+      .replace(/[^\w\s]/g, "")
+      .split(/\s+/)
+      .filter(w => w.length > 2 || w === "ml" || w === "ai");
+      
+    const extra: string[] = [];
+    if (words.includes("full") || words.includes("stack") || words.includes("fullstack")) {
+      extra.push("frontend", "backend", "mern", "mean", "developer", "engineer", "software", "web");
+    }
+    if (words.includes("frontend") || words.includes("front-end")) {
+      extra.push("developer", "engineer", "software", "web", "react", "angular", "vue", "javascript", "ui");
+    }
+    if (words.includes("backend") || words.includes("back-end")) {
+      extra.push("developer", "engineer", "software", "web", "node", "java", "python", "api");
+    }
+    if (words.includes("machine") || words.includes("learning") || words.includes("ml") || words.includes("ai")) {
+      extra.push("data scientist", "data science", "scientist", "deep learning", "nlp", "computer vision", "python");
+    }
+    return Array.from(new Set([...words, ...extra]));
+  };
+
+  const targetKeywords = getRelevantKeywords(target);
+  const candidateRoleWords = candidateRole.replace(/[^\w\s]/g, "").split(/\s+/);
+
+  // Check if role matches target keywords
+  const hasRelevantRole = candidateRoleWords.some(word => 
+    word.length > 2 && targetKeywords.some(keyword => keyword.includes(word) || word.includes(keyword))
+  );
+
+  // Exact role match check
+  const targetNormalized = target.replace(/\s+/g, "");
+  const roleNormalized = candidateRole.replace(/\s+/g, "");
+  const isExactRoleMatch = roleNormalized.includes(targetNormalized) || targetNormalized.includes(roleNormalized);
+
+  if (!hasRelevantRole && !isExactRoleMatch) {
+    return false;
+  }
+
+  // Rule 4: Skills overlap check (optional but useful if skills exist)
+  if (targetSkills && targetSkills.length > 0) {
+    const candidateSkills = (
+      Array.isArray(c.skills) ? c.skills.join(", ") :
+      Array.isArray(c.key_Skills) ? c.key_Skills.join(", ") :
+      c.skills || c.key_Skills || c.primarySkill || c.secondarySkill || ""
+    ).toString().toLowerCase();
+
+    const candidateSkillTerms = candidateSkills
+      .replace(/[^\w\s]/g, " ")
+      .split(/\s+/)
+      .filter(w => w.length > 2);
+
+    const skillKeywords = targetSkills.flatMap(s => 
+      s.toLowerCase().replace(/[^\w\s]/g, " ").split(/\s+/).filter(w => w.length > 3)
+    );
+
+    if (skillKeywords.length > 0) {
+      const hasSkillOverlap = skillKeywords.some(word => 
+        candidateSkillTerms.some(term => term.includes(word) || word.includes(term))
+      );
+      if (!hasSkillOverlap && !isExactRoleMatch) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+};
 
 export default function InterviewSetup() {
   const [fileName, setFileName] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [showAddCandidateModal, setShowAddCandidateModal] = useState(false);
+  const [showBulkAddCandidateModal, setShowBulkAddCandidateModal] = useState(false);
   const [description, setDescription] = useState<string>("");
   const [secondaryJobDescription, setSecondaryJobDescription] = useState<string>("");
   const [position, setPosition] = useState<string>("");
@@ -274,7 +367,7 @@ export default function InterviewSetup() {
       return keywords.some((word) => candidateSkills.includes(word));
     });
 
-    return filtered.length > 0 ? filtered : candidateList;
+    return filtered;
   };
 
   const toggleCandidateSelection = (candidate: any) => {
@@ -445,19 +538,20 @@ export default function InterviewSetup() {
 
   useEffect(() => {
     fetchCandidates();
-  }, [showAddCandidateModal]);
+  }, [showAddCandidateModal, showBulkAddCandidateModal]);
 
   useEffect(() => {
-    const base = scoredCandidates.length > 0 ? scoredCandidates : candidates;
+    const base = jdAnalysis ? scoredCandidates : candidates;
+    const relevantBase = base.filter((c: any) => isCandidateRelevant(c, position, skills));
     if (!searchTerm.trim()) {
-      setFilteredCandidates(base);
+      setFilteredCandidates(relevantBase);
       return;
     }
-    const filtered = base.filter((c: any) =>
+    const filtered = relevantBase.filter((c: any) =>
       c.name.toLowerCase().includes(searchTerm.toLowerCase()),
     );
     setFilteredCandidates(filtered);
-  }, [searchTerm, scoredCandidates, candidates]);
+  }, [searchTerm, scoredCandidates, candidates, jdAnalysis, position, skills]);
 
   // ─── SEND INVITATIONS ────────────────────────────────────────────────────
 
@@ -1387,7 +1481,13 @@ export default function InterviewSetup() {
                 >
                   Click on candidates to select/deselect
                 </span>
-                <div className="flex gap-3">
+                 <div className="flex gap-3">
+                  <button
+                    onClick={() => setShowBulkAddCandidateModal(true)}
+                    className="px-5 py-2 text-sm font-medium bg-[#003635] text-white rounded-lg hover:opacity-90 transition"
+                  >
+                    + Bulk Add
+                  </button>
                   <button
                     onClick={() => setShowAddCandidateModal(true)}
                     className="px-5 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
@@ -1412,6 +1512,13 @@ export default function InterviewSetup() {
             onClose={() => setShowAddCandidateModal(false)}
             onAdd={() => setShowAddCandidateModal(false)}
             onUpdate={() => {}}
+          />
+        )}
+
+        {showBulkAddCandidateModal && (
+          <BulkAddCandidate
+            isOpen={showBulkAddCandidateModal}
+            onClose={() => setShowBulkAddCandidateModal(false)}
           />
         )}
       </AdminLayout>

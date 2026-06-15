@@ -16,6 +16,98 @@ import { adminService } from "../../services/service/adminService";
 import { useAdminSocket } from "../../hooks/useAdminSocket";
 import ViewAssignedCandidate from "../../components/admin/TestAssessgnment/ViewAssignedCandidate";
 import AddCandidateModal from "../../components/Candidates/AddCandidate";
+import BulkAddCandidate from "../../components/Candidates/BulkAddCandidate";
+const isCandidateRelevant = (c: any, targetPosition: string, targetSkills: string[]): boolean => {
+  if (!targetPosition) return true;
+
+  const target = targetPosition.toLowerCase().trim();
+  const candidateRole = (c.role || c.jobTitle || c.designation || "").toString().toLowerCase().trim();
+
+  // Rule 1: Platform-specific exclusion
+  const platforms = ["kinaxis", "sap", "salesforce", "workday", "peoplesoft", "servicenow"];
+  for (const plat of platforms) {
+    if (candidateRole.includes(plat) && !target.includes(plat)) {
+      return false;
+    }
+  }
+
+  // Rule 2: Exclude non-tech / unrelated roles
+  const nonTechRoles = ["hr ", "recruiter", "marketing", "sales ", "accountant", "finance", "lawyer", "content writer", "designer"];
+  for (const role of nonTechRoles) {
+    if (candidateRole.includes(role) && !target.includes(role)) {
+      return false;
+    }
+  }
+
+  // Helper to extract keywords from position
+  const getRelevantKeywords = (pos: string): string[] => {
+    const words = pos
+      .replace(/[^\w\s]/g, "")
+      .split(/\s+/)
+      .filter(w => w.length > 2 || w === "ml" || w === "ai");
+      
+    const extra: string[] = [];
+    if (words.includes("full") || words.includes("stack") || words.includes("fullstack")) {
+      extra.push("frontend", "backend", "mern", "mean", "developer", "engineer", "software", "web");
+    }
+    if (words.includes("frontend") || words.includes("front-end")) {
+      extra.push("developer", "engineer", "software", "web", "react", "angular", "vue", "javascript", "ui");
+    }
+    if (words.includes("backend") || words.includes("back-end")) {
+      extra.push("developer", "engineer", "software", "web", "node", "java", "python", "api");
+    }
+    if (words.includes("machine") || words.includes("learning") || words.includes("ml") || words.includes("ai")) {
+      extra.push("data scientist", "data science", "scientist", "deep learning", "nlp", "computer vision", "python");
+    }
+    return Array.from(new Set([...words, ...extra]));
+  };
+
+  const targetKeywords = getRelevantKeywords(target);
+  const candidateRoleWords = candidateRole.replace(/[^\w\s]/g, "").split(/\s+/);
+
+  // Check if role matches target keywords
+  const hasRelevantRole = candidateRoleWords.some(word => 
+    word.length > 2 && targetKeywords.some(keyword => keyword.includes(word) || word.includes(keyword))
+  );
+
+  // Exact role match check
+  const targetNormalized = target.replace(/\s+/g, "");
+  const roleNormalized = candidateRole.replace(/\s+/g, "");
+  const isExactRoleMatch = roleNormalized.includes(targetNormalized) || targetNormalized.includes(roleNormalized);
+
+  if (!hasRelevantRole && !isExactRoleMatch) {
+    return false;
+  }
+
+  // Rule 4: Skills overlap check (optional but useful if skills exist)
+  if (targetSkills && targetSkills.length > 0) {
+    const candidateSkills = (
+      Array.isArray(c.skills) ? c.skills.join(", ") :
+      Array.isArray(c.key_Skills) ? c.key_Skills.join(", ") :
+      c.skills || c.key_Skills || c.primarySkill || c.secondarySkill || ""
+    ).toString().toLowerCase();
+
+    const candidateSkillTerms = candidateSkills
+      .replace(/[^\w\s]/g, " ")
+      .split(/\s+/)
+      .filter(w => w.length > 2);
+
+    const skillKeywords = targetSkills.flatMap(s => 
+      s.toLowerCase().replace(/[^\w\s]/g, " ").split(/\s+/).filter(w => w.length > 3)
+    );
+
+    if (skillKeywords.length > 0) {
+      const hasSkillOverlap = skillKeywords.some(word => 
+        candidateSkillTerms.some(term => term.includes(word) || word.includes(term))
+      );
+      if (!hasSkillOverlap && !isExactRoleMatch) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+};
 
 const EMPTY_FORM = {
   candidates: [],
@@ -218,6 +310,7 @@ const TestsAssessments = () => {
 
   const [activeTab, setActiveTab] = useState("create");
   const [showAddCandidateModal, setShowAddCandidateModal] = useState(false);
+  const [showBulkAddCandidateModal, setShowBulkAddCandidateModal] = useState(false);
   const [activeMenuItem, setActiveMenuItem] = useState("Dashboard");
   const [formData, setFormData] = useState<FormDataType>(EMPTY_FORM);
   const [errors, setErrors] = useState<FormErrors>({});
@@ -258,7 +351,7 @@ const TestsAssessments = () => {
 
   useEffect(() => {
     fetchCandidates();
-  }, [showAddCandidateModal]);
+  }, [showAddCandidateModal, showBulkAddCandidateModal]);
 
   useEffect(() => {
     if (activeTab === "templates") fetchAssessments();
@@ -1465,113 +1558,129 @@ const TestsAssessments = () => {
                             Loading candidates...
                           </span>
                         </div>
-                      ) : candidatesList?.length === 0 ? (
-                        <div
-                          className={`px-4 py-3 text-sm text-center ${isDark ? "text-slate-400" : "text-gray-500"}`}
-                        >
-                          No candidates found
-                        </div>
-                      ) : (
-                        candidatesList?.map((candidate:any) => {
-                          const isSelected = formData.candidates.some(
-                            (c: any) => c._id === candidate._id,
+                      ) : (() => {
+                        const dropdownCandidates = (scoredCandidates || [])
+                          .filter((c: any) =>
+                            isCandidateRelevant(c, formData.testTitle, [
+                              formData.primarySkill,
+                              formData.secondarySkill
+                            ].filter(Boolean))
+                          )
+                          .filter((c: any) =>
+                            `${c.name} ${c.role || ""} ${c.email}`
+                              .toLowerCase()
+                              .includes(candidateSearch.toLowerCase())
                           );
-                          const label = candidate.matchLabel;
-                          const style =
-                            matchStyles[label] || matchStyles["Low Match"];
-                          const score = candidate.matchScore;
-                          const isLowMatch =
-                            label === "Low Match" || score === undefined;
+                        return dropdownCandidates.length === 0 ? (
+                          <div
+                            className={`px-4 py-3 text-sm text-center ${isDark ? "text-slate-400" : "text-gray-500"}`}
+                          >
+                            No candidates found
+                          </div>
+                        ) : (
+                          dropdownCandidates.map((candidate: any) => {
+                            const isSelected = formData.candidates.some(
+                              (c: any) => c._id === candidate._id,
+                            );
+                            const label = candidate.matchLabel;
+                            const style =
+                              matchStyles[label] || matchStyles["Low Match"];
+                            const score = candidate.matchScore;
+                            const isLowMatch =
+                              label === "Low Match" || score === undefined;
 
-                          return (
-                            <div
-                              key={candidate._id}
-                              className={`px-4 py-2.5 cursor-pointer transition-colors ${
-                                isSelected
-                                  ? isDark
-                                    ? "bg-indigo-900/40 hover:bg-indigo-900/60"
-                                    : "bg-indigo-50 hover:bg-indigo-100"
-                                  : isLowMatch && hasGroqScores
+                            return (
+                              <div
+                                key={candidate._id}
+                                className={`px-4 py-2.5 cursor-pointer transition-colors ${
+                                  isSelected
                                     ? isDark
-                                      ? "opacity-50 hover:opacity-75 hover:bg-slate-700"
-                                      : "opacity-50 hover:opacity-75 hover:bg-gray-50"
-                                    : isDark
-                                      ? "hover:bg-slate-700"
-                                      : "hover:bg-gray-50"
-                              }`}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleCandidateSelection(candidate);
-                              }}
-                            >
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <span
-                                      className={`text-sm font-medium ${isDark ? "text-slate-100" : "text-gray-900"}`}
-                                    >
-                                      {candidate.name}
-                                    </span>
-                                    {candidate.role && (
+                                      ? "bg-indigo-900/40 hover:bg-indigo-900/60"
+                                      : "bg-indigo-50 hover:bg-indigo-100"
+                                    : isLowMatch && hasGroqScores
+                                      ? isDark
+                                        ? "opacity-50 hover:opacity-75 hover:bg-slate-700"
+                                        : "opacity-50 hover:opacity-75 hover:bg-gray-50"
+                                      : isDark
+                                        ? "hover:bg-slate-700"
+                                        : "hover:bg-gray-50"
+                                }`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleCandidateSelection(candidate);
+                                }}
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
                                       <span
-                                        className={`text-xs font-normal ${isDark ? "text-slate-400" : "text-gray-400"}`}
+                                        className={`text-sm font-medium ${isDark ? "text-slate-100" : "text-gray-900"}`}
                                       >
-                                        — {candidate.role}
+                                        {candidate.name}
                                       </span>
-                                    )}
-                                    {label && (
-                                      <span
-                                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${style.badge}`}
-                                      >
-                                        {label === "Strong Match" && (
-                                          <Star className="h-2.5 w-2.5 fill-current" />
-                                        )}
-                                        {label}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <div
-                                    className={`text-xs mt-0.5 ${isDark ? "text-slate-400" : "text-gray-500"}`}
-                                  >
-                                    {candidate.email}
-                                  </div>
-                                  {candidate.matchReason && (
-                                    <div
-                                      className={`text-xs mt-0.5 italic truncate ${isDark ? "text-slate-500" : "text-gray-400"}`}
-                                    >
-                                      {candidate.matchReason}
+                                      {candidate.role && (
+                                        <span
+                                          className={`text-xs font-normal ${isDark ? "text-slate-400" : "text-gray-400"}`}
+                                        >
+                                          — {candidate.role}
+                                        </span>
+                                      )}
+                                      {label && (
+                                        <span
+                                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${style.badge}`}
+                                        >
+                                          {label === "Strong Match" && (
+                                            <Star className="h-2.5 w-2.5 fill-current" />
+                                          )}
+                                          {label}
+                                        </span>
+                                      )}
                                     </div>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-2 shrink-0">
-                                  {score !== undefined && (
-                                    <span
-                                      className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                                        score >= 70
-                                          ? isDark
-                                            ? "bg-emerald-900/40 text-emerald-400"
-                                            : "bg-emerald-100 text-emerald-700"
-                                          : score >= 40
-                                            ? isDark
-                                              ? "bg-amber-900/40 text-amber-400"
-                                              : "bg-amber-100 text-amber-700"
-                                            : isDark
-                                              ? "bg-slate-700 text-slate-400"
-                                              : "bg-gray-100 text-gray-500"
-                                      }`}
+                                    <div
+                                      className={`text-xs mt-0.5 ${isDark ? "text-slate-400" : "text-gray-500"}`}
                                     >
-                                      {score}%
-                                    </span>
-                                  )}
-                                  {isSelected && (
-                                    <CheckCircle2 className="h-4 w-4 text-indigo-500" />
-                                  )}
+                                      {candidate.email}
+                                    </div>
+                                    {candidate.matchReason && (
+                                      <div
+                                        className={`text-xs mt-0.5 italic truncate ${isDark ? "text-slate-500" : "text-gray-400"}`}
+                                      >
+                                        {candidate.matchReason}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    {score !== undefined && (
+                                      <span
+                                        className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                                          score >= 70
+                                            ? isDark
+                                              ? "bg-emerald-900/40 text-emerald-400"
+                                              : "bg-emerald-100 text-emerald-700"
+                                            : score >= 40
+                                              ? isDark
+                                                ? "bg-amber-900/40 text-amber-400"
+                                                : "bg-amber-100 text-amber-700"
+                                              : isDark
+                                                ? "bg-slate-700 text-slate-400"
+                                                : "bg-gray-100 text-gray-500"
+                                        }`}
+                                      >
+                                        {score}%
+                                      </span>
+                                    )}
+                                    {isSelected && (
+                                      <CheckCircle2 className="h-4 w-4 text-indigo-500" />
+                                    )}
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          );
-                        })
-                      )}
+                            );
+                          })
+                        );
+                      })()
+                    
+                    }
                     </div>
                   </div>
                 )}
@@ -2080,6 +2189,12 @@ const TestsAssessments = () => {
               </span>
               <div className="flex gap-3">
                 <button
+                  onClick={() => setShowBulkAddCandidateModal(true)}
+                  className="px-5 py-2 text-sm font-medium bg-[#003635] text-white rounded-lg hover:opacity-90 transition"
+                >
+                  + Bulk Add
+                </button>
+                <button
                   onClick={() => setShowAddCandidateModal(true)}
                   className="px-5 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
                 >
@@ -2114,6 +2229,13 @@ const TestsAssessments = () => {
             setShowAddCandidateModal(false);
           }}
           onUpdate={() => {}}
+        />
+      )}
+
+      {showBulkAddCandidateModal && (
+        <BulkAddCandidate
+          isOpen={showBulkAddCandidateModal}
+          onClose={() => setShowBulkAddCandidateModal(false)}
         />
       )}
     </AdminLayout>
