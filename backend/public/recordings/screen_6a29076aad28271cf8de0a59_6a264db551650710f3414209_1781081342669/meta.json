@@ -1,0 +1,13 @@
+{
+  "session_id": "screen_6a29076aad28271cf8de0a59_6a264db551650710f3414209_1781081342669",
+  "interview_id": "6a29076aad28271cf8de0a59",
+  "candidate_id": "6a264db551650710f3414209",
+  "ext": "webm",
+  "chunkCount": 9,
+  "startedAt": "2026-06-10T08:49:34.122Z",
+  "lastChunkAt": "2026-06-10T08:50:52.855Z",
+  "status": "completed",
+  "mergedFile": "recording.webm",
+  "sizeBytes": 6117413,
+  "completedAt": "2026-06-10T08:50:52.921Z"
+}

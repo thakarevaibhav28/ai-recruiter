@@ -269,7 +269,7 @@ export const getCandidateProfile = async (req, res) => {
       const candidateData = interview.candidates.find(
         (c) => c.candidateId.toString() === id
       );
-      console.log("Candidate Data:", candidateData);
+      // console.log("Candidate Data:", candidateData);
 
       const scoreData = scores.find(
         (s) =>

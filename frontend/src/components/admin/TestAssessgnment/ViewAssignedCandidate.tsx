@@ -17,7 +17,7 @@ const ViewAssignedCandidate: React.FC<ViewAssignedCandidateProps> = ({
 }) => {
   const { theme } = useTheme();
   if (!isOpen || !assessmentData) return null;
-  console.log("assessmentData",assessmentData)
+  // console.log("assessmentData",assessmentData)
 
   const { candidates } = assessmentData;
 

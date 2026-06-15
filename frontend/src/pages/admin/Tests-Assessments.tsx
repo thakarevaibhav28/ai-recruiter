@@ -241,7 +241,6 @@ const TestsAssessments = () => {
   const [editLoading, setEditLoading] = useState(null);
   const [currentStep, setCurrentStep] = useState(1);
   const [reDirect, setReDirect] = useState(false);
-  console.log("selectedAssessment", assessments);
 
   const candidateDropdownRef = useRef<HTMLDivElement | null>(null);
 
@@ -344,7 +343,7 @@ const TestsAssessments = () => {
     setTemplatesLoading(true);
     try {
       const response = await adminService.getAssesments(id);
-      console.log("response", response);
+      // console.log("response", response);
       setAssessments(response.data?.data || response.data || []);
     } catch (err) {
       console.error("Error fetching assessments:", err);
@@ -546,7 +545,7 @@ const TestsAssessments = () => {
   };
 
   const toggleCandidateSelection = (candidate: any) => {
-    console.log("candidate", candidate);
+    // console.log("candidate", candidate);
     const isSelected = formData.candidates.some(
       (c: any) => c._id === candidate._id,
     );

@@ -666,7 +666,7 @@ const Candidates = () => {
       setLoading(true);
       const res = await adminService.getCandidateProfile(candidate._id);
       if (res.status === 200) {
-        console.log("Candidate profile:", res);
+        // console.log("Candidate profile:", res);
         setSelectedCandidate(res);
         setIsViewReportModalOpen(true);
       }

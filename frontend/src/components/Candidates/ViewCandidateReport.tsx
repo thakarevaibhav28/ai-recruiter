@@ -38,7 +38,7 @@ const ViewCandidateReportModal: React.FC<ViewCandidateReportModalProps> = ({
 
   /* ================= FILTER LOGIC ================= */
 
-  console.log("interviews", interviews);
+  // console.log("interviews", interviews);
   const filteredData = useMemo(() => {
     return interviews.filter((interview: any) => {
       const passed = interview.score >= interview.passingScore;

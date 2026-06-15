@@ -376,364 +376,7 @@ const earVal = (pts: faceapi.Point[]) =>
     : (edPt(pts[1], pts[5]) + edPt(pts[2], pts[4])) /
       (2 * edPt(pts[0], pts[3]));
 
-// ─── ANIMATED AVATAR ─────────────────────────────────────────────────────────
-/*
-const AnimatedAvatar = React.memo(({ state }: { state: AvatarState }) => {
-  const [blink, setBlink] = useState(false);
-  const [mouth, setMouth] = useState(0);
-  const [breathe, setBreathe] = useState(false);
-  useEffect(() => {
-    let t: any;
-    const l = () => {
-      t = setTimeout(
-        () => {
-          setBlink(true);
-          setTimeout(() => setBlink(false), 130);
-          l();
-        },
-        2500 + Math.random() * 2500,
-      );
-    };
-    l();
-    return () => clearTimeout(t);
-  }, []);
-  useEffect(() => {
-    const t = setInterval(() => setBreathe((p) => !p), 2200);
-    return () => clearInterval(t);
-  }, []);
-  useEffect(() => {
-    if (state !== "speaking") {
-      setMouth(0);
-      return;
-    }
-    const t = setInterval(() => setMouth((p) => (p % 4) + 1), 90);
-    return () => clearInterval(t);
-  }, [state]);
-  const mD = [
-    "M 116 218 Q 140 222 164 218",
-    "M 116 216 Q 140 228 164 216",
-    "M 114 215 Q 140 234 166 215",
-    "M 112 213 Q 140 238 168 213",
-    "M 114 215 Q 140 232 166 215",
-  ][mouth];
-  return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-[#0b1230] via-[#0d1535] to-[#060c22]">
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div
-          className="w-64 h-80 rounded-full opacity-15"
-          style={{
-            background: "radial-gradient(ellipse,#2D55FB 0%,transparent 70%)",
-            filter: "blur(50px)",
-          }}
-        />
-      </div>
-      <motion.div
-        animate={{ y: breathe && state === "idle" ? -4 : 0 }}
-        transition={{ duration: 2.2, ease: "easeInOut" }}
-      >
-        <svg
-          width="210"
-          height="252"
-          viewBox="0 0 280 340"
-          style={{ filter: "drop-shadow(0 12px 40px rgba(45,85,251,0.25))" }}
-        >
-          <defs>
-            <linearGradient id="av_skin" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#f8d5b5" />
-              <stop offset="45%" stopColor="#f0c4a0" />
-              <stop offset="100%" stopColor="#e0a87a" />
-            </linearGradient>
-            <linearGradient id="av_hair" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#3a2c1e" />
-              <stop offset="100%" stopColor="#1a140d" />
-            </linearGradient>
-            <linearGradient id="av_suit" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#162050" />
-              <stop offset="100%" stopColor="#0b1234" />
-            </linearGradient>
-            <radialGradient id="av_iris" cx="38%" cy="32%" r="62%">
-              <stop offset="0%" stopColor="#5b7bbf" />
-              <stop offset="100%" stopColor="#2d4a7a" />
-            </radialGradient>
-            <filter id="av_shadow">
-              <feDropShadow
-                dx="0"
-                dy="6"
-                stdDeviation="8"
-                floodColor="#000"
-                floodOpacity="0.28"
-              />
-            </filter>
-          </defs>
-          <rect
-            x="122"
-            y="232"
-            width="36"
-            height="45"
-            rx="6"
-            fill="url(#av_skin)"
-          />
-          <path
-            d="M 48 330 Q 50 268 90 256 L 140 266 L 190 256 Q 230 268 232 330 Z"
-            fill="url(#av_suit)"
-          />
-          <path
-            d="M 118 258 L 140 278 L 162 258 L 155 250 L 140 268 L 125 250 Z"
-            fill="#f0f4ff"
-          />
-          <path
-            d="M 134 263 L 140 308 L 146 263 L 140 258 Z"
-            fill="#2D55FB"
-            opacity="0.9"
-          />
-          <path
-            d="M 90 256 Q 112 245 130 250 L 118 258 Q 78 272 68 292 Z"
-            fill="#101840"
-            opacity="0.65"
-          />
-          <path
-            d="M 190 256 Q 168 245 150 250 L 162 258 Q 202 272 212 292 Z"
-            fill="#101840"
-            opacity="0.65"
-          />
-          <ellipse
-            cx="140"
-            cy="146"
-            rx="88"
-            ry="100"
-            fill="url(#av_skin)"
-            filter="url(#av_shadow)"
-          />
-          <path
-            d="M 56 108 Q 50 48 140 36 Q 230 48 224 108 L 220 128 Q 212 73 140 66 Q 68 73 60 128 Z"
-            fill="url(#av_hair)"
-          />
-          <path
-            d="M 56 108 Q 52 142 58 165 Q 54 132 60 128 Z"
-            fill="url(#av_hair)"
-          />
-          <path
-            d="M 224 108 Q 228 142 222 165 Q 226 132 220 128 Z"
-            fill="url(#av_hair)"
-          />
-          <ellipse cx="52" cy="153" rx="10" ry="14" fill="url(#av_skin)" />
-          <ellipse cx="228" cy="153" rx="10" ry="14" fill="url(#av_skin)" />
-          <path
-            d="M 86 106 Q 104 100 120 105"
-            stroke="#3a2c1e"
-            strokeWidth="3.2"
-            fill="none"
-            strokeLinecap="round"
-          />
-          <ellipse
-            cx="103"
-            cy="126"
-            rx="16"
-            ry={blink ? 0.8 : 12}
-            fill="white"
-          />
-          {!blink && (
-            <>
-              <ellipse cx="105" cy="127" rx="9" ry="9" fill="url(#av_iris)" />
-              <ellipse cx="105" cy="127" rx="5" ry="5" fill="#0a0a0a" />
-              <circle cx="102" cy="124" r="2.5" fill="white" opacity="0.9" />
-            </>
-          )}
-          <path
-            d={
-              blink
-                ? "M 87 126 Q 103 126 119 126"
-                : "M 87 118 Q 103 113 119 118"
-            }
-            stroke="#3a2c1e"
-            strokeWidth="1.8"
-            fill="none"
-            strokeLinecap="round"
-          />
-          <path
-            d="M 160 105 Q 176 100 194 106"
-            stroke="#3a2c1e"
-            strokeWidth="3.2"
-            fill="none"
-            strokeLinecap="round"
-          />
-          <ellipse
-            cx="177"
-            cy="126"
-            rx="16"
-            ry={blink ? 0.8 : 12}
-            fill="white"
-          />
-          {!blink && (
-            <>
-              <ellipse cx="175" cy="127" rx="9" ry="9" fill="url(#av_iris)" />
-              <ellipse cx="175" cy="127" rx="5" ry="5" fill="#0a0a0a" />
-              <circle cx="172" cy="124" r="2.5" fill="white" opacity="0.9" />
-            </>
-          )}
-          <path
-            d={
-              blink
-                ? "M 161 126 Q 177 126 193 126"
-                : "M 161 118 Q 177 113 193 118"
-            }
-            stroke="#3a2c1e"
-            strokeWidth="1.8"
-            fill="none"
-            strokeLinecap="round"
-          />
-          <path
-            d="M 140 133 L 135 168 Q 140 175 145 168 Z"
-            fill="#d4956a"
-            opacity="0.28"
-          />
-          <path
-            d="M 130 171 Q 140 177 150 171"
-            stroke="#c4856a"
-            strokeWidth="1.5"
-            fill="none"
-            strokeLinecap="round"
-          />
-          <path
-            d="M 116 213 Q 128 208 140 210 Q 152 208 164 213"
-            stroke="#c0766a"
-            strokeWidth="1.8"
-            fill="none"
-            strokeLinecap="round"
-          />
-          <path
-            d={mD}
-            stroke="#a85a5a"
-            strokeWidth="2.5"
-            fill={mouth > 1 ? "#7a3030" : "none"}
-            strokeLinecap="round"
-          />
-          {mouth > 1 && (
-            <path
-              d="M 120 216 Q 140 228 160 216 L 158 220 Q 140 232 122 220 Z"
-              fill="white"
-              opacity="0.88"
-            />
-          )}
-        </svg>
-      </motion.div>
-      <div className="mt-2 h-5 flex items-center justify-center">
-        {state === "thinking" && (
-          <div className="flex gap-1.5 items-center">
-            {[0, 0.15, 0.3].map((d, i) => (
-              <motion.div
-                key={i}
-                className="w-1.5 h-1.5 rounded-full bg-[#2D55FB]"
-                animate={{ y: ["0px", "-6px", "0px"], opacity: [0.5, 1, 0.5] }}
-                transition={{ duration: 0.7, repeat: Infinity, delay: d }}
-              />
-            ))}
-            <span className="text-white/35 text-[10px] ml-1 font-medium">
-              Thinking…
-            </span>
-          </div>
-        )}
-        {state === "speaking" && (
-          <div className="flex items-center gap-1">
-            {[0, 0.08, 0.16, 0.24, 0.16, 0.08].map((d, i) => (
-              <motion.div
-                key={i}
-                className="w-0.5 rounded-full bg-[#2D55FB]"
-                animate={{ height: ["3px", `${6 + (i % 3) * 4}px`, "3px"] }}
-                transition={{
-                  duration: 0.45,
-                  repeat: Infinity,
-                  delay: d,
-                  ease: "easeInOut",
-                }}
-              />
-            ))}
-            <span className="text-[#2D55FB] text-[10px] ml-1.5 font-semibold">
-              Speaking
-            </span>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-});
-*/
-
-// ─── AVATAR TILE ─────────────────────────────────────────────────────────────
-/*
-interface AvatarTileProps {
-  mode: AvatarMode;
-  state: AvatarState;
-  heygenVideoRef: React.RefObject<HTMLVideoElement | null>;
-  ganAiVideoUrl: string | null;
-  ganAiLoading: boolean;
-  heygenReady: boolean;
-}
-const AvatarTile = React.memo(
-  ({
-    mode,
-    state,
-    heygenVideoRef,
-    ganAiVideoUrl,
-    ganAiLoading,
-    heygenReady,
-  }: AvatarTileProps) => {
-    const ganRef = useRef<HTMLVideoElement>(null);
-    useEffect(() => {
-      if (ganAiVideoUrl && ganRef.current) {
-        ganRef.current.src = ganAiVideoUrl;
-        ganRef.current.play().catch(() => {});
-      }
-    }, [ganAiVideoUrl]);
-    return (
-      <div className="absolute inset-0">
-        <AnimatedAvatar
-          state={mode === "heygen" && heygenReady ? "idle" : state}
-        />
-        {mode === "heygen" && (
-          <video
-            ref={heygenVideoRef}
-            playsInline
-            autoPlay
-            className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ${heygenReady ? "opacity-100" : "opacity-0"}`}
-          />
-        )}
-        {mode === "ganai" && ganAiVideoUrl && (
-          <video
-            ref={ganRef}
-            playsInline
-            className="absolute inset-0 w-full h-full object-cover"
-            onEnded={() => {
-              if (ganRef.current) ganRef.current.src = "";
-            }}
-          />
-        )}
-        <div className="absolute top-3 left-3 z-20">
-          {mode === "heygen" && (
-            <div
-              className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border backdrop-blur-sm text-[9px] font-semibold ${heygenReady ? "bg-green-500/15 border-green-500/30 text-green-300" : "bg-amber-500/15 border-amber-500/30 text-amber-300"}`}
-            >
-              <div
-                className={`w-1.5 h-1.5 rounded-full ${heygenReady ? "bg-green-400" : "bg-amber-400"} animate-pulse`}
-              />
-              {heygenReady ? "Live Avatar" : "Connecting…"}
-            </div>
-          )}
-          {mode === "ganai" && (
-            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full border backdrop-blur-sm bg-purple-500/15 border-purple-500/30 text-purple-300 text-[9px] font-semibold">
-              <div
-                className={`w-1.5 h-1.5 rounded-full ${ganAiLoading ? "bg-amber-400 animate-pulse" : "bg-purple-400"}`}
-              />
-              {ganAiLoading ? "Rendering…" : "Gan.AI"}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  },
-);
-*/
-
+// ─── WAVE BAR ────────────────────────────────────────────────────────────────
 const WaveBar = ({ delay, active }: { delay: number; active: boolean }) => (
   <motion.span
     className="inline-block w-0.75 rounded-full bg-white/80 mx-[1.5px]"
@@ -832,7 +475,7 @@ const UserVideo = React.memo(
 );
 
 // ─── VIOLATION MODAL ──────────────────────────────────────────────────────────
-const ViolationModal = React.memo(
+const ViolationToast = React.memo(
   ({ alert, onClose }: { alert: AlertState; onClose: () => void }) => {
     const atMax = alert.count >= MAX_VIOLATIONS;
     const firedRef = useRef(false);
@@ -848,101 +491,96 @@ const ViolationModal = React.memo(
     }, [safeClose, atMax]);
 
     const isPersonSwap = alert.type === "person-substitution";
+    const color = atMax ? "#ef4444" : isPersonSwap ? "#f97316" : "#f59e0b";
 
     return (
-      <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-        <div
-          className="absolute inset-0 bg-black/75 backdrop-blur-md"
-          onClick={safeClose}
-        />
-        <div
-          className={`relative z-10 w-full max-w-sm mx-4 rounded-2xl border p-6 shadow-2xl ${
-            atMax
-              ? "bg-red-950/95 border-red-500/60"
-              : isPersonSwap
-                ? "bg-orange-950/95 border-orange-500/60"
-                : "bg-[#0d1836] border-amber-500/50"
-          }`}
-          style={{
-            animation: "violPop 0.25s cubic-bezier(0.34,1.56,0.64,1) both",
-          }}
-        >
-          <style>{`@keyframes violPop{from{opacity:0;transform:scale(0.88) translateY(20px)}to{opacity:1;transform:scale(1) translateY(0)}}`}</style>
-          <div
-            className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${
-              atMax
-                ? "bg-red-500/25"
+      <div
+        style={{
+          position: "fixed",
+          top: 72,
+          right: 16,
+          zIndex: 9999,
+          width: 272,
+          borderRadius: 10,
+          border: `1px solid ${color}44`,
+          background: "rgba(7,14,43,0.96)",
+          backdropFilter: "blur(10px)",
+          overflow: "hidden",
+          animation: "toastIn 0.22s cubic-bezier(0.34,1.56,0.64,1) both",
+        }}
+      >
+        <style>{`@keyframes toastIn{from{opacity:0;transform:translateX(30px)}to{opacity:1;transform:translateX(0)}}@keyframes shrink{from{width:100%}to{width:0%}}`}</style>
+
+        {/* top accent line */}
+        <div style={{ height: 3, background: color }} />
+
+        <div style={{ padding: "10px 12px 8px" }}>
+          {/* header row */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+            {/* icon */}
+            <div
+              style={{
+                width: 28, height: 28, borderRadius: 6, flexShrink: 0,
+                background: `${color}22`,
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}
+            >
+              {atMax
+                ? <ShieldAlert size={14} color={color} />
                 : isPersonSwap
-                  ? "bg-orange-500/25"
-                  : "bg-amber-500/25"
-            }`}
-          >
-            {atMax ? (
-              <ShieldAlert className="h-6 w-6 text-red-400" />
-            ) : isPersonSwap ? (
-              <UserX className="h-6 w-6 text-orange-400" />
-            ) : (
-              <AlertTriangle className="h-6 w-6 text-amber-400" />
-            )}
+                  ? <UserX size={14} color={color} />
+                  : <AlertTriangle size={14} color={color} />}
+            </div>
+
+            {/* title */}
+            <p style={{ fontSize: 12, fontWeight: 600, color: "#fff", flex: 1, lineHeight: 1.3, margin: 0 }}>
+              {atMax ? "Max Warnings Reached" : alert.title}
+            </p>
+
+            {/* warning count badge */}
+            <span
+              style={{
+                fontSize: 11, fontWeight: 700,
+                color: color,
+                background: `${color}18`,
+                border: `1px solid ${color}44`,
+                borderRadius: 99,
+                padding: "2px 8px",
+                whiteSpace: "nowrap",
+                letterSpacing: "0.02em",
+              }}
+            >
+              {alert.count}/{MAX_VIOLATIONS}
+            </span>
           </div>
-          <h3 className="text-white font-bold text-lg mb-1">
-            {atMax ? "Maximum Warnings Reached" : alert.title}
-          </h3>
-          <p
-            className={`text-sm mb-2 ${
-              atMax
-                ? "text-red-400"
-                : isPersonSwap
-                  ? "text-orange-400"
-                  : "text-amber-400"
-            }`}
-          >
-            {atMax
-              ? "Interview flagged — will auto-submit when complete"
-              : `Warning ${alert.count} of ${MAX_VIOLATIONS}`}
-          </p>
-          <p className="text-white/70 text-sm leading-relaxed mb-5">
+
+          {/* body */}
+          <p style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", lineHeight: 1.45, margin: "0 0 8px" }}>
             {alert.body}
           </p>
-          {!atMax && (
-            <div className="flex gap-1.5 mb-5">
-              {[...Array(MAX_VIOLATIONS)].map((_, i) => (
-                <div
-                  key={i}
-                  className={`flex-1 h-1.5 rounded-full transition-colors ${
-                    i < alert.count
-                      ? isPersonSwap
-                        ? "bg-orange-400"
-                        : "bg-amber-400"
-                      : "bg-white/10"
-                  }`}
-                />
-              ))}
-            </div>
-          )}
-          {atMax && (
-            <div className="flex gap-1.5 mb-5">
-              {[...Array(MAX_VIOLATIONS)].map((_, i) => (
-                <div key={i} className="flex-1 h-1.5 rounded-full bg-red-500" />
-              ))}
-            </div>
-          )}
-          <button
-            onClick={safeClose}
-            className={`w-full py-2.5 rounded-xl font-semibold text-white text-sm transition-colors ${
-              atMax
-                ? "bg-red-600 hover:bg-red-500"
-                : isPersonSwap
-                  ? "bg-orange-600 hover:bg-orange-500"
-                  : "bg-[#2D55FB] hover:bg-[#1e3fd4]"
-            }`}
-          >
-            {atMax ? "Continue Interview" : "I Understand — Continue"}
-          </button>
-          <p className="text-center text-white/30 text-[10px] mt-2">
-            Auto-closing in {atMax ? 5 : 8}s
-          </p>
+
+          {/* pip dots */}
+          <div style={{ display: "flex", gap: 3 }}>
+            {[...Array(MAX_VIOLATIONS)].map((_, i) => (
+              <div
+                key={i}
+                style={{
+                  flex: 1, height: 3, borderRadius: 99,
+                  background: i < alert.count ? color : "rgba(255,255,255,0.1)",
+                }}
+              />
+            ))}
+          </div>
         </div>
+
+        {/* shrinking progress bar */}
+        <div
+          style={{
+            height: 2,
+            background: `${color}55`,
+            animation: `shrink ${atMax ? 5 : 8}s linear forwards`,
+          }}
+        />
       </div>
     );
   },
@@ -1560,17 +1198,17 @@ const VideoInterview: React.FC = () => {
         .withFaceDescriptors();
 
       if (dets.length === 0) {
-        console.log("[Identity] Check skipped — no face detected");
+        console.log("Identity Check skipped — no face detected");
         return;
       }
       if (dets.length > 1) {
-        console.log("[Identity] Check skipped — multiple faces");
+        console.log("Identity Check skipped — multiple faces");
         return;
       }
 
       const { descriptor, detection } = dets[0];
       if (detection.score < 0.5) {
-        console.log("[Identity] Check skipped — low confidence detection");
+        console.log("Identity Check skipped — low confidence detection");
         return;
       }
 
@@ -1582,7 +1220,7 @@ const VideoInterview: React.FC = () => {
 
       console.log(
         `[Identity] Check — dist=${dist.toFixed(4)} threshold=${FACE_MATCH_THRESHOLD} match=${isSamePerson}`,
-      );
+      ); 
 
       if (!isSamePerson) {
         personChangeTicks.current++;
@@ -1612,7 +1250,7 @@ const VideoInterview: React.FC = () => {
         }
       } else {
         if (personChangeTicks.current > 0) {
-          console.log("[Identity] Match restored — resetting mismatch ticks");
+          // console.log("[Identity] Match restored — resetting mismatch ticks");
           personChangeTicks.current = 0;
           idMismatchAlertShownRef.current = false;
         }
@@ -1662,9 +1300,9 @@ const VideoInterview: React.FC = () => {
           registrationCompleteRef.current = true;
           identityStatusRef.current = "verified";
           setIdentityStatus("verified");
-          console.log(
-            "[Identity] ✓ Reference face registered — starting verification loop",
-          );
+          // console.log(
+          //   "[Identity] ✓ Reference face registered — starting verification loop",
+          // );
 
           if (identityCheckIntervalRef.current)
             clearInterval(identityCheckIntervalRef.current);
@@ -1693,7 +1331,7 @@ const VideoInterview: React.FC = () => {
       .then(() => {
         mlReady = true;
         faceRecognitionReadyRef.current = true;
-        console.log("[Proctor] Face models loaded — recognition active");
+        // console.log("[Proctor] Face models loaded — recognition active");
       })
       .catch((e) => console.warn("[Proctor] face-api failed:", e));
 
@@ -2789,13 +2427,13 @@ ${RULES}`;
   // ── Overlays ───────────────────────────────────────────────────────────────
   const overlays = (
     <>
-      {activeAlert && (
-        <ViolationModal
-          key={`${activeAlert.type}__${activeAlert.count}`}
-          alert={activeAlert}
-          onClose={handleAlertClose}
-        />
-      )}
+     {activeAlert && (
+  <ViolationToast 
+    key={`${activeAlert.type}__${activeAlert.count}`}
+    alert={activeAlert}
+    onClose={handleAlertClose}
+  />
+)}
       <AnimatePresence>
         {noiseWarning && screen !== "lobby" && !activeAlert && (
           <motion.div

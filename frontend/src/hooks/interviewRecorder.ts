@@ -102,9 +102,9 @@ export function useScreenRecorder({
         }
         setChunks((n) => n + 1);
         onChunkUploaded?.(chunkIndex);
-        console.log(
-          `[ScreenRecorder] ✓ chunk ${chunkIndex} (${Math.round(blob.size / 1024)} KB)${isFinal ? " [FINAL]" : ""}`,
-        );
+        // console.log(
+        //   `[ScreenRecorder] ✓ chunk ${chunkIndex} (${Math.round(blob.size / 1024)} KB)${isFinal ? " [FINAL]" : ""}`,
+        // );
       } catch (err) {
         console.error(`[ScreenRecorder] chunk ${chunkIndex} error:`, err);
         onError?.(err as Error);
@@ -181,7 +181,7 @@ screenStreamRef.current = screenStream;
       // Mic
       if (micStream && micStream.getAudioTracks().length > 0) {
         audioCtx.createMediaStreamSource(micStream).connect(dest);
-        console.log("[ScreenRecorder] ✓ Mic connected");
+        // console.log("[ScreenRecorder] ✓ Mic connected");
       }
 
       // AI (Vapi) — clone tracks so playback is unaffected
@@ -192,7 +192,7 @@ screenStreamRef.current = screenStream;
           .map((t) => t.clone());
         if (clones.length > 0) {
           audioCtx.createMediaStreamSource(new MediaStream(clones)).connect(dest);
-          console.log("[ScreenRecorder] ✓ Vapi AI audio cloned & connected");
+          // console.log("[ScreenRecorder] ✓ Vapi AI audio cloned & connected");
         }
       } else {
         console.warn("[ScreenRecorder] Vapi audio element not found");
@@ -211,11 +211,7 @@ screenStreamRef.current = screenStream;
     sessionIdRef.current = `screen_${interview_id}_${candidateId}_${Date.now()}`;
 
     const mimeType = getSupportedMime();
-    console.log(
-      `[ScreenRecorder] Starting | session=${sessionIdRef.current}`,
-      `| video=${combined.getVideoTracks().length}`,
-      `| audio=${combined.getAudioTracks().length}`,
-    );
+  
 
     // 4. MediaRecorder
     let recorder: MediaRecorder;
@@ -249,7 +245,7 @@ screenStreamRef.current = screenStream;
       // so any race-condition chunks that fire after are dropped
       if (isFinal) {
         isDeadRef.current = true;
-        console.log("[ScreenRecorder] Final chunk — marking dead, no more uploads after this");
+        // console.log("[ScreenRecorder] Final chunk — marking dead, no more uploads after this");
       }
 
       uploadChunk(event.data, idx, isFinal);
@@ -263,11 +259,11 @@ screenStreamRef.current = screenStream;
 
     recorder.onstart = () => {
       setStatus("recording");
-      console.log("[ScreenRecorder] ✓ Recording started");
+      // console.log("[ScreenRecorder] ✓ Recording started");
     };
 
     recorder.onstop = () => {
-      console.log("[ScreenRecorder] Stopped — cleaning up");
+      // console.log("[ScreenRecorder] Stopped — cleaning up");
       isDeadRef.current = true; // belt-and-suspenders
       cleanup();
       setStatus("stopped");
@@ -320,7 +316,7 @@ screenStreamRef.current = screenStream;
       recorder.requestData();
       recorder.stop();
 
-      console.log("[ScreenRecorder] stop() called — final chunk will upload then all uploads cease");
+      // console.log("[ScreenRecorder] stop() called — final chunk will upload then all uploads cease");
     });
   }, [cleanup]);
 

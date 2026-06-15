@@ -90,7 +90,7 @@ async function mergeChunks(sessionDir, ext, interview_id, candidate_id) {
   }
 
   const relativePath = `/screen-recordings/${path.basename(sessionDir)}/${finalName}`;
-  console.log(`[ScreenRec] Merged ${chunkFiles.length} chunks → ${relativePath}`);
+  // console.log(`[ScreenRec] Merged ${chunkFiles.length} chunks → ${relativePath}`);
   return relativePath;
 }
 
@@ -140,10 +140,10 @@ async function mergeInterviewChunks(sessionDir, ext = "webm") {
   }
 
   const totalSizeBytes = fs.statSync(finalPath).size;
-  console.log(
-    `[Recording] Merged ${chunkFiles.length} chunks → ${finalFilename}`,
-    `(${(totalSizeBytes / 1024 / 1024).toFixed(2)} MB)`,
-  );
+  // console.log(
+  //   `[Recording] Merged ${chunkFiles.length} chunks → ${finalFilename}`,
+  //   `(${(totalSizeBytes / 1024 / 1024).toFixed(2)} MB)`,
+  // );
 
   return {
     filename: finalFilename,
@@ -185,7 +185,7 @@ router.post("/login/:id", async (req, res) => {
         c.password === password,
     );
 
-    console.log(candidateEntry);
+    // console.log(candidateEntry);
     if (!candidateEntry) {
       return res.status(400).json({ message: "Invalid credentials" });
     }
@@ -630,9 +630,7 @@ router.post(
       const chunkFile = path.join(sessionDir, `chunk_${paddedIdx}.${ext}`);
       fs.writeFileSync(chunkFile, req.file.buffer);
 
-      console.log(
-        `[ScreenRec] chunk ${chunkIdx} saved → ${chunkFile} (${req.file.size} bytes)${isFinal ? " [FINAL]" : ""}`,
-      );
+  
 
       let finalPath = null;
       if (isFinal) {
@@ -683,7 +681,7 @@ router.post("/upload-screen-chunk", chunkUpload.single("chunk"), async (req, res
 
     fs.writeFileSync(chunkPath, req.file.buffer);
 
-    console.log(`✓ Chunk uploaded: ${chunkFilename} (${req.file.size} bytes)`);
+    // console.log(`✓ Chunk uploaded: ${chunkFilename} (${req.file.size} bytes)`);
 
     res.json({
       message: "Chunk uploaded successfully",
@@ -793,11 +791,6 @@ router.post(
       const chunkFile = path.join(sessionDir, `chunk_${paddedIdx}.${ext}`);
       fs.writeFileSync(chunkFile, req.file.buffer);
 
-      console.log(
-        `[Recording] chunk ${chunkIdx} → ${path.basename(sessionDir)}/chunk_${paddedIdx}.${ext}`,
-        `(${(req.file.size / 1024).toFixed(1)} KB)`,
-        isFinal ? "[FINAL]" : "",
-      );
 
       // ── Write / update meta.json ─────────────────────────────────────────
       const metaPath = path.join(sessionDir, "meta.json");
