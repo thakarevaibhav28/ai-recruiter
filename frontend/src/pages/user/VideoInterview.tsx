@@ -2631,32 +2631,14 @@ ${RULES}`;
                   "Interview"}{" "}
                 • {interviewInfo?.duration || "N/A"}
               </p>
-              <div
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl max-w-xs border ${USE_HEYGEN ? "bg-green-500/10 border-green-500/25" : USE_GANAI ? "bg-purple-500/10 border-purple-500/25" : "bg-[#2D55FB]/10 border-[#2D55FB]/25"}`}
-              >
-                <div
-                  className={`w-2 h-2 rounded-full ${USE_HEYGEN ? "bg-green-400" : USE_GANAI ? "bg-purple-400" : "bg-[#2D55FB]/60"}`}
-                />
-                <span className="text-white/50 text-xs">
-                  {USE_HEYGEN
-                    ? "Photorealistic via HeyGen"
-                    : USE_GANAI
-                      ? "Via Gan.AI"
-                      : "Animated AI avatar"}
-                </span>
-              </div>
+           
               <div className="flex items-center gap-2 px-3.5 py-2 bg-[#2D55FB]/10 border border-[#2D55FB]/25 rounded-xl max-w-xs">
                 <Maximize className="h-3.5 w-3.5 text-[#2D55FB]/70 shrink-0" />
                 <span className="text-white/50 text-xs">
                   Fullscreen + proctored interview
                 </span>
               </div>
-              <div className="flex items-center gap-2 px-3.5 py-2 bg-orange-500/10 border border-orange-500/25 rounded-xl max-w-xs">
-                <UserX className="h-3.5 w-3.5 text-orange-400/70 shrink-0" />
-                <span className="text-white/50 text-xs">
-                  Face identity verified throughout interview
-                </span>
-              </div>
+              
               <div className="flex items-center">
                 <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-400 to-indigo-700 border-2 border-[#2D55FB] flex items-center justify-center shadow-lg">
                   <User className="h-6 w-6 text-white/80" />
