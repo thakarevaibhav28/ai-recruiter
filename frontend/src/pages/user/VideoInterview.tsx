@@ -1923,7 +1923,7 @@ const VideoInterview: React.FC = () => {
           ? ` Person substitution was detected ${personSwapCount} time(s).`
           : "";
 
-      const prompt = `You are a senior recruitment analyst with 15+ years of hiring experience. Produce a rigorous, accurate, evidence-based assessment of the following interview. This assessment will directly determine whether the candidate is hired — be thorough and honest.\n\nCANDIDATE: ${cName}\nROLE: ${pos}${violationSummary}${personSwapNote}\n\nINTERVIEW TRANSCRIPT:\n${transcript.map((m) => `${m.role === "Interviewer" ? "Interviewer" : "Candidate"}: ${m.text}`).join("\n")}\n\nReturn a JSON object ONLY — no markdown, no extra text, no code fences:\n{\n  \"candidateName\": \"${cName}\",\n  \"role\": \"${pos}\",\n  \"confidenceScore\": <integer 0-100>,\n  \"confidenceLabel\": <\"High Confidence\" | \"Moderate Confidence\" | \"Low Confidence\">,\n  \"behavioralInsights\": [\n    { \"title\": \"Communication Style\",       \"description\": \"<precise one-sentence observation>\", \"status\": <\"good\"|\"warning\"|\"bad\"> },\n    { \"title\": \"Problem-Solving Approach\",  \"description\": \"<precise one-sentence observation>\", \"status\": <\"good\"|\"warning\"|\"bad\"> },\n    { \"title\": \"Professionalism & Poise\",   \"description\": \"<precise one-sentence observation>\", \"status\": <\"good\"|\"warning\"|\"bad\"> }\n  ],\n  \"technicalCompetency\": [\n    { \"title\": \"Core Knowledge\",       \"description\": \"<precise one-sentence observation>\", \"status\": <\"good\"|\"warning\"|\"bad\"> },\n    { \"title\": \"Practical Experience\", \"description\": \"<precise one-sentence observation>\", \"status\": <\"good\"|\"warning\"|\"bad\"> },\n    { \"title\": \"Advanced Topics\",      \"description\": \"<precise one-sentence observation>\", \"status\": <\"good\"|\"warning\"|\"bad\"> }\n  ],\n  \"speechPatterns\": {\n    \"clarityScore\": <integer 0-100>,\n    \"avgResponseTime\": \"<estimate e.g. '1.4s' or '5.2s'>\",\n    \"confidenceLevel\": <integer 0-100>,\n    \"complexityScore\": <float 1.0-5.0>\n  },\n  \"proctoringFlags\": ${alertCountRef.current},\n  \"personSubstitutionFlags\": ${personSwapCount},\n  \"recommendations\": [\n    \"<specific, actionable recommendation 1>\",\n    \"<specific, actionable recommendation 2>\"\n  ],\n  \"overallVerdict\": <\"hire\" | \"consider\" | \"reject\">,\n  \"verdictReason\": \"<one evidence-based sentence with specific transcript references>\"\n}`;
+      const prompt = `You are a senior recruitment analyst with 25+ years of hiring experience. Produce a rigorous, accurate, evidence-based assessment of the following interview. This assessment will directly determine whether the candidate is hired — be thorough and honest.\n\nCANDIDATE: ${cName}\nROLE: ${pos}${violationSummary}${personSwapNote}\n\nINTERVIEW TRANSCRIPT:\n${transcript.map((m) => `${m.role === "Interviewer" ? "Interviewer" : "Candidate"}: ${m.text}`).join("\n")}\n\nReturn a JSON object ONLY — no markdown, no extra text, no code fences:\n{\n  \"candidateName\": \"${cName}\",\n  \"role\": \"${pos}\",\n  \"confidenceScore\": <integer 0-100>,\n  \"confidenceLabel\": <\"High\" | \"Moderate\" | \"Low\">,\n  \"behavioralInsights\": [\n    { \"title\": \"Communication Style\",       \"description\": \"<precise one-sentence observation>\", \"status\": <\"good\"|\"warning\"|\"bad\"> },\n    { \"title\": \"Problem-Solving Approach\",  \"description\": \"<precise one-sentence observation>\", \"status\": <\"good\"|\"warning\"|\"bad\"> },\n    { \"title\": \"Professionalism & Poise\",   \"description\": \"<precise one-sentence observation>\", \"status\": <\"good\"|\"warning\"|\"bad\"> }\n  ],\n  \"technicalCompetency\": [\n    { \"title\": \"Core Knowledge\",       \"description\": \"<precise one-sentence observation>\", \"status\": <\"good\"|\"warning\"|\"bad\"> },\n    { \"title\": \"Practical Experience\", \"description\": \"<precise one-sentence observation>\", \"status\": <\"good\"|\"warning\"|\"bad\"> },\n    { \"title\": \"Advanced Topics\",      \"description\": \"<precise one-sentence observation>\", \"status\": <\"good\"|\"warning\"|\"bad\"> }\n  ],\n  \"speechPatterns\": {\n    \"clarityScore\": <integer 0-100>,\n    \"avgResponseTime\": \"<estimate e.g. '1.4s' or '5.2s'>\",\n    \"confidenceLevel\": <integer 0-100>,\n    \"complexityScore\": <float 1.0-5.0>\n  },\n  \"proctoringFlags\": ${alertCountRef.current},\n  \"personSubstitutionFlags\": ${personSwapCount},\n  \"recommendations\": [\n    \"<specific, actionable recommendation 1>\",\n    \"<specific, actionable recommendation 2>\"\n  ],\n  \"overallVerdict\": <\"hire\" | \"consider\" | \"rejected\">,\n  \"verdictReason\": \"<one evidence-based sentence with specific transcript references>\"\n}`;
 
       const r = await fetch(`${Base_Url}/ai-feedback`, {
         method: "POST",
@@ -1935,22 +1935,46 @@ const VideoInterview: React.FC = () => {
         .replace(/```json|```/g, "")
         .trim();
       if (raw) {
-        let parsed: any = {};
+        let parsed: any | null = null;
         try {
           parsed = JSON.parse(raw);
-        } catch {}
-        await userService.generateFeedback({
-          interview_id,
-          candidateId: cand_id.candidateId._id,
-          userName: userData?.name,
-          userEmail: userData?.email,
-          feedback: parsed,
-          transcript,
-          behaviorReport: behaviorTracker.current.getReport(),
-          violationCount: alertCountRef.current,
-          personSubstitutionCount: personSwapCount,
-          completedAt: new Date().toISOString(),
-        });
+        } catch {
+          console.warn("[generateFeedback] AI returned non-parseable JSON:", raw);
+        }
+
+        // Only save if we got a valid non-empty feedback object
+        if (parsed && typeof parsed === "object" && Object.keys(parsed).length > 0) {
+          // ── Normalize confidenceLabel to match schema enum ["High","Moderate","Low"] ──
+          if (parsed.confidenceLabel) {
+            const cl = String(parsed.confidenceLabel);
+            if (cl.toLowerCase().includes("high")) parsed.confidenceLabel = "High";
+            else if (cl.toLowerCase().includes("moderate")) parsed.confidenceLabel = "Moderate";
+            else if (cl.toLowerCase().includes("low")) parsed.confidenceLabel = "Low";
+          }
+
+          // ── Normalize overallVerdict to match schema enum ["hire","consider","rejected"] ──
+          if (parsed.overallVerdict) {
+            const ov = String(parsed.overallVerdict).toLowerCase();
+            if (ov === "reject" || ov === "no" || ov === "rejected") parsed.overallVerdict = "rejected";
+            else if (ov === "hire" || ov === "yes") parsed.overallVerdict = "hire";
+            else if (ov === "consider" || ov === "maybe") parsed.overallVerdict = "consider";
+          }
+
+          await userService.generateFeedback({
+            interview_id,
+            candidateId: cand_id.candidateId._id,
+            userName: userData?.name,
+            userEmail: userData?.email,
+            feedback: parsed,
+            transcript,
+            behaviorReport: behaviorTracker.current.getReport(),
+            violationCount: alertCountRef.current,
+            personSubstitutionCount: personSwapCount,
+            completedAt: new Date().toISOString(),
+          });
+        } else {
+          console.error("[generateFeedback] Skipping save — feedback object is empty or invalid.");
+        }
       }
     } catch (e) {
       console.error("Feedback:", e);

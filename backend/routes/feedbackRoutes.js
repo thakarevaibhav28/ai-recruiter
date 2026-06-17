@@ -928,6 +928,13 @@ router.post("/ai-feedback", async (req, res) => {
 
   const { prompt } = req.body;
 
+  if (!prompt || typeof prompt !== "string") {
+    return res.status(400).json({
+      feedback: "",
+      error: "prompt (string) is required.",
+    });
+  }
+
   if (prompt.length > 200_000) {
     return res.status(413).json({
       feedback: "",
@@ -946,7 +953,7 @@ router.post("/ai-feedback", async (req, res) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "llama-3.1-8b-instant", // free, fast, great at JSON
+          model: "llama-3.1-8b-instant",
           messages: [
             {
               role: "system",
@@ -958,9 +965,10 @@ router.post("/ai-feedback", async (req, res) => {
               content: prompt,
             },
           ],
-          max_tokens: 1500,
+          max_tokens: 2000,
           temperature: 0.3,
           stream: false,
+          response_format: { type: "json_object" },
         }),
       },
     );
