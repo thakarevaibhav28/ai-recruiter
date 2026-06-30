@@ -500,52 +500,53 @@ const ViolationToast = React.memo(
           top: 72,
           right: 16,
           zIndex: 9999,
-          width: 272,
-          borderRadius: 10,
+          width: 340,
+          borderRadius: 14,
           border: `1px solid ${color}44`,
           background: "rgba(7,14,43,0.96)",
           backdropFilter: "blur(10px)",
           overflow: "hidden",
           animation: "toastIn 0.22s cubic-bezier(0.34,1.56,0.64,1) both",
         }}
+
       >
         <style>{`@keyframes toastIn{from{opacity:0;transform:translateX(30px)}to{opacity:1;transform:translateX(0)}}@keyframes shrink{from{width:100%}to{width:0%}}`}</style>
 
         {/* top accent line */}
         <div style={{ height: 3, background: color }} />
 
-        <div style={{ padding: "10px 12px 8px" }}>
+       <div style={{ padding: "14px 16px 12px" }}>
           {/* header row */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
             {/* icon */}
             <div
               style={{
-                width: 28, height: 28, borderRadius: 6, flexShrink: 0,
+                width: 36, height: 36, borderRadius: 8, flexShrink: 0,
                 background: `${color}22`,
                 display: "flex", alignItems: "center", justifyContent: "center",
               }}
             >
               {atMax
-                ? <ShieldAlert size={14} color={color} />
+                ? <ShieldAlert size={18} color={color} />
                 : isPersonSwap
-                  ? <UserX size={14} color={color} />
-                  : <AlertTriangle size={14} color={color} />}
+                  ? <UserX size={18} color={color} />
+                  : <AlertTriangle size={18} color={color} />}
             </div>
 
             {/* title */}
-            <p style={{ fontSize: 12, fontWeight: 600, color: "#fff", flex: 1, lineHeight: 1.3, margin: 0 }}>
+            <p style={{ fontSize: 14, fontWeight: 700, color: "#fff", flex: 1, lineHeight: 1.3, margin: 0 }}>
               {atMax ? "Max Warnings Reached" : alert.title}
             </p>
 
             {/* warning count badge */}
             <span
               style={{
-                fontSize: 11, fontWeight: 700,
+                fontSize: 12, fontWeight: 700,
                 color: color,
                 background: `${color}18`,
                 border: `1px solid ${color}44`,
                 borderRadius: 99,
-                padding: "2px 8px",
+                padding: "3px 10px",
                 whiteSpace: "nowrap",
                 letterSpacing: "0.02em",
               }}
@@ -555,17 +556,17 @@ const ViolationToast = React.memo(
           </div>
 
           {/* body */}
-          <p style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", lineHeight: 1.45, margin: "0 0 8px" }}>
+          <p style={{ fontSize: 12, color: "rgba(255,255,255,0.65)", lineHeight: 1.6, margin: "0 0 12px" }}>
             {alert.body}
           </p>
 
           {/* pip dots */}
-          <div style={{ display: "flex", gap: 3 }}>
+          <div style={{ display: "flex", gap: 4 }}>
             {[...Array(MAX_VIOLATIONS)].map((_, i) => (
               <div
                 key={i}
                 style={{
-                  flex: 1, height: 3, borderRadius: 99,
+                  flex: 1, height: 4, borderRadius: 99,
                   background: i < alert.count ? color : "rgba(255,255,255,0.1)",
                 }}
               />
@@ -2064,16 +2065,30 @@ const VideoInterview: React.FC = () => {
     const durationMins =
       parseInt(String(interviewInfo?.duration || "5"), 10) || 5;
 
-    const NATURAL_CONV = `
+//     const NATURAL_CONV = `
+// NATURAL CONVERSATION RULES (follow these strictly):
+// 1. ALWAYS wait for the candidate to completely finish speaking before responding.
+// 2. If the candidate pauses mid-answer for up to 5 seconds, DO NOT interrupt — they may be thinking.
+// 3. Only respond after a clear, definitive end to their turn.
+// 4. Give brief, natural acknowledgements like "That makes sense", "Good point", "I appreciate that" before moving to the next question — never jump immediately.
+// 5. Speak at a conversational pace — not robotic. Use natural filler phrases like "So...", "Right, so...", "Let me ask you..." when transitioning.
+// 6. Keep your questions concise — one question at a time, never compound questions.
+// 7. If the candidate seems to be mid-thought, stay silent and let them finish.
+// 8. NEVER treat silence alone as a completed answer. Only move on after you hear an actual response.`;
+
+ const NATURAL_CONV = `
 NATURAL CONVERSATION RULES (follow these strictly):
 1. ALWAYS wait for the candidate to completely finish speaking before responding.
 2. If the candidate pauses mid-answer for up to 5 seconds, DO NOT interrupt — they may be thinking.
 3. Only respond after a clear, definitive end to their turn.
-4. Give brief, natural acknowledgements like "That makes sense", "Good point", "I appreciate that" before moving to the next question — never jump immediately.
-5. Speak at a conversational pace — not robotic. Use natural filler phrases like "So...", "Right, so...", "Let me ask you..." when transitioning.
-6. Keep your questions concise — one question at a time, never compound questions.
-7. If the candidate seems to be mid-thought, stay silent and let them finish.
-8. NEVER treat silence alone as a completed answer. Only move on after you hear an actual response.`;
+4. NEVER say "Thank you" or "Thanks" after every answer — it sounds robotic and repetitive. Instead react naturally: "Got it.", "Interesting.", "Right.", "Makes sense.", "I see.", "Okay.", or just move forward naturally.
+5. COUNTER-QUESTIONS: When a candidate gives a vague, shallow, or interesting answer — ask a natural follow-up or counter-question to dig deeper. Examples: "Can you walk me through a specific example?", "What was the outcome of that?", "How did you handle that technically?", "What would you do differently now?". This makes the conversation feel like a real interview.
+6. CONFIDENCE CHALLENGE: Occasionally, after a candidate gives an answer — especially if they sound uncertain, hesitant, or their answer seems incomplete — challenge them with phrases like: "Are you sure about that?", "Interesting — are you confident in that answer?", "That's one way to look at it — would you like to reconsider?", "Are you certain that's the right approach?". This tests how confident the candidate is in their knowledge. Do NOT overuse this — apply it 1-2 times during the entire interview, at natural moments.
+7. Speak at a conversational pace — not robotic. Use natural filler phrases like "So...", "Right, so...", "Let me ask you..." when transitioning.
+8. Keep your questions concise — one question at a time, never compound questions.
+9. If the candidate seems to be mid-thought, stay silent and let them finish.
+10. NEVER treat silence alone as a completed answer. Only move on after you hear an actual response.
+11. Vary your acknowledgement style — do NOT use the same phrase twice in a row. Keep it natural and human.`;
 
     const PRECHECK = `
 PHASE 1 — AUDIO CHECK:
@@ -2087,8 +2102,14 @@ PHASE 2 — INTERVIEW:
 - You are a ${diff}-level interviewer. Be professional, warm, and genuinely conversational.
 - Start with: "So, could you tell me a little about yourself?" then wait for the full response.
 - Ask exactly ${numQs} questions, one at a time.
-- After each answer, give a brief natural acknowledgement, then ask the next question.
-- After all ${numQs} questions, wrap up warmly and naturally — like a real interviewer.`;
+- After each answer:
+  * DO NOT say "Thank you for your answer" or any variation of it.
+  * React naturally and briefly ("Got it.", "Interesting.", "Right.", "Makes sense.", or just a short pause filler).
+  * If the answer is vague or interesting, ask ONE natural counter/follow-up question before moving to the next planned question — but count it as part of the flow, not an extra question.
+  * If the candidate sounds uncertain or hesitant, challenge them: "Are you sure about that?", "Are you confident in that answer?", or "Would you like to reconsider?" — use this 1-2 times max across the whole interview.
+  * If the answer is complete and clear, move on to the next question smoothly.
+- Be unpredictable and human — sometimes jump straight to the next question, sometimes probe deeper. A real interviewer does NOT follow a rigid script.
+- After all ${numQs} questions, wrap up warmly and naturally — like a real interviewer would.`;
 
     let sys = "",
       first = "";
@@ -2400,17 +2421,17 @@ ${RULES}`;
           <Maximize className="w-2.5 h-2.5" />
           {isFullscreen ? "Fullscreen" : "Not FS!"}
         </div>
-        {noFaceVisible && (
+        {/* {noFaceVisible && (
           <span className="text-red-400 text-[10px] font-bold animate-pulse">
             ⚠ No face
           </span>
-        )}
-        {!noFaceVisible && alertCountRef.current > 0 && (
+        )} */}
+        {/* {!noFaceVisible && alertCountRef.current > 0 && (
           <span className="text-orange-400 text-[10px] font-bold">
             {alertCountRef.current}/{MAX_VIOLATIONS} warns
           </span>
-        )}
-        {isCallActive && (
+        )} */}
+        {/* {isCallActive && (
           <div
             className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[9px] font-semibold ${
               identityStatus === "verified"
@@ -2431,8 +2452,8 @@ ${RULES}`;
                   ? "Scanning"
                   : "ID…"}
           </div>
-        )}
-        <div className="flex items-center gap-1">
+        )} */}
+        {/* <div className="flex items-center gap-1">
           <div
             className={`w-1.5 h-1.5 rounded-full ${faceStatus === "ok" ? "bg-green-400" : faceStatus === "warn" ? "bg-red-400 animate-pulse" : "bg-gray-500"}`}
           />
@@ -2443,7 +2464,7 @@ ${RULES}`;
                 ? "Alert"
                 : "Scanning"}
           </span>
-        </div>
+        </div> */}
       </div>
     </div>
   );

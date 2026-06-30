@@ -301,7 +301,7 @@ const ActiveInterviews: React.FC<ActiveInterviewsProps> = ({
                           onClick={() => onNavigateToInterviewSetup(assessment)}
                           className="flex-1 px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 active:scale-95 transition-all duration-150"
                         >
-                          Use Template
+                         Add Candidates
                         </button>
                         <button
                           onClick={() => handleViewCandidates(assessment)}

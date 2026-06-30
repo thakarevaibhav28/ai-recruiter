@@ -10,7 +10,6 @@ import MCQRoutes from "./routes/MCQRoutes.js";
 
 const app = express();
 
-connectDB();
 
 //cors configuration
 const allowedOrigins = [

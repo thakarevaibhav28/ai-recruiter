@@ -152,6 +152,12 @@
 //   const [cardScanLinePos, setCardScanLinePos] = useState(0);
 //   const [cardFrozenFrame, setCardFrozenFrame] = useState<string | null>(null);
 
+//   // ── auto-capture state ────────────────────────────────────────────────────────
+//   const [autoDetectConfidence, setAutoDetectConfidence] = useState(0); // 0-100 fill for the detection bar
+//   const autoDetectIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+//   const autoDetectCanvasRef = useRef<HTMLCanvasElement>(null);
+//   const isAutoCapturingRef = useRef(false); // guard: don't trigger twice
+
 //   // ── refs: photo camera ─────────────────────────────────────────────────────────────
 //   const canvasRef = useRef<HTMLCanvasElement>(null);
 //   const liveCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -191,13 +197,87 @@
 //     setCardCamError(null);
 //     setCardScanProgress(0);
 //     setCardFrozenFrame(null);
+//     setAutoDetectConfidence(0);
+//     isAutoCapturingRef.current = false;
 //   };
+
+//   // ═══════════════════════════════════════════════════════════════════════════
+//   // ─── AUTO-DETECT HELPERS ─────────────────────────────────────────────────
+//   // ═══════════════════════════════════════════════════════════════════════════
+
+//   /**
+//    * Stops the auto-detect polling interval.
+//    */
+//   const stopAutoDetect = useCallback(() => {
+//     if (autoDetectIntervalRef.current) {
+//       clearInterval(autoDetectIntervalRef.current);
+//       autoDetectIntervalRef.current = null;
+//     }
+//   }, []);
+
+//   /**
+//    * Runs a lightweight Tesseract OCR sample every 2.5 s on a small
+//    * low-resolution snapshot of the live video.  When ≥ 2 of the three
+//    * Aadhaar signals are found the confidence bar fills to 100 % and
+//    * captureAndVerifyCard() is triggered automatically.
+//    */
+//   const startAutoDetect = useCallback((captureCallback: () => void) => {
+//     stopAutoDetect();
+//     isAutoCapturingRef.current = false;
+//     setAutoDetectConfidence(0);
+
+//     autoDetectIntervalRef.current = setInterval(async () => {
+//       // guard: only run when camera is still active
+//       const video = cardVideoRef.current;
+//       const canvas = autoDetectCanvasRef.current;
+//       if (!video || !canvas || isAutoCapturingRef.current) return;
+//       if (video.readyState < 2) return; // video not ready
+
+//       // grab a small downsampled snapshot (320×180) for speed
+//       const W = 320, H = 180;
+//       canvas.width = W;
+//       canvas.height = H;
+//       const ctx = canvas.getContext("2d");
+//       if (!ctx) return;
+//       ctx.drawImage(video, 0, 0, W, H);
+//       const dataUrl = canvas.toDataURL("image/jpeg", 0.75);
+
+//       try {
+//         const result = await Tesseract.recognize(dataUrl, "eng", { logger: () => {} });
+//         const upper = result.data.text.toUpperCase();
+
+//         const hasAadhaarKeyword = /AADHAAR|AADHAR|UIDAI/.test(upper) || /\bUID\b/.test(upper);
+//         const has12Digit =
+//           /\d{4}[\s\-]?\d{4}[\s\-]?\d{4}/.test(upper) ||
+//           /[X\d]{4}[\s\-]?[X\d]{4}[\s\-]?[X\d]{4}/i.test(upper);
+//         const hasGovt = /GOVERNMENT\s+OF\s+INDIA|GOVT\.?\s+OF\s+INDIA/.test(upper);
+
+//         const signalsFound = [hasAadhaarKeyword, has12Digit, hasGovt].filter(Boolean).length;
+//         // map 0→1→2→3 signals to 0→40→75→100 confidence
+//         const confidenceMap: Record<number, number> = { 0: 0, 1: 40, 2: 75, 3: 100 };
+//         const confidence = confidenceMap[signalsFound] ?? 0;
+//         setAutoDetectConfidence(confidence);
+
+//         if (signalsFound >= 2 && !isAutoCapturingRef.current) {
+//           isAutoCapturingRef.current = true;
+//           stopAutoDetect();
+//           // small delay so the bar visually reaches 100% before the capture kicks in
+//           setTimeout(() => {
+//             captureCallback();
+//           }, 400);
+//         }
+//       } catch {
+//         // silent — OCR errors during polling are non-fatal
+//       }
+//     }, 2500); // poll every 2.5 seconds
+//   }, [stopAutoDetect]);
 
 //   // ═══════════════════════════════════════════════════════════════════════════
 //   // ─── CARD CAMERA HELPERS ──────────────────────────────────────────────────
 //   // ═══════════════════════════════════════════════════════════════════════════
 
 //   const stopCardCamera = useCallback(() => {
+//     stopAutoDetect();
 //     if (cardStreamRef.current) {
 //       cardStreamRef.current.getTracks().forEach((t) => t.stop());
 //       cardStreamRef.current = null;
@@ -206,7 +286,7 @@
 //       cancelAnimationFrame(cardScanRafRef.current);
 //       cardScanRafRef.current = null;
 //     }
-//   }, []);
+//   }, [stopAutoDetect]);
 
 //   const runCardScanLine = useCallback(() => {
 //     const tick = () => {
@@ -219,11 +299,19 @@
 //     cardScanRafRef.current = requestAnimationFrame(tick);
 //   }, []);
 
+//   /**
+//    * captureAndVerifyCard is declared below but we need a stable ref to it
+//    * so startCardCamera can pass it into startAutoDetect without a stale closure.
+//    */
+//   const captureAndVerifyCardRef = useRef<() => void>(() => {});
+
 //   const startCardCamera = useCallback(async () => {
 //     setCardCamError(null);
 //     setCardFrozenFrame(null);
 //     setCardCamStatus("idle");
 //     setCardScanProgress(0);
+//     setAutoDetectConfidence(0);
+//     isAutoCapturingRef.current = false;
 //     cardScanPosRef.current = 0;
 //     cardScanDirRef.current = 1;
 //     try {
@@ -241,10 +329,12 @@
 //       }
 //       setCardCamStatus("active");
 //       runCardScanLine();
+//       // start auto-detect polling — pass ref so closure is always fresh
+//       startAutoDetect(() => captureAndVerifyCardRef.current());
 //     } catch {
 //       toast.error("Camera access denied. Please allow camera permission and try again.");
 //     }
-//   }, [runCardScanLine]);
+//   }, [runCardScanLine, startAutoDetect]);
 
 //   /**
 //    * Freeze current frame, stop stream, run Tesseract OCR on captured image.
@@ -324,6 +414,11 @@
 //     }
 //   }, [stopCardCamera]);
 
+//   // Keep the ref in sync so auto-detect always calls the latest version
+//   useEffect(() => {
+//     captureAndVerifyCardRef.current = captureAndVerifyCard;
+//   }, [captureAndVerifyCard]);
+
 //   /** Reset card-camera so user can try again */
 //   const retakeCard = useCallback(() => {
 //     stopCardCamera();
@@ -331,6 +426,8 @@
 //     setCardCamError(null);
 //     setCardScanProgress(0);
 //     setCardFrozenFrame(null);
+//     setAutoDetectConfidence(0);
+//     isAutoCapturingRef.current = false;
 //     cardScanPosRef.current = 0;
 //     cardScanDirRef.current = 1;
 //   }, [stopCardCamera]);
@@ -413,7 +510,7 @@
 // //  const handleComplete = () => navigate(userPath("instructions", interviewId), { replace: true });
 
 //   useEffect(() => {
-//     return () => { stopStream(); stopLiveAnalysis(); stopCountdown(); stopScan(); stopCardCamera(); };
+//     return () => { stopStream(); stopLiveAnalysis(); stopCountdown(); stopScan(); stopCardCamera(); stopAutoDetect(); };
 //   }, []);
 
   
@@ -436,6 +533,8 @@
 //       <canvas ref={canvasRef} className="hidden" />
 //       <canvas ref={liveCanvasRef} className="hidden" />
 //       <canvas ref={cardCanvasRef} className="hidden" />
+//       {/* Hidden canvas for auto-detect sampling (low-res) */}
+//       <canvas ref={autoDetectCanvasRef} className="hidden" />
 
 //       <div className="relative z-10 min-h-screen">
 
@@ -638,7 +737,8 @@
 //                       Flow:
 //                         idle     → user clicks "Open Camera"
 //                         active   → live preview + animated scan line overlay + card guide corners
-//                                    user aligns card, clicks "Capture & Verify"
+//                                    auto-detect polls every 2.5 s; when card detected → auto-captures
+//                                    user can also manually click "Capture & Verify"
 //                         scanning → frozen frame shown, Tesseract runs, progress bar
 //                         verified → green overlay, "Proceed" unlocked
 //                         error    → red overlay with reason, "Try Again" retake button
@@ -646,7 +746,7 @@
 //                   {docType === "aadhaar" && aadhaarMode === "camera" && (
 //                     <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
 //                       <p className="text-gray-500 text-xs mb-3">
-//                         Hold your physical Aadhaar card up to the camera so all four corners and text are fully visible, then tap <strong className="text-white">Capture &amp; Verify</strong>.
+//                         Hold your physical Aadhaar card up to the camera — it will be <strong className="text-white">captured automatically</strong> once detected. You can also tap <strong className="text-white">Capture &amp; Verify</strong> manually.
 //                       </p>
 
 //                       {/* Camera viewport */}
@@ -741,6 +841,36 @@
 //                               }}
 //                             />
 
+//                             {/* ── Auto-detect confidence bar (top of viewport) ── */}
+//                             <div className="absolute top-0 left-0 right-0 z-30 px-3 pt-2 pb-1">
+//                               <div className="flex items-center gap-2">
+//                                 <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
+//                                   <motion.div
+//                                     className="h-full rounded-full"
+//                                     style={{
+//                                       background:
+//                                         autoDetectConfidence >= 75
+//                                           ? "linear-gradient(to right,#22c55e,#4ade80)"
+//                                           : autoDetectConfidence >= 40
+//                                           ? "linear-gradient(to right,#f59e0b,#fbbf24)"
+//                                           : "linear-gradient(to right,#2D55FB,#60a5fa)",
+//                                       width: `${autoDetectConfidence}%`,
+//                                     }}
+//                                     transition={{ duration: 0.4 }}
+//                                   />
+//                                 </div>
+//                                 <span className="text-[10px] text-white/60 shrink-0 w-20 text-right">
+//                                   {autoDetectConfidence === 0
+//                                     ? "Scanning…"
+//                                     : autoDetectConfidence < 40
+//                                     ? "Weak signal"
+//                                     : autoDetectConfidence < 75
+//                                     ? "Card detected"
+//                                     : "Auto-capturing…"}
+//                                 </span>
+//                               </div>
+//                             </div>
+
 //                             {/* Bottom label */}
 //                             <div className="absolute bottom-0 left-0 right-0 z-20 bg-black/55 backdrop-blur-sm px-4 py-2 flex items-center justify-center gap-2">
 //                               <motion.div
@@ -748,7 +878,9 @@
 //                                 animate={{ opacity: [1, 0.3, 1] }}
 //                                 transition={{ duration: 1.2, repeat: Infinity }}
 //                               />
-//                               <span className="text-white/80 text-xs font-medium">Align all four corners inside the guide, then capture</span>
+//                               <span className="text-white/80 text-xs font-medium">
+//                                 Align card inside guide — auto-capture will trigger when detected
+//                               </span>
 //                             </div>
 //                           </>
 //                         )}
@@ -821,7 +953,7 @@
 //                         )}
 //                       </div>
 
-//                       {/* Capture button — only when camera is live */}
+//                       {/* Capture button — only when camera is live (manual fallback) */}
 //                       <AnimatePresence>
 //                         {cardCamStatus === "active" && (
 //                           <motion.div
@@ -914,6 +1046,8 @@
 // };
 
 // export default IdentityVerification;
+
+
 
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -1132,62 +1266,84 @@ const IdentityVerification: React.FC = () => {
     }
   }, []);
 
-  /**
-   * Runs a lightweight Tesseract OCR sample every 2.5 s on a small
-   * low-resolution snapshot of the live video.  When ≥ 2 of the three
-   * Aadhaar signals are found the confidence bar fills to 100 % and
-   * captureAndVerifyCard() is triggered automatically.
-   */
-  const startAutoDetect = useCallback((captureCallback: () => void) => {
-    stopAutoDetect();
-    isAutoCapturingRef.current = false;
-    setAutoDetectConfidence(0);
+// Auto Detect document functionality
+ const startAutoDetect = useCallback((captureCallback: () => void) => {
+  stopAutoDetect();
+  isAutoCapturingRef.current = false;
+  setAutoDetectConfidence(0);
 
-    autoDetectIntervalRef.current = setInterval(async () => {
-      // guard: only run when camera is still active
-      const video = cardVideoRef.current;
-      const canvas = autoDetectCanvasRef.current;
-      if (!video || !canvas || isAutoCapturingRef.current) return;
-      if (video.readyState < 2) return; // video not ready
+  let consecutiveHits = 0;
+  const REQUIRED_CONSECUTIVE_HITS = 2;
+  let isOcrRunning = false; // guard against overlapping OCR calls
+  let pollCount = 0;
+  const MAX_POLLS_BEFORE_HINT = 6; // ~ after this many polls, nudge user to use manual capture
 
-      // grab a small downsampled snapshot (320×180) for speed
-      const W = 320, H = 180;
+  autoDetectIntervalRef.current = setInterval(async () => {
+    const video = cardVideoRef.current;
+    const canvas = autoDetectCanvasRef.current;
+    if (!video || !canvas || isAutoCapturingRef.current || isOcrRunning) return;
+    if (video.readyState < 2) return;
+
+    isOcrRunning = true;
+    try {
+      // Crop to the card-guide region only (matches the visual overlay: 7%-93% x, 19%-81% y)
+      // and use a higher resolution so text is actually legible to the OCR engine.
+      const vw = video.videoWidth || 1280;
+      const vh = video.videoHeight || 720;
+      // const sx = vw * 0.07, sy = vh * 0.19;
+      // const sw = vw * 0.86, sh = vh * 0.62;
+      const sx = vw * 0.04, sy = vh * 0.12;
+const sw = vw * 0.92, sh = vh * 0.76;
+
+
+      const W = 900, H = Math.round((sh / sw) * 900); // upscale crop for sharper OCR input
       canvas.width = W;
       canvas.height = H;
       const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-      ctx.drawImage(video, 0, 0, W, H);
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.75);
+      if (!ctx) { isOcrRunning = false; return; }
+      ctx.drawImage(video, sx, sy, sw, sh, 0, 0, W, H);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
 
-      try {
-        const result = await Tesseract.recognize(dataUrl, "eng", { logger: () => {} });
-        const upper = result.data.text.toUpperCase();
+      const result = await Tesseract.recognize(dataUrl, "eng", { logger: () => {} });
+      const upper = result.data.text.toUpperCase();
 
-        const hasAadhaarKeyword = /AADHAAR|AADHAR|UIDAI/.test(upper) || /\bUID\b/.test(upper);
-        const has12Digit =
-          /\d{4}[\s\-]?\d{4}[\s\-]?\d{4}/.test(upper) ||
-          /[X\d]{4}[\s\-]?[X\d]{4}[\s\-]?[X\d]{4}/i.test(upper);
-        const hasGovt = /GOVERNMENT\s+OF\s+INDIA|GOVT\.?\s+OF\s+INDIA/.test(upper);
+      const hasAadhaarKeyword = /AADHAAR|AADHAR|UIDAI/.test(upper) || /\bUID\b/.test(upper);
+      const has12Digit =
+        /\d{4}[\s\-]?\d{4}[\s\-]?\d{4}/.test(upper) ||
+        /[X\d]{4}[\s\-]?[X\d]{4}[\s\-]?[X\d]{4}/i.test(upper);
+      const hasGovt = /GOVERNMENT\s+OF\s+INDIA|GOVT\.?\s+OF\s+INDIA/.test(upper);
 
-        const signalsFound = [hasAadhaarKeyword, has12Digit, hasGovt].filter(Boolean).length;
-        // map 0→1→2→3 signals to 0→40→75→100 confidence
-        const confidenceMap: Record<number, number> = { 0: 0, 1: 40, 2: 75, 3: 100 };
-        const confidence = confidenceMap[signalsFound] ?? 0;
-        setAutoDetectConfidence(confidence);
+      const signalsFound = [hasAadhaarKeyword, has12Digit, hasGovt].filter(Boolean).length;
+      const isHit = signalsFound >= 2;
 
-        if (signalsFound >= 2 && !isAutoCapturingRef.current) {
-          isAutoCapturingRef.current = true;
-          stopAutoDetect();
-          // small delay so the bar visually reaches 100% before the capture kicks in
-          setTimeout(() => {
-            captureCallback();
-          }, 400);
-        }
-      } catch {
-        // silent — OCR errors during polling are non-fatal
+      consecutiveHits = isHit ? consecutiveHits + 1 : 0;
+      pollCount++;
+
+      const baseConfidenceMap: Record<number, number> = { 0: 0, 1: 40, 2: 75, 3: 90 };
+      const confidence = isHit
+        ? Math.min(100, 85 + consecutiveHits * 15)
+        : (baseConfidenceMap[signalsFound] ?? 0);
+      setAutoDetectConfidence(confidence);
+
+      if (consecutiveHits >= REQUIRED_CONSECUTIVE_HITS && !isAutoCapturingRef.current) {
+        isAutoCapturingRef.current = true;
+        stopAutoDetect();
+        setTimeout(() => captureCallback(), 300);
+        return;
       }
-    }, 2500); // poll every 2.5 seconds
-  }, [stopAutoDetect]);
+
+      // Fallback: if we've polled many times without success, nudge the bar
+      // to suggest manual capture rather than scanning forever silently.
+      if (pollCount >= MAX_POLLS_BEFORE_HINT && !isAutoCapturingRef.current) {
+        setAutoDetectConfidence((prev) => Math.max(prev, 30));
+      }
+    } catch {
+      consecutiveHits = 0;
+    } finally {
+      isOcrRunning = false;
+    }
+  }, 2200); // give each OCR pass enough headroom before the next poll fires
+}, [stopAutoDetect]);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // ─── CARD CAMERA HELPERS ──────────────────────────────────────────────────
@@ -1654,7 +1810,8 @@ const IdentityVerification: React.FC = () => {
                       Flow:
                         idle     → user clicks "Open Camera"
                         active   → live preview + animated scan line overlay + card guide corners
-                                   auto-detect polls every 2.5 s; when card detected → auto-captures
+                                   auto-detect polls every 1.5 s, requires 2 consecutive stable
+                                   confirmations → auto-captures
                                    user can also manually click "Capture & Verify"
                         scanning → frozen frame shown, Tesseract runs, progress bar
                         verified → green overlay, "Proceed" unlocked
