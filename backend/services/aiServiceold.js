@@ -2,8 +2,8 @@
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const genAI = new GoogleGenerativeAI("AIzaSyDDq4xW3YZoTBLCybwaNYbyRXPXBtj1-cg");
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" });
 
 const cleanResponseText = (text) => {
   return text.replace(/```json\n|```|\n/g, "").trim();

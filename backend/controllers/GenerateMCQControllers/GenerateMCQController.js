@@ -44,6 +44,8 @@ Format exactly like this:
 ]
 `;
 
+// console.log(process.env.HF_API_TOKEN);
+
       const response = await fetch(
         "https://router.huggingface.co/v1/chat/completions",
         {
